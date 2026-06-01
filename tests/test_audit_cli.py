@@ -2373,6 +2373,71 @@ class AuditCliTests(unittest.TestCase):
             {"LF_TAG_POLICY_EXPRESSION_NAME_UNDEFINED"},
         )
 
+    def test_lint_checks_named_lf_tag_expression_references_by_catalog_id(self):
+        desired = DesiredState.from_dict(
+            {
+                "lf_tags": {"domain": ["sales"]},
+                "lf_tag_expressions": [
+                    {
+                        "name": "shared",
+                        "catalog_id": "111111111111",
+                        "expression": {"domain": ["sales"]},
+                    }
+                ],
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "lf_tag_policy",
+                            "catalog_id": "222222222222",
+                            "resource_type": "TABLE",
+                            "expression_name": "shared",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ],
+            }
+        )
+
+        findings = lint_desired(desired)
+
+        self.assertEqual([finding.code for finding in findings], ["LF_TAG_POLICY_EXPRESSION_NAME_UNDEFINED"])
+        self.assertEqual(findings[0].details["catalog_id"], "222222222222")
+
+    def test_lint_unscoped_named_lf_tag_expression_reference_requires_unambiguous_match(self):
+        desired = DesiredState.from_dict(
+            {
+                "lf_tags": {"domain": ["sales", "finance"]},
+                "lf_tag_expressions": [
+                    {
+                        "name": "shared",
+                        "catalog_id": "111111111111",
+                        "expression": {"domain": ["sales"]},
+                    },
+                    {
+                        "name": "shared",
+                        "catalog_id": "222222222222",
+                        "expression": {"domain": ["finance"]},
+                    },
+                ],
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "lf_tag_policy",
+                            "resource_type": "TABLE",
+                            "expression_name": "shared",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ],
+            }
+        )
+
+        findings = lint_desired(desired)
+
+        self.assertEqual([finding.code for finding in findings], ["LF_TAG_POLICY_EXPRESSION_NAME_UNDEFINED"])
+
     def test_lint_named_lf_tag_expression_only_state_is_not_empty(self):
         desired = DesiredState.from_dict(
             {

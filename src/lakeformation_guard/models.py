@@ -716,14 +716,20 @@ class GuardrailState:
             "lf_tags": {tag.key: list(tag.values) for tag in self.lf_tags},
         }
         if self.lf_tag_expressions:
-            data["lf_tag_expressions"] = {
-                expression.name: {
-                    key: value
-                    for key, value in expression.to_dict().items()
-                    if key != "name"
+            expression_names = [expression.name for expression in self.lf_tag_expressions]
+            if len(expression_names) != len(set(expression_names)):
+                data["lf_tag_expressions"] = [
+                    expression.to_dict() for expression in self.lf_tag_expressions
+                ]
+            else:
+                data["lf_tag_expressions"] = {
+                    expression.name: {
+                        key: value
+                        for key, value in expression.to_dict().items()
+                        if key != "name"
+                    }
+                    for expression in self.lf_tag_expressions
                 }
-                for expression in self.lf_tag_expressions
-            }
         if self.lf_tag_key_metadata:
             data["lf_tag_key_metadata"] = {
                 metadata.key: {"assignable_to": list(metadata.assignable_to)}

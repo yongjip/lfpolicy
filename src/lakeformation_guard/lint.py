@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from .config import lint_severity
-from .models import DesiredState, Grant, ResourceTagAssignment
+from .models import DesiredState, Grant, LFTagExpressionDefinition, ResourceTagAssignment
 
 
 BROAD_PRINCIPALS = {"alliamprincipals", "iamallowedprincipals", "iam_allowed_principals"}
@@ -265,6 +265,28 @@ def _resource_tag_assignment_scope(resource_kind: str) -> Any:
     return None
 
 
+def _named_lf_tag_expression_defined(
+    expressions: Tuple[LFTagExpressionDefinition, ...],
+    catalog_id: Optional[str],
+    expression_name: str,
+) -> bool:
+    expression_keys = {
+        (expression.catalog_id, expression.name)
+        for expression in expressions
+    }
+    if catalog_id:
+        return (catalog_id, expression_name) in expression_keys
+    if (None, expression_name) in expression_keys:
+        return True
+    # Without a grant catalog_id, only a single scoped definition is unambiguous.
+    scoped_matches = {
+        expression_catalog_id
+        for expression_catalog_id, name in expression_keys
+        if expression_catalog_id and name == expression_name
+    }
+    return len(scoped_matches) == 1
+
+
 def _lint_grant(
     grant: Grant,
     tag_values: Mapping[str, set],
@@ -275,8 +297,11 @@ def _lint_grant(
     if grant.resource.kind != "lf_tag_policy":
         return findings
     if grant.resource.expression_name:
-        expression_names = {expression.name for expression in desired.lf_tag_expressions}
-        if grant.resource.expression_name not in expression_names:
+        if not _named_lf_tag_expression_defined(
+            desired.lf_tag_expressions,
+            grant.resource.catalog_id,
+            grant.resource.expression_name,
+        ):
             findings.append(
                 LintFinding(
                     code="LF_TAG_POLICY_EXPRESSION_NAME_UNDEFINED",
@@ -287,6 +312,7 @@ def _lint_grant(
                         "principal": grant.principal,
                         "resource": grant.resource.to_dict(),
                         "expression_name": grant.resource.expression_name,
+                        "catalog_id": grant.resource.catalog_id,
                     },
                 )
             )

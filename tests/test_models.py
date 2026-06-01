@@ -113,6 +113,38 @@ class ModelTests(unittest.TestCase):
         self.assertIn("lf_tag_expressions", state.to_dict())
         self.assertIn("lint", state.to_dict())
 
+    def test_state_serializes_duplicate_named_lf_tag_expressions_as_list(self):
+        state = DesiredState.from_dict(
+            {
+                "lf_tag_expressions": [
+                    {
+                        "name": "shared",
+                        "catalog_id": "111111111111",
+                        "expression": {"domain": ["finance"]},
+                    },
+                    {
+                        "name": "shared",
+                        "catalog_id": "222222222222",
+                        "expression": {"domain": ["sales"]},
+                    },
+                ]
+            }
+        )
+
+        payload = state.to_dict()
+        expressions = payload["lf_tag_expressions"]
+        round_tripped = DesiredState.from_dict(payload)
+
+        self.assertIsInstance(expressions, list)
+        self.assertEqual(
+            {(item["catalog_id"], item["name"]) for item in expressions},
+            {("111111111111", "shared"), ("222222222222", "shared")},
+        )
+        self.assertEqual(
+            {(expression.catalog_id, expression.name) for expression in round_tripped.lf_tag_expressions},
+            {("111111111111", "shared"), ("222222222222", "shared")},
+        )
+
     def test_state_parses_optional_lf_tag_key_metadata(self):
         state = DesiredState.from_dict(
             {
