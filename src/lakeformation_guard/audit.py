@@ -7,12 +7,14 @@ from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
 from .config import unmanaged_severity
 from .models import CurrentState, DesiredState, Grant, ResourceRef
+from .permissions import missing_permissions
 from .state_index import (
     grant_index,
     grant_target,
     lf_tag_expression_index,
     lf_tag_expression_sort_key,
     lf_tag_index,
+    lf_tag_sort_key,
     resource_tag_index,
 )
 
@@ -76,16 +78,16 @@ def _audit_lf_tags(desired: DesiredState, current: CurrentState) -> List[AuditFi
     findings: List[AuditFinding] = []
     desired_tags = lf_tag_index(desired.lf_tags)
     current_tags = lf_tag_index(current.lf_tags)
-    for key, desired_tag in sorted(desired_tags.items()):
+    for key, desired_tag in sorted(desired_tags.items(), key=lambda item: lf_tag_sort_key(item[0])):
         current_tag = current_tags.get(key)
         if current_tag is None:
             findings.append(
                 AuditFinding(
                     code="LF_TAG_MISSING",
                     severity="error",
-                    target="lf_tag:{}".format(key),
+                    target=desired_tag.identity,
                     message="Desired LF-Tag is missing",
-                    details={"tag_key": key, "desired_values": list(desired_tag.values)},
+                    details=_lf_tag_details(desired_tag, "desired"),
                 )
             )
             continue
@@ -95,25 +97,55 @@ def _audit_lf_tags(desired: DesiredState, current: CurrentState) -> List[AuditFi
                 AuditFinding(
                     code="LF_TAG_VALUES_MISSING",
                     severity="error",
-                    target="lf_tag:{}".format(key),
+                    target=desired_tag.identity,
                     message="Desired LF-Tag values are missing",
-                    details={"tag_key": key, "missing_values": missing},
+                    details={
+                        "tag_key": desired_tag.key,
+                        "catalog_id": desired_tag.catalog_id,
+                        "missing_values": missing,
+                    },
                 )
             )
         extra = sorted(set(current_tag.values) - set(desired_tag.values))
         if extra:
-            severity = unmanaged_severity(desired.config, None, ResourceRef(kind="catalog"))
+            severity = unmanaged_severity(desired.config, None, ResourceRef(kind="catalog", catalog_id=current_tag.catalog_id))
             if severity:
                 findings.append(
                     AuditFinding(
                         code="LF_TAG_VALUES_UNMANAGED",
                         severity=severity,
-                        target="lf_tag:{}".format(key),
+                        target=current_tag.identity,
                         message="Current LF-Tag has values not present in desired state",
-                        details={"tag_key": key, "unmanaged_values": extra},
+                        details={
+                            "tag_key": current_tag.key,
+                            "catalog_id": current_tag.catalog_id,
+                            "unmanaged_values": extra,
+                        },
                     )
                 )
+    for key, current_tag in sorted(current_tags.items(), key=lambda item: lf_tag_sort_key(item[0])):
+        if key in desired_tags:
+            continue
+        severity = unmanaged_severity(desired.config, None, ResourceRef(kind="catalog", catalog_id=current_tag.catalog_id))
+        if severity:
+            findings.append(
+                AuditFinding(
+                    code="LF_TAG_UNMANAGED",
+                    severity=severity,
+                    target=current_tag.identity,
+                    message="Current LF-Tag is not present in desired state",
+                    details=_lf_tag_details(current_tag, "current"),
+                )
+            )
     return findings
+
+
+def _lf_tag_details(tag: Any, field_name: str) -> Dict[str, Any]:
+    return {
+        "tag_key": tag.key,
+        "catalog_id": tag.catalog_id,
+        field_name: tag.to_dict(),
+    }
 
 
 def _audit_lf_tag_expressions(desired: DesiredState, current: CurrentState) -> List[AuditFinding]:
@@ -227,7 +259,28 @@ def _audit_resource_tags(desired: DesiredState, current: CurrentState) -> List[A
                         details={"resource": resource.to_dict(), "tag_key": key, "unmanaged_values": sorted(current_tags[key])},
                     )
                 )
+    for resource, current_tags in sorted(current_by_resource.items(), key=lambda item: item[0].identity):
+        if resource in desired_by_resource:
+            continue
+        severity = unmanaged_severity(desired.config, None, resource)
+        if severity:
+            findings.append(
+                AuditFinding(
+                    code="RESOURCE_TAG_UNMANAGED",
+                    severity=severity,
+                    target=resource.identity,
+                    message="Resource has LF-Tags but is not present in desired resource tag assignments",
+                    details={
+                        "resource": resource.to_dict(),
+                        "current_tags": _resource_tag_values(current_tags),
+                    },
+                )
+            )
     return findings
+
+
+def _resource_tag_values(tags: Mapping[str, Iterable[str]]) -> Dict[str, List[str]]:
+    return {key: sorted(values) for key, values in sorted(tags.items())}
 
 
 def _audit_grants(desired: DesiredState, current: CurrentState) -> List[AuditFinding]:
@@ -243,11 +296,13 @@ def _audit_grants(desired: DesiredState, current: CurrentState) -> List[AuditFin
                 "missing_grantable_permissions": list(desired_grant.grantable_permissions),
             }))
             continue
-        missing_permissions = sorted(set(desired_grant.permissions) - set(current_grant.permissions))
-        missing_grantables = sorted(set(desired_grant.grantable_permissions) - set(current_grant.grantable_permissions))
-        if missing_permissions or missing_grantables:
+        missing_permission_names = sorted(missing_permissions(desired_grant.permissions, current_grant.permissions))
+        missing_grantables = sorted(
+            missing_permissions(desired_grant.grantable_permissions, current_grant.grantable_permissions)
+        )
+        if missing_permission_names or missing_grantables:
             findings.append(_grant_finding("GRANT_PERMISSIONS_MISSING", "error", desired_grant, "Principal is missing desired permissions", {
-                "missing_permissions": missing_permissions,
+                "missing_permissions": missing_permission_names,
                 "missing_grantable_permissions": missing_grantables,
             }))
         extra_permissions = sorted(set(current_grant.permissions) - set(desired_grant.permissions))

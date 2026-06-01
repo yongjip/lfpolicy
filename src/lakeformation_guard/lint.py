@@ -7,20 +7,28 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from .config import lint_exception_applies, lint_severity
 from .models import DesiredState, Grant, GuardrailConfig, PolicyException, ResourceTagAssignment
+from .permissions import BROAD_PERMISSION_COVERAGE
 from .state_index import (
     LFTagExpressionKey,
+    LFTagKey,
+    duplicate_lf_tag_key_metadata_keys,
+    duplicate_lf_tag_keys,
     duplicate_lf_tag_expression_keys,
     lf_tag_expression_index,
     lf_tag_expression_key_identity,
+    lf_tag_index,
+    lf_tag_key_metadata_identity,
+    lf_tag_key_identity,
     resolve_lf_tag_expression_key,
+    resolve_lf_tag_key,
 )
 
 
 BROAD_PRINCIPALS = {"alliamprincipals", "iamallowedprincipals", "iam_allowed_principals"}
-BROAD_PERMISSIONS = {"ALL", "SUPER"}
+BROAD_PERMISSIONS = BROAD_PERMISSION_COVERAGE
 MUTATING_PERMISSIONS = {"ALTER", "CREATE_TABLE", "DELETE", "DROP", "INSERT"}
 TABLE_MUTATING_PERMISSIONS = {"ALTER", "DELETE", "DROP", "INSERT"}
-NAMED_GRANT_RESOURCE_KINDS = {"database", "table", "table_with_columns"}
+NAMED_GRANT_RESOURCE_KINDS = {"database", "table", "table_with_columns", "data_cells_filter"}
 LINT_EXCEPTION_RULE_BY_CODE = {
     "BROAD_PRINCIPAL_GRANT": "allow_broad_principals",
     "BROAD_PERMISSION_GRANT": "allow_broad_permissions",
@@ -77,9 +85,17 @@ def lint_desired(desired: DesiredState) -> Tuple[LintFinding, ...]:
             )
         )
 
-    tag_values = {tag.key: set(tag.values) for tag in desired.lf_tags}
+    duplicate_tag_keys = duplicate_lf_tag_keys(desired.lf_tags)
+    duplicate_metadata_keys = duplicate_lf_tag_key_metadata_keys(desired.lf_tag_key_metadata)
+    tag_values = {
+        key: set(tag.values)
+        for key, tag in lf_tag_index(
+            desired.lf_tags,
+            allow_duplicates=bool(duplicate_tag_keys),
+        ).items()
+    }
     tag_assignment_scopes = {
-        metadata.key: set(metadata.assignable_to)
+        (metadata.catalog_id, metadata.key): set(metadata.assignable_to)
         for metadata in desired.lf_tag_key_metadata
     }
     duplicate_expression_keys = duplicate_lf_tag_expression_keys(desired.lf_tag_expressions)
@@ -88,6 +104,8 @@ def lint_desired(desired: DesiredState) -> Tuple[LintFinding, ...]:
         allow_duplicates=bool(duplicate_expression_keys),
     )
     findings.extend(_lint_policy_exceptions(desired.config.exceptions))
+    findings.extend(_lint_duplicate_lf_tag_keys(duplicate_tag_keys))
+    findings.extend(_lint_duplicate_lf_tag_key_metadata_keys(duplicate_metadata_keys))
     findings.extend(_lint_lf_tag_definitions(tag_values))
     findings.extend(_lint_duplicate_lf_tag_expression_keys(duplicate_expression_keys))
     for expression in desired.lf_tag_expressions:
@@ -102,34 +120,68 @@ def lint_desired(desired: DesiredState) -> Tuple[LintFinding, ...]:
         )
     for grant in desired.grants:
         findings.extend(_lint_grant(grant, tag_values, tag_assignment_scopes, expression_index, desired.config))
-    findings.extend(_lint_combined_grant_conflicts(desired.grants, tag_assignment_scopes, desired.config))
+    findings.extend(_lint_combined_grant_conflicts(desired.grants, tag_assignment_scopes, expression_index, desired.config))
     return tuple(_apply_lint_config(findings, desired))
 
 
-def _lint_lf_tag_definitions(tag_values: Mapping[str, set]) -> List[LintFinding]:
+def _lint_lf_tag_definitions(tag_values: Mapping[LFTagKey, set]) -> List[LintFinding]:
     findings: List[LintFinding] = []
-    for tag_key, values in sorted(tag_values.items()):
+    for tag_key, values in sorted(tag_values.items(), key=lambda item: lf_tag_key_identity(item[0])):
         if len(values) > 1000:
             findings.append(
                 LintFinding(
                     code="LF_TAG_VALUE_LIMIT_EXCEEDED",
                     severity="error",
-                    target="lf_tag:{}".format(tag_key),
+                    target=lf_tag_key_identity(tag_key),
                     message="AWS Lake Formation supports at most 1000 values per LF-Tag key",
-                    details={"tag_key": tag_key, "value_count": len(values)},
+                    details={"tag_key": tag_key[1], "catalog_id": tag_key[0], "value_count": len(values)},
                 )
             )
-        case_sensitive_values = sorted(_case_sensitive_values((tag_key, *values)))
+        case_sensitive_values = sorted(_case_sensitive_values((tag_key[1], *values)))
         if case_sensitive_values:
             findings.append(
                 LintFinding(
                     code="LF_TAG_CASE_NORMALIZATION",
                     severity="error",
-                    target="lf_tag:{}".format(tag_key),
+                    target=lf_tag_key_identity(tag_key),
                     message="AWS Lake Formation stores LF-Tag keys and values in lower case",
-                    details={"values": case_sensitive_values},
+                    details={"tag_key": tag_key[1], "catalog_id": tag_key[0], "values": case_sensitive_values},
                 )
             )
+    return findings
+
+
+def _lint_duplicate_lf_tag_keys(
+    duplicate_keys: Tuple[LFTagKey, ...],
+) -> List[LintFinding]:
+    findings: List[LintFinding] = []
+    for key in duplicate_keys:
+        findings.append(
+            LintFinding(
+                code="LF_TAG_DUPLICATE_IDENTITY",
+                severity="error",
+                target=lf_tag_key_identity(key),
+                message="Desired state defines multiple LF-Tags with the same catalog ID and key",
+                details={"catalog_id": key[0], "tag_key": key[1]},
+            )
+        )
+    return findings
+
+
+def _lint_duplicate_lf_tag_key_metadata_keys(
+    duplicate_keys: Tuple[LFTagKey, ...],
+) -> List[LintFinding]:
+    findings: List[LintFinding] = []
+    for key in duplicate_keys:
+        findings.append(
+            LintFinding(
+                code="LF_TAG_KEY_METADATA_DUPLICATE_IDENTITY",
+                severity="error",
+                target=lf_tag_key_metadata_identity(key),
+                message="Desired state defines multiple LF-Tag key metadata entries with the same catalog ID and key",
+                details={"catalog_id": key[0], "tag_key": key[1]},
+            )
+        )
     return findings
 
 
@@ -152,8 +204,8 @@ def _lint_policy_exceptions(exceptions: Tuple[PolicyException, ...]) -> List[Lin
 
 def _lint_resource_tag_assignment(
     assignment: ResourceTagAssignment,
-    tag_values: Mapping[str, set],
-    tag_assignment_scopes: Mapping[str, set],
+    tag_values: Mapping[LFTagKey, set],
+    tag_assignment_scopes: Mapping[LFTagKey, set],
 ) -> List[LintFinding]:
     findings: List[LintFinding] = []
     assignment_scope = _resource_tag_assignment_scope(assignment.resource.kind)
@@ -212,7 +264,8 @@ def _lint_resource_tag_assignment(
                     },
                 )
             )
-        if tag_key not in tag_values:
+        tag_definition_key = resolve_lf_tag_key(tag_values, assignment.resource.catalog_id, tag_key)
+        if tag_definition_key is None:
             findings.append(
                 LintFinding(
                     code="RESOURCE_TAG_KEY_UNDEFINED",
@@ -222,12 +275,13 @@ def _lint_resource_tag_assignment(
                     details={
                         "resource": assignment.resource.to_dict(),
                         "tag_key": tag_key,
+                        "catalog_id": assignment.resource.catalog_id,
                         "tag_values": sorted(values),
                     },
                 )
             )
             continue
-        metadata_scopes = tag_assignment_scopes.get(tag_key)
+        metadata_scopes = _tag_assignment_scopes_for_key(tag_assignment_scopes, assignment.resource.catalog_id, tag_key)
         if (
             assignment_scope is not None
             and metadata_scopes is not None
@@ -247,7 +301,7 @@ def _lint_resource_tag_assignment(
                     },
                 )
             )
-        undefined_values = sorted(values - tag_values[tag_key])
+        undefined_values = sorted(values - tag_values[tag_definition_key])
         if undefined_values:
             findings.append(
                 LintFinding(
@@ -258,6 +312,7 @@ def _lint_resource_tag_assignment(
                     details={
                         "resource": assignment.resource.to_dict(),
                         "tag_key": tag_key,
+                        "catalog_id": tag_definition_key[0],
                         "undefined_values": undefined_values,
                     },
                 )
@@ -267,7 +322,7 @@ def _lint_resource_tag_assignment(
 
 def _lint_lf_tag_expression_definition(
     expression_definition: Any,
-    tag_values: Mapping[str, set],
+    tag_values: Mapping[LFTagKey, set],
 ) -> List[LintFinding]:
     findings: List[LintFinding] = []
     if len(expression_definition.expression) > 50:
@@ -288,8 +343,9 @@ def _lint_lf_tag_expression_definition(
             _lint_expression_item(
                 expression_item,
                 tag_values,
+                catalog_id=expression_definition.catalog_id,
                 target=expression_definition.identity,
-                details={"name": expression_definition.name},
+                details={"name": expression_definition.name, "catalog_id": expression_definition.catalog_id},
                 code_prefix="LF_TAG_EXPRESSION",
             )
         )
@@ -333,12 +389,12 @@ def _named_lf_tag_expression_defined(
 
 def _lint_grant(
     grant: Grant,
-    tag_values: Mapping[str, set],
-    tag_assignment_scopes: Mapping[str, set],
+    tag_values: Mapping[LFTagKey, set],
+    tag_assignment_scopes: Mapping[LFTagKey, set],
     expression_index: Mapping[LFTagExpressionKey, Any],
     config: GuardrailConfig,
 ) -> List[LintFinding]:
-    findings = _lint_grant_governance(grant, tag_assignment_scopes, config)
+    findings = _lint_grant_governance(grant, tag_assignment_scopes, expression_index, config)
     if grant.resource.kind != "lf_tag_policy":
         return findings
     if grant.resource.expression_name:
@@ -382,6 +438,7 @@ def _lint_grant(
             _lint_expression_item(
                 expression_item,
                 tag_values,
+                catalog_id=grant.resource.catalog_id,
                 target=_grant_target(grant),
                 details={"principal": grant.principal, "resource": grant.resource.to_dict()},
                 code_prefix="LF_TAG_POLICY",
@@ -392,8 +449,9 @@ def _lint_grant(
 
 def _lint_expression_item(
     expression_item: Any,
-    tag_values: Mapping[str, set],
+    tag_values: Mapping[LFTagKey, set],
     *,
+    catalog_id: Optional[str],
     target: str,
     details: Mapping[str, Any],
     code_prefix: str,
@@ -438,9 +496,14 @@ def _lint_expression_item(
                 details=finding_details,
             )
         )
-    if expression_item.key not in tag_values:
+    tag_definition_key = resolve_lf_tag_key(tag_values, catalog_id, expression_item.key)
+    if tag_definition_key is None:
         finding_details = dict(common_details)
-        finding_details.update({"tag_key": expression_item.key, "tag_values": list(expression_item.values)})
+        finding_details.update({
+            "tag_key": expression_item.key,
+            "catalog_id": catalog_id,
+            "tag_values": list(expression_item.values),
+        })
         findings.append(
             LintFinding(
                 code="{}_KEY_UNDEFINED".format(code_prefix),
@@ -452,11 +515,15 @@ def _lint_expression_item(
         )
         return findings
     undefined_values = sorted(
-        value for value in set(expression_item.values) - tag_values[expression_item.key] if value != "*"
+        value for value in set(expression_item.values) - tag_values[tag_definition_key] if value != "*"
     )
     if undefined_values:
         finding_details = dict(common_details)
-        finding_details.update({"tag_key": expression_item.key, "undefined_values": undefined_values})
+        finding_details.update({
+            "tag_key": expression_item.key,
+            "catalog_id": tag_definition_key[0],
+            "undefined_values": undefined_values,
+        })
         findings.append(
             LintFinding(
                 code="{}_VALUE_UNDEFINED".format(code_prefix),
@@ -471,7 +538,8 @@ def _lint_expression_item(
 
 def _lint_grant_governance(
     grant: Grant,
-    tag_assignment_scopes: Mapping[str, set],
+    tag_assignment_scopes: Mapping[LFTagKey, set],
+    expression_index: Mapping[LFTagExpressionKey, Any],
     config: GuardrailConfig,
 ) -> List[LintFinding]:
     findings: List[LintFinding] = []
@@ -515,7 +583,7 @@ def _lint_grant_governance(
             broad_permissions,
         )
 
-    mutating_permissions = _mutating_permissions_requiring_review(grant, tag_assignment_scopes)
+    mutating_permissions = _mutating_permissions_requiring_review(grant, tag_assignment_scopes, expression_index)
     if mutating_permissions:
         _append_governance_finding(
             findings,
@@ -576,7 +644,7 @@ def _lint_grant_governance(
     if (
         _is_lf_tag_table_policy(grant)
         and "SELECT" in grant.permissions
-        and _lf_tag_policy_can_narrow_columns(grant.resource, tag_assignment_scopes)
+        and _lf_tag_policy_can_narrow_columns(grant.resource, tag_assignment_scopes, expression_index)
     ):
         conflicting_permissions = sorted(set(grant.permissions) & TABLE_MUTATING_PERMISSIONS)
         if conflicting_permissions:
@@ -600,7 +668,7 @@ def _lint_grant_governance(
                 ("SELECT", *conflicting_permissions),
             )
 
-    if grant.resource.kind == "table_with_columns":
+    if grant.resource.kind in {"table_with_columns", "data_cells_filter"}:
         conflicting_permissions = sorted(set(grant.permissions) & TABLE_MUTATING_PERMISSIONS)
         if conflicting_permissions:
             _append_governance_finding(
@@ -612,7 +680,7 @@ def _lint_grant_governance(
                     severity="error",
                     target=target,
                     message=(
-                        "Column-filtered grants must not include table mutation permissions"
+                        "Column- or cell-filtered grants must not include table mutation permissions"
                     ),
                     details={
                         "principal": grant.principal,
@@ -641,7 +709,8 @@ def _append_governance_finding(
 
 def _lint_combined_grant_conflicts(
     grants: Tuple[Grant, ...],
-    tag_assignment_scopes: Mapping[str, set],
+    tag_assignment_scopes: Mapping[LFTagKey, set],
+    expression_index: Mapping[LFTagExpressionKey, Any],
     config: GuardrailConfig,
 ) -> List[LintFinding]:
     findings: List[LintFinding] = []
@@ -668,7 +737,7 @@ def _lint_combined_grant_conflicts(
         permissions = entry["permissions"]
         if "SELECT" not in permissions:
             continue
-        if not _lf_tag_policy_can_narrow_columns(entry["resource"], tag_assignment_scopes):
+        if not _lf_tag_policy_can_narrow_columns(entry["resource"], tag_assignment_scopes, expression_index):
             continue
         conflicting_permissions = sorted(permissions & TABLE_MUTATING_PERMISSIONS)
         if not conflicting_permissions:
@@ -707,20 +776,21 @@ def _is_lf_tag_table_policy(grant: Grant) -> bool:
 
 def _mutating_permissions_requiring_review(
     grant: Grant,
-    tag_assignment_scopes: Mapping[str, set],
+    tag_assignment_scopes: Mapping[LFTagKey, set],
+    expression_index: Mapping[LFTagExpressionKey, Any],
 ) -> List[str]:
     mutating_permissions = sorted(set(grant.permissions) & MUTATING_PERMISSIONS)
     if not mutating_permissions:
         return []
     if (
         _is_lf_tag_table_policy(grant)
-        and not _lf_tag_policy_can_narrow_columns(grant.resource, tag_assignment_scopes)
+        and not _lf_tag_policy_can_narrow_columns(grant.resource, tag_assignment_scopes, expression_index)
     ):
         return sorted(set(mutating_permissions) - {"DELETE", "INSERT"})
     if (
         grant.resource.kind == "lf_tag_policy"
         and grant.resource.resource_type == "DATABASE"
-        and not _lf_tag_policy_can_narrow_columns(grant.resource, tag_assignment_scopes)
+        and not _lf_tag_policy_can_narrow_columns(grant.resource, tag_assignment_scopes, expression_index)
     ):
         return sorted(set(mutating_permissions) - {"CREATE_TABLE"})
     return mutating_permissions
@@ -728,18 +798,51 @@ def _mutating_permissions_requiring_review(
 
 def _lf_tag_policy_can_narrow_columns(
     resource: Any,
-    tag_assignment_scopes: Mapping[str, set],
+    tag_assignment_scopes: Mapping[LFTagKey, set],
+    expression_index: Mapping[LFTagExpressionKey, Any],
 ) -> bool:
-    expression_keys = [item.key for item in resource.expression]
+    expression = _lf_tag_policy_expression(resource, expression_index)
+    if expression is None:
+        return True
+    expression_keys = [item.key for item in expression]
     if not expression_keys:
         return True
     for tag_key in expression_keys:
-        scopes = tag_assignment_scopes.get(tag_key)
+        scopes = _tag_assignment_scopes_for_key(tag_assignment_scopes, resource.catalog_id, tag_key)
         if scopes is None:
             return True
         if "column" in scopes:
             return True
     return False
+
+
+def _lf_tag_policy_expression(
+    resource: Any,
+    expression_index: Mapping[LFTagExpressionKey, Any],
+) -> Optional[Tuple[Any, ...]]:
+    if resource.expression:
+        return tuple(resource.expression)
+    if not resource.expression_name:
+        return ()
+    key = resolve_lf_tag_expression_key(
+        expression_index,
+        resource.catalog_id,
+        resource.expression_name,
+    )
+    if key is None:
+        return None
+    return tuple(getattr(expression_index[key], "expression", ()))
+
+
+def _tag_assignment_scopes_for_key(
+    tag_assignment_scopes: Mapping[LFTagKey, set],
+    catalog_id: Optional[str],
+    key: str,
+) -> Optional[set]:
+    metadata_key = resolve_lf_tag_key(tag_assignment_scopes, catalog_id, key)
+    if metadata_key is None:
+        return None
+    return tag_assignment_scopes[metadata_key]
 
 
 def _case_sensitive_values(values: Tuple[str, ...]) -> Tuple[str, ...]:

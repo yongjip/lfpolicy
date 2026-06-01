@@ -11,11 +11,13 @@ from .models import (
     LFTagExpressionDefinition,
     ResourceRef,
 )
+from .permissions import BROAD_PERMISSION_COVERAGE, missing_permissions
 from .state_index import (
     grant_index,
     grant_target,
     lf_tag_expression_index,
     lf_tag_index,
+    lf_tag_sort_key,
     resource_tag_index,
 )
 
@@ -184,17 +186,18 @@ def plan(desired: DesiredState, current: CurrentState, options: PlanOptions = Pl
 
 
 def _plan_lf_tags(desired: DesiredState, current: CurrentState, options: PlanOptions) -> Iterable[Change]:
+    desired_tags = lf_tag_index(desired.lf_tags)
     current_tags = lf_tag_index(current.lf_tags)
-    for desired_tag in desired.lf_tags:
-        current_tag = current_tags.get(desired_tag.key)
+    for key, desired_tag in sorted(desired_tags.items(), key=lambda item: lf_tag_sort_key(item[0])):
+        current_tag = current_tags.get(key)
         if current_tag is None:
             yield Change(
                 action="lf_tag.create",
-                target="lf_tag:{}".format(desired_tag.key),
+                target=desired_tag.identity,
                 reason="LF-Tag is missing",
-                payload={"tag_key": desired_tag.key, "tag_values": list(desired_tag.values)},
+                payload=_lf_tag_payload(desired_tag.key, desired_tag.values, desired_tag.catalog_id),
                 before=None,
-                after={"tag_key": desired_tag.key, "tag_values": list(desired_tag.values)},
+                after=_lf_tag_payload(desired_tag.key, desired_tag.values, desired_tag.catalog_id),
             )
             continue
 
@@ -204,22 +207,22 @@ def _plan_lf_tags(desired: DesiredState, current: CurrentState, options: PlanOpt
         if missing_values:
             yield Change(
                 action="lf_tag.add_values",
-                target="lf_tag:{}".format(desired_tag.key),
+                target=desired_tag.identity,
                 reason="LF-Tag is missing allowed values",
-                payload={"tag_key": desired_tag.key, "tag_values": missing_values},
-                before={"tag_key": desired_tag.key, "tag_values": sorted(current_values)},
-                after={"tag_key": desired_tag.key, "tag_values": sorted(current_values | set(missing_values))},
+                payload=_lf_tag_payload(desired_tag.key, missing_values, desired_tag.catalog_id),
+                before=_lf_tag_payload(desired_tag.key, sorted(current_values), desired_tag.catalog_id),
+                after=_lf_tag_payload(desired_tag.key, sorted(current_values | set(missing_values)), desired_tag.catalog_id),
             )
         extra_values = sorted(current_values - desired_values)
         if extra_values and options.allow_lf_tag_value_removals:
             yield Change(
                 action="lf_tag.remove_values",
-                target="lf_tag:{}".format(desired_tag.key),
+                target=desired_tag.identity,
                 reason="LF-Tag has values not present in desired state",
-                payload={"tag_key": desired_tag.key, "tag_values": extra_values},
+                payload=_lf_tag_payload(desired_tag.key, extra_values, desired_tag.catalog_id),
                 destructive=True,
-                before={"tag_key": desired_tag.key, "tag_values": sorted(current_values)},
-                after={"tag_key": desired_tag.key, "tag_values": sorted(current_values - set(extra_values))},
+                before=_lf_tag_payload(desired_tag.key, sorted(current_values), desired_tag.catalog_id),
+                after=_lf_tag_payload(desired_tag.key, sorted(current_values - set(extra_values)), desired_tag.catalog_id),
             )
 
 
@@ -269,11 +272,14 @@ def _plan_lf_tag_expressions(desired: DesiredState, current: CurrentState, optio
 def _plan_resource_tags(desired: DesiredState, current: CurrentState, options: PlanOptions) -> Iterable[Change]:
     current_by_resource = resource_tag_index(current.resource_tags)
     desired_by_resource = resource_tag_index(desired.resource_tags)
-    for resource, desired_tags in desired_by_resource.items():
+    for resource, desired_tags in sorted(
+        desired_by_resource.items(),
+        key=lambda item: item[0].identity,
+    ):
         current_tags = current_by_resource.get(resource, {})
         tags_to_add: Dict[str, List[str]] = {}
         tags_to_remove: Dict[str, List[str]] = {}
-        for key, desired_values in desired_tags.items():
+        for key, desired_values in sorted(desired_tags.items()):
             current_values = current_tags.get(key, frozenset())
             missing_values = sorted(desired_values - current_values)
             if missing_values:
@@ -281,6 +287,13 @@ def _plan_resource_tags(desired: DesiredState, current: CurrentState, options: P
             extra_values = sorted(current_values - desired_values)
             if extra_values and options.allow_resource_tag_removals:
                 tags_to_remove[key] = extra_values
+        if options.allow_resource_tag_removals:
+            for key, current_values in sorted(current_tags.items()):
+                if key in desired_tags:
+                    continue
+                values_to_remove = sorted(current_values)
+                if values_to_remove:
+                    tags_to_remove[key] = values_to_remove
 
         if tags_to_add:
             yield Change(
@@ -301,6 +314,25 @@ def _plan_resource_tags(desired: DesiredState, current: CurrentState, options: P
                 before={"resource": resource.to_dict(), "tags": _tag_values_dict(current_tags)},
                 after={"resource": resource.to_dict(), "tags": _remove_tag_values(current_tags, tags_to_remove)},
             )
+    if options.allow_resource_tag_removals:
+        for resource, current_tags in sorted(
+            current_by_resource.items(),
+            key=lambda item: item[0].identity,
+        ):
+            if resource in desired_by_resource:
+                continue
+            tags_to_remove = _tag_values_dict(current_tags)
+            if not tags_to_remove:
+                continue
+            yield Change(
+                action="resource_tag.remove_values",
+                target=resource.identity,
+                reason="Resource has LF-Tag assignments not present in desired state",
+                payload={"resource": resource.to_dict(), "tags": tags_to_remove},
+                destructive=True,
+                before={"resource": resource.to_dict(), "tags": tags_to_remove},
+                after={"resource": resource.to_dict(), "tags": {}},
+            )
 
 
 def _plan_grants(desired: DesiredState, current: CurrentState, options: PlanOptions) -> Iterable[Change]:
@@ -314,10 +346,17 @@ def _plan_grants(desired: DesiredState, current: CurrentState, options: PlanOpti
         desired_permissions = set(desired_grant.permissions)
         desired_grantables = set(desired_grant.grantable_permissions)
 
-        missing_permissions = sorted(desired_permissions - current_permissions)
-        missing_grantables = sorted(desired_grantables - current_grantables)
-        if missing_permissions or missing_grantables:
-            permissions_to_grant = sorted(set(missing_permissions) | set(missing_grantables))
+        missing_permission_names = missing_permissions(desired_permissions, current_permissions)
+        missing_grantables = missing_permissions(desired_grantables, current_grantables)
+        if options.allow_permission_revokes:
+            if current_permissions & BROAD_PERMISSION_COVERAGE and not desired_permissions & BROAD_PERMISSION_COVERAGE:
+                missing_permission_names.update(desired_permissions - current_permissions)
+            if current_grantables & BROAD_PERMISSION_COVERAGE and not desired_grantables & BROAD_PERMISSION_COVERAGE:
+                missing_grantables.update(desired_grantables - current_grantables)
+        missing_permission_names = sorted(missing_permission_names)
+        missing_grantables = sorted(missing_grantables)
+        if missing_permission_names or missing_grantables:
+            permissions_to_grant = sorted(set(missing_permission_names) | set(missing_grantables))
             yield Change(
                 action="grant.add_permissions",
                 target=grant_target(desired_grant),
@@ -391,6 +430,13 @@ def _lf_tag_expression_payload(expression: LFTagExpressionDefinition) -> Dict[st
         payload["description"] = expression.description
     if expression.catalog_id:
         payload["catalog_id"] = expression.catalog_id
+    return payload
+
+
+def _lf_tag_payload(key: str, values: Iterable[str], catalog_id: Optional[str]) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {"tag_key": key, "tag_values": list(values)}
+    if catalog_id:
+        payload["catalog_id"] = catalog_id
     return payload
 
 

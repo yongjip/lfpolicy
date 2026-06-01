@@ -161,6 +161,37 @@ class AwsAdapterTests(unittest.TestCase):
             resource,
         )
 
+    def test_resource_conversion_uses_fallback_catalog_id_when_response_omits_it(self):
+        resource = from_lf_resource(
+            {"Table": {"DatabaseName": "analytics", "Name": "orders"}},
+            fallback_catalog_id="222222222222",
+        )
+
+        self.assertEqual(resource.catalog_id, "222222222222")
+
+    def test_data_cells_filter_resource_conversion_preserves_table_catalog_id(self):
+        resource = ResourceRef.from_dict(
+            {
+                "kind": "data_cells_filter",
+                "catalog_id": "222222222222",
+                "database": "analytics",
+                "table": "orders",
+                "filter_name": "orders_public",
+            }
+        )
+
+        payload = {
+            "DataCellsFilter": {
+                "TableCatalogId": "222222222222",
+                "DatabaseName": "analytics",
+                "TableName": "orders",
+                "Name": "orders_public",
+            }
+        }
+
+        self.assertEqual(to_lf_resource(resource), payload)
+        self.assertEqual(from_lf_resource(payload), resource)
+
     def test_apply_executes_lf_tag_expression_changes(self):
         change_plan = Plan.from_dict(
             {
@@ -217,6 +248,30 @@ class AwsAdapterTests(unittest.TestCase):
         self.assertEqual(state.grants[0].principal, "role")
         self.assertEqual(state.resource_tags[0].resource.database_name, "analytics")
         self.assertIn("list_lf_tags", [name for name, _ in client.calls])
+
+    def test_import_state_preserves_adapter_catalog_id_when_responses_omit_it(self):
+        client = FakeLakeFormation()
+        adapter = AWSLakeFormationAdapter(client, catalog_id="222222222222")
+
+        state = adapter.import_state(include=("lf-tags", "lf-tag-expressions", "resource-tags", "grants"))
+
+        self.assertEqual(state.lf_tags[0].catalog_id, "222222222222")
+        self.assertEqual(state.lf_tag_expressions[0].catalog_id, "222222222222")
+        self.assertEqual(state.grants[0].resource.catalog_id, "222222222222")
+        self.assertEqual(state.resource_tags[0].resource.catalog_id, "222222222222")
+
+    def test_import_state_uses_grants_for_resource_tag_discovery_without_returning_grants(self):
+        client = FakeLakeFormation()
+        adapter = AWSLakeFormationAdapter(client)
+
+        state = adapter.import_state(include=("resource-tags",))
+
+        self.assertEqual(state.grants, ())
+        self.assertEqual(state.resource_tags[0].resource.database_name, "analytics")
+        self.assertEqual(
+            [name for name, _ in client.calls],
+            ["list_permissions", "get_resource_lf_tags"],
+        )
 
 
 def _desired_state():

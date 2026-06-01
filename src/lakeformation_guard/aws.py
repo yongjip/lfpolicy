@@ -84,12 +84,15 @@ class AWSLakeFormationAdapter:
         lf_tag_expressions = (
             list(self._import_lf_tag_expressions()) if "lf-tag-expressions" in include_set else []
         )
-        grants = list(self._import_grants()) if "grants" in include_set else []
+        discovered_grants = (
+            list(self._import_grants()) if {"grants", "resource-tags"} & include_set else []
+        )
+        grants = discovered_grants if "grants" in include_set else []
         resource_tags = []
         if "resource-tags" in include_set:
             resources = {
                 grant.resource
-                for grant in grants
+                for grant in discovered_grants
                 if grant.resource.kind not in {"lf_tag_policy", "lf_tag_expression"}
             }
             resource_tags = list(self._load_tags_for_resources(resources))
@@ -111,7 +114,7 @@ class AWSLakeFormationAdapter:
 
     def _load_lf_tags(self, desired: DesiredState) -> Iterable[LFTagDefinition]:
         for tag in desired.lf_tags:
-            kwargs = self._with_catalog_id({"TagKey": tag.key})
+            kwargs = self._with_catalog_id({"catalog_id": tag.catalog_id, "TagKey": tag.key})
             try:
                 response = self.lakeformation.get_lf_tag(**kwargs)
             except Exception as exc:
@@ -120,7 +123,7 @@ class AWSLakeFormationAdapter:
                 raise
             values = response.get("TagValues", ())
             if values:
-                yield LFTagDefinition(tag.key, tuple(values))
+                yield LFTagDefinition(tag.key, tuple(values), catalog_id=response.get("CatalogId") or tag.catalog_id)
 
     def _load_lf_tag_expressions(self, desired: DesiredState) -> Iterable[LFTagExpressionDefinition]:
         expression_keys = {
@@ -141,7 +144,11 @@ class AWSLakeFormationAdapter:
                 if _is_not_found(exc):
                     continue
                 raise
-            expression = _expression_definition_from_response(response, fallback_name=name)
+            expression = _expression_definition_from_response(
+                response,
+                fallback_name=name,
+                fallback_catalog_id=catalog_id,
+            )
             if expression:
                 yield expression
 
@@ -161,9 +168,7 @@ class AWSLakeFormationAdapter:
                 if _is_not_found(exc):
                     continue
                 raise
-            tags = _extract_resource_tags(response)
-            if tags:
-                yield ResourceTagAssignment(resource=resource, tags=tags)
+            yield from _extract_resource_tag_assignments(resource, response)
 
     def _import_lf_tags(self) -> Iterable[LFTagDefinition]:
         kwargs = self._with_catalog_id({"MaxResults": 100})
@@ -171,19 +176,23 @@ class AWSLakeFormationAdapter:
             key = item.get("TagKey")
             values = item.get("TagValues", ())
             if key and values:
-                yield LFTagDefinition(str(key), tuple(values))
+                yield LFTagDefinition(
+                    str(key),
+                    tuple(values),
+                    catalog_id=item.get("CatalogId") or self.catalog_id,
+                )
 
     def _import_lf_tag_expressions(self) -> Iterable[LFTagExpressionDefinition]:
         kwargs = self._with_catalog_id({"MaxResults": 100})
         for item in self._paginate_or_call("list_lf_tag_expressions", kwargs, "LFTagExpressions"):
-            expression = _expression_definition_from_response(item)
+            expression = _expression_definition_from_response(item, fallback_catalog_id=self.catalog_id)
             if expression:
                 yield expression
 
     def _import_grants(self) -> Iterable[Grant]:
         kwargs = self._with_catalog_id({"MaxResults": 100})
         for item in self._list_permissions(kwargs):
-            grant = _grant_from_permission_item(item)
+            grant = _grant_from_permission_item(item, fallback_catalog_id=self.catalog_id)
             if grant:
                 yield grant
 
@@ -203,7 +212,13 @@ class AWSLakeFormationAdapter:
             kwargs = self._with_catalog_id(kwargs)
             for item in self._list_permissions(kwargs):
                 principal = item.get("Principal", {}).get("DataLakePrincipalIdentifier", desired_grant.principal)
-                resource = from_lf_resource(item.get("Resource", {})) or desired_grant.resource
+                resource = (
+                    from_lf_resource(
+                        item.get("Resource", {}),
+                        fallback_catalog_id=desired_grant.resource.catalog_id,
+                    )
+                    or desired_grant.resource
+                )
                 permissions = tuple(item.get("Permissions", ()))
                 grantables = tuple(item.get("PermissionsWithGrantOption", ()))
                 if permissions:
@@ -237,16 +252,19 @@ class AWSLakeFormationAdapter:
         payload = dict(change.payload)
         if action == "lf_tag.create":
             response = self.lakeformation.create_lf_tag(**self._with_catalog_id({
+                "catalog_id": payload.get("catalog_id"),
                 "TagKey": payload["tag_key"],
                 "TagValues": payload["tag_values"],
             }))
         elif action == "lf_tag.add_values":
             response = self.lakeformation.update_lf_tag(**self._with_catalog_id({
+                "catalog_id": payload.get("catalog_id"),
                 "TagKey": payload["tag_key"],
                 "TagValuesToAdd": payload["tag_values"],
             }))
         elif action == "lf_tag.remove_values":
             response = self.lakeformation.update_lf_tag(**self._with_catalog_id({
+                "catalog_id": payload.get("catalog_id"),
                 "TagKey": payload["tag_key"],
                 "TagValuesToDelete": payload["tag_values"],
             }))
@@ -274,14 +292,14 @@ class AWSLakeFormationAdapter:
             response = self.lakeformation.add_lf_tags_to_resource(**self._with_catalog_id({
                 "catalog_id": resource.catalog_id,
                 "Resource": to_lf_resource(resource),
-                "LFTags": _lf_tag_pairs(payload["tags"]),
+                "LFTags": _lf_tag_pairs(payload["tags"], catalog_id=resource.catalog_id),
             }))
         elif action == "resource_tag.remove_values":
             resource = ResourceRef.from_dict(payload["resource"])
             response = self.lakeformation.remove_lf_tags_from_resource(**self._with_catalog_id({
                 "catalog_id": resource.catalog_id,
                 "Resource": to_lf_resource(resource),
-                "LFTags": _lf_tag_pairs(payload["tags"]),
+                "LFTags": _lf_tag_pairs(payload["tags"], catalog_id=resource.catalog_id),
             }))
         elif action == "grant.add_permissions":
             resource = ResourceRef.from_dict(payload["resource"])
@@ -365,6 +383,21 @@ def to_lf_resource(resource: ResourceRef) -> Dict[str, Any]:
         }, resource)}
     if resource.kind == "data_location":
         return {"DataLocation": _catalog_scoped({"ResourceArn": resource.location}, resource)}
+    if resource.kind == "data_cells_filter":
+        filter_resource = {
+            "DatabaseName": resource.database_name,
+            "TableName": resource.table_name,
+            "Name": resource.filter_name,
+        }
+        if resource.catalog_id:
+            filter_resource["TableCatalogId"] = resource.catalog_id
+        return {
+            "DataCellsFilter": {
+                key: value
+                for key, value in filter_resource.items()
+                if value not in (None, "")
+            }
+        }
     if resource.kind == "lf_tag_policy":
         policy = {"ResourceType": resource.resource_type}
         if resource.expression_name:
@@ -384,16 +417,32 @@ def to_lf_resource(resource: ResourceRef) -> Dict[str, Any]:
     raise ValueError("Unsupported resource kind: {}".format(resource.kind))
 
 
-def from_lf_resource(raw: Mapping[str, Any]) -> Optional[ResourceRef]:
+def from_lf_resource(
+    raw: Mapping[str, Any],
+    *,
+    fallback_catalog_id: Optional[str] = None,
+) -> Optional[ResourceRef]:
     if "Catalog" in raw:
         item = raw["Catalog"]
-        return ResourceRef(kind="catalog", catalog_id=item.get("Id") or item.get("CatalogId"))
+        return ResourceRef(
+            kind="catalog",
+            catalog_id=item.get("Id") or item.get("CatalogId") or fallback_catalog_id,
+        )
     if "Database" in raw:
         item = raw["Database"]
-        return ResourceRef(kind="database", database_name=item.get("Name"), catalog_id=item.get("CatalogId"))
+        return ResourceRef(
+            kind="database",
+            database_name=item.get("Name"),
+            catalog_id=item.get("CatalogId") or fallback_catalog_id,
+        )
     if "Table" in raw:
         item = raw["Table"]
-        return ResourceRef(kind="table", database_name=item.get("DatabaseName"), table_name=item.get("Name"), catalog_id=item.get("CatalogId"))
+        return ResourceRef(
+            kind="table",
+            database_name=item.get("DatabaseName"),
+            table_name=item.get("Name"),
+            catalog_id=item.get("CatalogId") or fallback_catalog_id,
+        )
     if "TableWithColumns" in raw:
         item = raw["TableWithColumns"]
         return ResourceRef(
@@ -401,17 +450,30 @@ def from_lf_resource(raw: Mapping[str, Any]) -> Optional[ResourceRef]:
             database_name=item.get("DatabaseName"),
             table_name=item.get("Name"),
             columns=tuple(item.get("ColumnNames", ())),
-            catalog_id=item.get("CatalogId"),
+            catalog_id=item.get("CatalogId") or fallback_catalog_id,
         )
     if "DataLocation" in raw:
         item = raw["DataLocation"]
-        return ResourceRef(kind="data_location", location=item.get("ResourceArn"), catalog_id=item.get("CatalogId"))
+        return ResourceRef(
+            kind="data_location",
+            location=item.get("ResourceArn"),
+            catalog_id=item.get("CatalogId") or fallback_catalog_id,
+        )
+    if "DataCellsFilter" in raw:
+        item = raw["DataCellsFilter"]
+        return ResourceRef(
+            kind="data_cells_filter",
+            database_name=item.get("DatabaseName"),
+            table_name=item.get("TableName"),
+            filter_name=item.get("Name"),
+            catalog_id=item.get("TableCatalogId") or item.get("CatalogId") or fallback_catalog_id,
+        )
     if "LFTagPolicy" in raw:
         item = raw["LFTagPolicy"]
         data = {
             "kind": "lf_tag_policy",
             "resource_type": item.get("ResourceType"),
-            "catalog_id": item.get("CatalogId"),
+            "catalog_id": item.get("CatalogId") or fallback_catalog_id,
         }
         if item.get("ExpressionName"):
             data["expression_name"] = item.get("ExpressionName")
@@ -423,7 +485,11 @@ def from_lf_resource(raw: Mapping[str, Any]) -> Optional[ResourceRef]:
         return ResourceRef.from_dict(data)
     if "LFTagExpression" in raw:
         item = raw["LFTagExpression"]
-        return ResourceRef(kind="lf_tag_expression", expression_name=item.get("Name"), catalog_id=item.get("CatalogId"))
+        return ResourceRef(
+            kind="lf_tag_expression",
+            expression_name=item.get("Name"),
+            catalog_id=item.get("CatalogId") or fallback_catalog_id,
+        )
     return None
 
 
@@ -435,13 +501,27 @@ def _catalog_scoped(data: Mapping[str, Any], resource: ResourceRef) -> Dict[str,
 
 
 def _resource_request_kwargs(resource: ResourceRef, **kwargs: Any) -> Dict[str, Any]:
-    request = {"catalog_id": resource.catalog_id, "Resource": to_lf_resource(resource)}
+    request = {
+        "catalog_id": resource.catalog_id,
+        "Resource": to_lf_resource(resource),
+        "ShowAssignedLFTags": True,
+    }
     request.update(kwargs)
     return request
 
 
-def _lf_tag_pairs(tags: Mapping[str, Iterable[str]]) -> List[Dict[str, Any]]:
-    return [{"TagKey": key, "TagValues": list(values)} for key, values in sorted(tags.items())]
+def _lf_tag_pairs(
+    tags: Mapping[str, Iterable[str]],
+    *,
+    catalog_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    pairs = []
+    for key, values in sorted(tags.items()):
+        pair: Dict[str, Any] = {"TagKey": key, "TagValues": list(values)}
+        if catalog_id:
+            pair["CatalogId"] = catalog_id
+        pairs.append(pair)
+    return pairs
 
 
 def _expression_pairs(raw: Any) -> List[Dict[str, Any]]:
@@ -462,6 +542,7 @@ def _expression_definition_from_response(
     raw: Mapping[str, Any],
     *,
     fallback_name: Optional[str] = None,
+    fallback_catalog_id: Optional[str] = None,
 ) -> Optional[LFTagExpressionDefinition]:
     name = raw.get("Name") or fallback_name
     expression = raw.get("Expression", ())
@@ -471,7 +552,7 @@ def _expression_definition_from_response(
         str(name),
         {
             "description": raw.get("Description"),
-            "catalog_id": raw.get("CatalogId"),
+            "catalog_id": raw.get("CatalogId") or fallback_catalog_id,
             "expression": {
                 item.get("TagKey"): item.get("TagValues", ())
                 for item in expression
@@ -480,9 +561,16 @@ def _expression_definition_from_response(
     )
 
 
-def _grant_from_permission_item(item: Mapping[str, Any]) -> Optional[Grant]:
+def _grant_from_permission_item(
+    item: Mapping[str, Any],
+    *,
+    fallback_catalog_id: Optional[str] = None,
+) -> Optional[Grant]:
     principal = item.get("Principal", {}).get("DataLakePrincipalIdentifier")
-    resource = from_lf_resource(item.get("Resource", {}))
+    resource = from_lf_resource(
+        item.get("Resource", {}),
+        fallback_catalog_id=fallback_catalog_id,
+    )
     permissions = tuple(item.get("Permissions", ()))
     if not principal or resource is None or not permissions:
         return None
@@ -494,12 +582,51 @@ def _grant_from_permission_item(item: Mapping[str, Any]) -> Optional[Grant]:
     )
 
 
-def _extract_resource_tags(response: Mapping[str, Any]) -> Dict[str, frozenset]:
-    tags: Dict[str, set] = {}
-    for key in ("LFTagOnDatabase", "LFTagsOnTable"):
-        _merge_lf_tag_pairs(tags, response.get(key, ()))
+def _extract_resource_tag_assignments(
+    resource: ResourceRef,
+    response: Mapping[str, Any],
+) -> Iterable[ResourceTagAssignment]:
+    database_tags = _extract_lf_tag_pairs(response.get("LFTagOnDatabase", ()))
+    if database_tags and resource.database_name:
+        yield ResourceTagAssignment(
+            resource=ResourceRef(
+                kind="database",
+                database_name=resource.database_name,
+                catalog_id=resource.catalog_id,
+            ),
+            tags=database_tags,
+        )
+    table_tags = _extract_lf_tag_pairs(response.get("LFTagsOnTable", ()))
+    if table_tags and resource.database_name and resource.table_name:
+        yield ResourceTagAssignment(
+            resource=ResourceRef(
+                kind="table",
+                database_name=resource.database_name,
+                table_name=resource.table_name,
+                catalog_id=resource.catalog_id,
+            ),
+            tags=table_tags,
+        )
     for column_tags in response.get("LFTagsOnColumns", ()):
-        _merge_lf_tag_pairs(tags, column_tags.get("LFTags", ()))
+        column_name = column_tags.get("Name")
+        tags = _extract_lf_tag_pairs(column_tags.get("LFTags", ()))
+        if not column_name or not tags or not resource.database_name or not resource.table_name:
+            continue
+        yield ResourceTagAssignment(
+            resource=ResourceRef(
+                kind="table_with_columns",
+                database_name=resource.database_name,
+                table_name=resource.table_name,
+                columns=(str(column_name),),
+                catalog_id=resource.catalog_id,
+            ),
+            tags=tags,
+        )
+
+
+def _extract_lf_tag_pairs(pairs: Iterable[Mapping[str, Any]]) -> Dict[str, frozenset]:
+    tags: Dict[str, set] = {}
+    _merge_lf_tag_pairs(tags, pairs)
     return {key: frozenset(values) for key, values in tags.items()}
 
 

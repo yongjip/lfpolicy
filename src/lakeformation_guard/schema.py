@@ -32,7 +32,12 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
             "oneOf": [
                 {
                     "type": "object",
-                    "additionalProperties": _VALUE_LIST,
+                    "additionalProperties": {
+                        "oneOf": [
+                            _VALUE_LIST,
+                            {"$ref": "#/$defs/lfTagDefinitionValue"},
+                        ]
+                    },
                 },
                 {
                     "type": "array",
@@ -92,6 +97,16 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
             "required": ["key", "values"],
             "properties": {
                 "key": _STRING_VALUE,
+                "catalog_id": _STRING_VALUE,
+                "values": _VALUE_LIST,
+            },
+        },
+        "lfTagDefinitionValue": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["values"],
+            "properties": {
+                "catalog_id": _STRING_VALUE,
                 "values": _VALUE_LIST,
             },
         },
@@ -101,6 +116,7 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
             "required": ["key", "assignable_to"],
             "properties": {
                 "key": _STRING_VALUE,
+                "catalog_id": _STRING_VALUE,
                 "assignable_to": {"$ref": "#/$defs/tagAssignmentScopeList"},
             },
         },
@@ -109,6 +125,7 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
             "additionalProperties": False,
             "required": ["assignable_to"],
             "properties": {
+                "catalog_id": _STRING_VALUE,
                 "assignable_to": {"$ref": "#/$defs/tagAssignmentScopeList"},
             },
         },
@@ -141,10 +158,19 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
                 },
                 {
                     "type": "array",
-                    "items": {"$ref": "#/$defs/lfTagDefinition"},
+                    "items": {"$ref": "#/$defs/lfTagExpressionItem"},
                     "minItems": 1,
                 },
             ],
+        },
+        "lfTagExpressionItem": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["key", "values"],
+            "properties": {
+                "key": _STRING_VALUE,
+                "values": _VALUE_LIST,
+            },
         },
         "tagAssignmentScopeList": {
             "oneOf": [
@@ -187,6 +213,7 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
                 {"$ref": "#/$defs/tableResource"},
                 {"$ref": "#/$defs/tableWithColumnsResource"},
                 {"$ref": "#/$defs/dataLocationResource"},
+                {"$ref": "#/$defs/dataCellsFilterResource"},
                 {"$ref": "#/$defs/lfTagPolicyResource"},
                 {"$ref": "#/$defs/lfTagExpressionResource"},
             ],
@@ -246,6 +273,18 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
                 "kind": {"const": "data_location"},
                 "catalog_id": _STRING_VALUE,
                 "location": _STRING_VALUE,
+            },
+        },
+        "dataCellsFilterResource": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["kind", "database", "table", "filter_name"],
+            "properties": {
+                "kind": {"const": "data_cells_filter"},
+                "catalog_id": _STRING_VALUE,
+                "database": _STRING_VALUE,
+                "table": _STRING_VALUE,
+                "filter_name": _STRING_VALUE,
             },
         },
         "lfTagPolicyResource": {
@@ -354,7 +393,7 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
                     "type": "object",
                     "minProperties": 1,
                     "additionalProperties": False,
-                        "properties": {
+                    "properties": {
                         "kind": {
                             "enum": [
                                 "catalog",
@@ -362,6 +401,7 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
                                 "table",
                                 "table_with_columns",
                                 "data_location",
+                                "data_cells_filter",
                                 "lf_tag_policy",
                                 "lf_tag_expression",
                             ]
@@ -371,6 +411,7 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
                         "table": _STRING_VALUE,
                         "location": _STRING_VALUE,
                         "expression_name": _STRING_VALUE,
+                        "filter_name": _STRING_VALUE,
                     },
                 },
             ],

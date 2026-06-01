@@ -77,6 +77,117 @@ class ProviderExplainTests(unittest.TestCase):
         self.assertEqual(report.findings[0].source, "direct_grant")
         self.assertEqual(report.findings[0].id, "finding_001")
 
+    def test_explain_reports_data_cells_filter_grant_for_target_table(self):
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "data_cells_filter",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                            "filter_name": "orders_public",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+
+        report = explain(
+            DesiredState.empty(),
+            current,
+            principal="role",
+            resource=ResourceRef(
+                kind="table",
+                catalog_id="222222222222",
+                database_name="analytics",
+                table_name="orders",
+            ),
+            permissions=("SELECT",),
+        )
+
+        self.assertEqual(report.summary()["matched"], 1)
+        self.assertEqual(report.findings[0].resource.kind, "data_cells_filter")
+        self.assertEqual(report.findings[0].details["filter_name"], "orders_public")
+        self.assertIn("row/column restrictions", report.findings[0].message)
+
+    def test_explain_does_not_match_different_data_cells_filter_target(self):
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "data_cells_filter",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                            "filter_name": "orders_public",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+
+        report = explain(
+            DesiredState.empty(),
+            current,
+            principal="role",
+            resource=ResourceRef(
+                kind="data_cells_filter",
+                catalog_id="222222222222",
+                database_name="analytics",
+                table_name="orders",
+                filter_name="orders_private",
+            ),
+            permissions=("SELECT",),
+        )
+
+        self.assertEqual(report.summary()["matched"], 0)
+        self.assertEqual(report.summary()["not_matched"], 1)
+        self.assertEqual(report.findings[0].details["grant_filter_name"], "orders_public")
+        self.assertEqual(report.findings[0].details["requested_filter_name"], "orders_private")
+
+    def test_explain_reports_table_grant_for_data_cells_filter_target(self):
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+
+        report = explain(
+            DesiredState.empty(),
+            current,
+            principal="role",
+            resource=ResourceRef(
+                kind="data_cells_filter",
+                catalog_id="222222222222",
+                database_name="analytics",
+                table_name="orders",
+                filter_name="orders_public",
+            ),
+            permissions=("SELECT",),
+        )
+
+        self.assertEqual(report.summary()["matched"], 1)
+        self.assertEqual(report.findings[0].resource.kind, "table")
+        self.assertIn("Table-level grant covers", report.findings[0].message)
+
     def test_explain_ignores_catalog_grant_for_different_target_catalog(self):
         current = CurrentState.from_dict(
             {
@@ -122,6 +233,178 @@ class ProviderExplainTests(unittest.TestCase):
 
         self.assertEqual(report.summary()["context"], 1)
         self.assertEqual(report.findings[0].resource.catalog_id, "111111111111")
+
+    def test_explain_uses_target_catalog_for_effective_lf_tags(self):
+        current = CurrentState.from_dict(
+            {
+                "resource_tags": [
+                    {
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "111111111111",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "tags": {"domain": ["sales"]},
+                    },
+                    {
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "tags": {"domain": ["finance"]},
+                    },
+                ],
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "lf_tag_policy",
+                            "catalog_id": "222222222222",
+                            "resource_type": "TABLE",
+                            "expression": {"domain": ["finance"]},
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ],
+            }
+        )
+
+        report = explain(
+            DesiredState.empty(),
+            current,
+            principal="role",
+            resource=ResourceRef(
+                kind="table",
+                catalog_id="222222222222",
+                database_name="analytics",
+                table_name="orders",
+            ),
+            permissions=("SELECT",),
+        )
+
+        self.assertEqual(report.effective_lf_tags, {"domain": ("finance",)})
+        self.assertEqual(report.summary()["matched"], 1)
+
+    def test_explain_uses_grant_catalog_for_unscoped_lf_tag_policy_target(self):
+        current = CurrentState.from_dict(
+            {
+                "resource_tags": [
+                    {
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "111111111111",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "tags": {"domain": ["sales"]},
+                    },
+                    {
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "tags": {"domain": ["finance"]},
+                    },
+                ],
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "lf_tag_policy",
+                            "catalog_id": "222222222222",
+                            "resource_type": "TABLE",
+                            "expression": {"domain": ["finance"]},
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ],
+            }
+        )
+
+        report = explain(
+            DesiredState.empty(),
+            current,
+            principal="role",
+            resource=ResourceRef(kind="table", database_name="analytics", table_name="orders"),
+            permissions=("SELECT",),
+        )
+
+        self.assertEqual(report.effective_lf_tags, {"domain": ("finance", "sales")})
+        self.assertEqual(
+            report.effective_lf_tags_by_catalog,
+            {
+                "111111111111": {"domain": ("sales",)},
+                "222222222222": {"domain": ("finance",)},
+            },
+        )
+        self.assertEqual(report.summary()["matched"], 1)
+        self.assertEqual(report.findings[0].details["effective_lf_tags_catalog_id"], "222222222222")
+        self.assertEqual(report.findings[0].details["effective_lf_tags"], {"domain": ["finance"]})
+        self.assertTrue(any("multiple catalogs" in note for note in report.notes))
+        self.assertEqual(
+            report.to_dict()["effective_lf_tags_by_catalog"],
+            [
+                {"catalog_id": "111111111111", "lf_tags": {"domain": ["sales"]}},
+                {"catalog_id": "222222222222", "lf_tags": {"domain": ["finance"]}},
+            ],
+        )
+
+    def test_explain_marks_unscoped_lf_tag_policy_ambiguous_across_catalogs(self):
+        current = CurrentState.from_dict(
+            {
+                "resource_tags": [
+                    {
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "111111111111",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "tags": {"domain": ["sales"]},
+                    },
+                    {
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "tags": {"domain": ["finance"]},
+                    },
+                ],
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "lf_tag_policy",
+                            "resource_type": "TABLE",
+                            "expression": {"domain": ["sales"]},
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ],
+            }
+        )
+
+        report = explain(
+            DesiredState.empty(),
+            current,
+            principal="role",
+            resource=ResourceRef(kind="table", database_name="analytics", table_name="orders"),
+            permissions=("SELECT",),
+        )
+
+        self.assertEqual(report.summary()["not_matched"], 1)
+        self.assertEqual(
+            report.findings[0].details["ambiguous_catalog_ids"],
+            ["111111111111", "222222222222"],
+        )
+        self.assertIn("specify catalog_id", report.findings[0].message)
 
     def test_explain_resolves_named_lf_tag_expression_grant(self):
         current = CurrentState.from_dict(
@@ -255,6 +538,61 @@ class ProviderExplainTests(unittest.TestCase):
         self.assertEqual(report.summary()["matched"], 1)
         self.assertEqual(report.findings[0].details["expression"], {"domain": ["sales"]})
 
+    def test_explain_does_not_resolve_named_expression_from_different_target_catalog(self):
+        current = CurrentState.from_dict(
+            {
+                "lf_tag_expressions": [
+                    {
+                        "name": "shared",
+                        "catalog_id": "111111111111",
+                        "expression": {"domain": ["sales"]},
+                    }
+                ],
+                "resource_tags": [
+                    {
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "tags": {"domain": ["sales"]},
+                    }
+                ],
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "lf_tag_policy",
+                            "resource_type": "TABLE",
+                            "expression_name": "shared",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ],
+            }
+        )
+
+        report = explain(
+            DesiredState.empty(),
+            current,
+            principal="role",
+            resource=ResourceRef(
+                kind="table",
+                catalog_id="222222222222",
+                database_name="analytics",
+                table_name="orders",
+            ),
+            permissions=("SELECT",),
+        )
+
+        self.assertEqual(report.summary()["not_matched"], 1)
+        self.assertEqual(
+            report.findings[0].message,
+            "Named LF-Tag expression definition is missing from current state.",
+        )
+        self.assertEqual(report.findings[0].details["expression_catalog_id"], "222222222222")
+
     def test_explain_rejects_duplicate_lf_tag_expression_identity(self):
         current = CurrentState.from_dict(
             {
@@ -341,6 +679,204 @@ class ProviderExplainTests(unittest.TestCase):
         self.assertEqual(report.summary()["missing"], 1)
         self.assertEqual(report.findings[0].source, "desired_grant")
 
+    def test_explain_treats_current_all_permission_as_covering_requested_and_desired_permissions(self):
+        desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                        "permissions": ["ALL"],
+                    }
+                ]
+            }
+        )
+
+        report = explain(
+            desired,
+            current,
+            principal="role",
+            resource=ResourceRef(kind="table", database_name="analytics", table_name="orders"),
+            permissions=("SELECT",),
+        )
+
+        self.assertEqual(report.summary()["matched"], 1)
+        self.assertEqual(report.summary()["missing"], 0)
+        self.assertEqual(report.findings[0].permissions, ("ALL",))
+        self.assertNotIn("missing_permissions", report.findings[0].details)
+
+    def test_explain_does_not_mark_desired_data_cells_filter_missing_when_current_table_grant_covers_it(self):
+        desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "data_cells_filter",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                            "filter_name": "orders_public",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+
+        report = explain(
+            desired,
+            current,
+            principal="role",
+            resource=ResourceRef(
+                kind="data_cells_filter",
+                catalog_id="222222222222",
+                database_name="analytics",
+                table_name="orders",
+                filter_name="orders_public",
+            ),
+            permissions=("SELECT",),
+        )
+
+        self.assertEqual(report.summary()["matched"], 1)
+        self.assertEqual(report.summary()["missing"], 0)
+        self.assertEqual([finding.source for finding in report.findings], ["direct_grant"])
+
+    def test_explain_marks_scoped_desired_grant_missing_when_current_covering_grant_is_unscoped(self):
+        desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "data_cells_filter",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                            "filter_name": "orders_public",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "table",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+
+        report = explain(
+            desired,
+            current,
+            principal="role",
+            resource=ResourceRef(
+                kind="data_cells_filter",
+                catalog_id="222222222222",
+                database_name="analytics",
+                table_name="orders",
+                filter_name="orders_public",
+            ),
+            permissions=("SELECT",),
+        )
+
+        self.assertEqual(report.summary()["matched"], 1)
+        self.assertEqual(report.summary()["missing"], 1)
+        self.assertEqual([finding.source for finding in report.findings], ["direct_grant", "desired_grant"])
+        self.assertEqual(
+            report.findings[1].details["desired_resource"]["catalog_id"],
+            "222222222222",
+        )
+
+    def test_explain_still_marks_desired_table_missing_when_current_grant_is_only_filtered(self):
+        desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "data_cells_filter",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                            "filter_name": "orders_public",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+
+        report = explain(
+            desired,
+            current,
+            principal="role",
+            resource=ResourceRef(
+                kind="table",
+                catalog_id="222222222222",
+                database_name="analytics",
+                table_name="orders",
+            ),
+            permissions=("SELECT",),
+        )
+
+        self.assertEqual(report.summary()["matched"], 1)
+        self.assertEqual(report.summary()["missing"], 1)
+        self.assertEqual(report.findings[1].source, "desired_grant")
+
     def test_cli_explain_uses_current_snapshot_without_aws(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -390,6 +926,79 @@ class ProviderExplainTests(unittest.TestCase):
             self.assertEqual(payload["schema_version"], "lfguard.explain.v1")
             self.assertEqual(payload["summary"]["matched"], 1)
             self.assertEqual(payload["findings"][0]["id"], "finding_001")
+            from_boto3.assert_not_called()
+
+    def test_cli_explain_targets_data_cells_filter_from_snapshot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            desired_path = tmp_path / "desired.json"
+            current_path = tmp_path / "current.json"
+            desired_path.write_text(json.dumps({"grants": []}), encoding="utf-8")
+            current_path.write_text(
+                json.dumps(
+                    {
+                        "resource_tags": [
+                            {
+                                "resource": {
+                                    "kind": "table",
+                                    "catalog_id": "222222222222",
+                                    "database": "analytics",
+                                    "table": "orders",
+                                },
+                                "tags": {"domain": ["sales"]},
+                            }
+                        ],
+                        "grants": [
+                            {
+                                "principal": "role",
+                                "resource": {
+                                    "kind": "data_cells_filter",
+                                    "catalog_id": "222222222222",
+                                    "database": "analytics",
+                                    "table": "orders",
+                                    "filter_name": "orders_public",
+                                },
+                                "permissions": ["SELECT"],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter.from_boto3") as from_boto3:
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "explain",
+                            "--desired",
+                            str(desired_path),
+                            "--current-snapshot",
+                            str(current_path),
+                            "--principal",
+                            "role",
+                            "--catalog-id",
+                            "222222222222",
+                            "--database",
+                            "analytics",
+                            "--table",
+                            "orders",
+                            "--data-cells-filter",
+                            "orders_public",
+                            "--permissions",
+                            "SELECT",
+                            "--output",
+                            "json",
+                        ]
+                    )
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(payload["summary"]["matched"], 1)
+            self.assertEqual(payload["resource"]["kind"], "data_cells_filter")
+            self.assertEqual(payload["effective_lf_tags"], {"domain": ["sales"]})
+            self.assertEqual(payload["findings"][0]["resource"]["filter_name"], "orders_public")
             from_boto3.assert_not_called()
 
     def test_cli_explain_outputs_markdown(self):

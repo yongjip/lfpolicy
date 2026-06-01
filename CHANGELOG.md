@@ -2,6 +2,77 @@
 
 ## Unreleased
 
+## 0.5.2
+
+- Adds catalog-scoped LF-Tag definitions so same-name tag keys in different
+  catalogs are planned, audited, linted, and applied independently.
+- Adds Stubber coverage for catalog-scoped LF-Tag definition inventory plus
+  LF-Tag definition, resource tag, and table grant apply request shapes.
+- Adds catalog-aware Python policy authoring for tag keys, resource tag
+  assignments, LF-Tag policy bundles, and catalog creator bundles.
+- Rejects duplicate exact LF-Tag and LF-Tag key metadata identities so
+  catalog-scoped list-form state cannot be silently collapsed by shared
+  indexes.
+- Preserves the requested catalog ID in live import and scoped current-state
+  loading when Lake Formation responses omit `CatalogId`.
+- Adds catalog-specific effective LF-Tag evidence to `explain` reports and uses
+  scoped grant catalogs when evaluating LF-Tag policy matches for unscoped
+  targets.
+- Reports wholly unmanaged current LF-Tag definitions in audit evidence, with
+  catalog-aware ownership and ignore handling.
+- Reports wholly unmanaged current resource tag assignments in audit evidence,
+  with catalog-aware ownership and ignore handling.
+- Plans destructive removal of unmanaged current resource tag assignments and
+  unmanaged tag keys on desired resources when `--allow-resource-tag-removals`
+  is enabled, preserving scoped catalog IDs for live apply.
+- Keeps column-level LF-Tag assignments from `get_resource_lf_tags` as separate
+  `table_with_columns` resource tag evidence instead of flattening them onto the
+  table.
+- Includes scoped resource catalog IDs on Lake Formation `LFTagPair` entries
+  when adding or removing resource tag assignments.
+- Models Lake Formation `DataCellsFilter` grant resources so live permission
+  inventory, apply, audit, and explain evidence do not drop row/cell-filtered
+  access grants.
+- Adds `lfguard explain --data-cells-filter FILTER` so CLI evidence can target
+  Lake Formation data cells filter grants directly.
+- Adds Stubber coverage for catalog-scoped `DataCellsFilter` grants and
+  revokes so live apply preserves `TableCatalogId`.
+- Tightens `explain --data-cells-filter` evidence so grants for other filters
+  on the same table are reported as non-matches instead of effective access.
+- Reports broader table/database grants as relevant evidence when explaining a
+  specific data cells filter target.
+- Uses Lake Formation grants internally to discover resource-tag import targets
+  even when `lfguard import --include resource-tags` omits `grants` from the
+  generated desired-state file.
+- Requests assigned LF-Tags explicitly when loading resource-tag evidence from
+  AWS so planned assignment drift is not based on inherited tag context.
+- Adds Stubber coverage for catalog-scoped data-location grant apply, revoke,
+  and live inventory request shapes.
+- Makes `explain` missing-desired-grant evidence account for broader current
+  database/table/column grants that already cover narrower desired resources,
+  while keeping filtered grants from satisfying full table desired grants.
+- Makes lint resolve catalog-scoped named LF-Tag expression bodies for
+  column-narrowing safety checks, reducing false positives for table-only named
+  expressions.
+- Constrains `explain` named LF-Tag expression lookup by the target/effective
+  catalog when a grant omits `catalog_id`, avoiding cross-catalog evidence
+  matches.
+- Makes resource-tag plan changes deterministic by resource identity and tag
+  key so review IDs do not depend on input ordering.
+- Adds Stubber coverage for catalog-scoped named LF-Tag expression grants and
+  revokes used by stewardship bundles.
+- Keeps `explain` from treating unscoped current grants as proof that a
+  catalog-scoped desired grant is present, while still showing the current grant
+  as relevant evidence.
+- Makes catalog-scoped ownership boundaries include matching unscoped current
+  grants, so broad unmanaged grants are not hidden outside the managed catalog.
+- Treats current `ALL`/`SUPER_USER` grants as covering concrete desired
+  permissions in audit, explain, and planning evidence while still reporting
+  broad grants as unmanaged policy drift.
+- When destructive permission revokes are enabled, adds desired concrete
+  permissions before revoking broad current permissions such as `ALL` so the
+  resulting plan still converges to desired access.
+
 ## 0.5.1
 
 - Preserves catalog IDs for catalog resources in AWS grant apply and inventory

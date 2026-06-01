@@ -253,6 +253,7 @@ class AwsAdapterStubberTests(unittest.TestCase):
                         "Name": "orders",
                     }
                 },
+                "ShowAssignedLFTags": True,
             },
         )
         self.stubber.add_response(
@@ -319,6 +320,76 @@ class AwsAdapterStubberTests(unittest.TestCase):
         self.assertEqual(current.grants[0].permissions, ("SELECT",))
         self.stubber.assert_no_pending_responses()
 
+    def test_load_current_state_keeps_column_lf_tags_separate_from_table_tags(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id="111111111111")
+        desired = DesiredState.from_dict(
+            {
+                "resource_tags": [
+                    {
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "tags": {"domain": ["sales"]},
+                    }
+                ]
+            }
+        )
+
+        self.stubber.add_response(
+            "get_resource_lf_tags",
+            {
+                "LFTagsOnTable": [{"TagKey": "domain", "TagValues": ["sales"]}],
+                "LFTagsOnColumns": [
+                    {
+                        "Name": "customer_id",
+                        "LFTags": [{"TagKey": "pii", "TagValues": ["yes"]}],
+                    }
+                ],
+            },
+            {
+                "CatalogId": "222222222222",
+                "Resource": {
+                    "Table": {
+                        "CatalogId": "222222222222",
+                        "DatabaseName": "analytics",
+                        "Name": "orders",
+                    }
+                },
+                "ShowAssignedLFTags": True,
+            },
+        )
+
+        current = adapter.load_current_state_for(desired)
+
+        self.assertEqual(
+            [assignment.to_dict() for assignment in current.resource_tags],
+            [
+                {
+                    "resource": {
+                        "kind": "table",
+                        "catalog_id": "222222222222",
+                        "database": "analytics",
+                        "table": "orders",
+                    },
+                    "tags": {"domain": ["sales"]},
+                },
+                {
+                    "resource": {
+                        "kind": "table_with_columns",
+                        "catalog_id": "222222222222",
+                        "database": "analytics",
+                        "table": "orders",
+                        "columns": ["customer_id"],
+                    },
+                    "tags": {"pii": ["yes"]},
+                },
+            ],
+        )
+        self.stubber.assert_no_pending_responses()
+
     def test_not_found_lf_tag_is_treated_as_absent_current_state(self):
         adapter = AWSLakeFormationAdapter(self.client, catalog_id=CATALOG_ID)
         desired = DesiredState.from_dict({"lf_tags": {"domain": ["sales"]}})
@@ -332,6 +403,393 @@ class AwsAdapterStubberTests(unittest.TestCase):
         current = adapter.load_current_state_for(desired)
 
         self.assertEqual(current.lf_tags, ())
+        self.stubber.assert_no_pending_responses()
+
+    def test_load_current_state_fetches_lf_tags_by_catalog_id(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id="111111111111")
+        desired = DesiredState.from_dict(
+            {
+                "lf_tags": [
+                    {
+                        "key": "domain",
+                        "catalog_id": "222222222222",
+                        "values": ["sales"],
+                    }
+                ]
+            }
+        )
+
+        self.stubber.add_response(
+            "get_lf_tag",
+            {"CatalogId": "222222222222", "TagKey": "domain", "TagValues": ["sales"]},
+            {"CatalogId": "222222222222", "TagKey": "domain"},
+        )
+
+        current = adapter.load_current_state_for(desired)
+
+        self.assertEqual(current.lf_tags[0].catalog_id, "222222222222")
+        self.stubber.assert_no_pending_responses()
+
+    def test_apply_lf_tag_payload_catalog_id_overrides_adapter_default(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id="111111111111")
+        change_plan = Plan.from_dict(
+            {
+                "changes": [
+                    {
+                        "action": "lf_tag.create",
+                        "target": "lf_tag:catalog=222222222222:key=domain",
+                        "reason": "missing",
+                        "payload": {
+                            "catalog_id": "222222222222",
+                            "tag_key": "domain",
+                            "tag_values": ["sales"],
+                        },
+                    }
+                ]
+            }
+        )
+
+        self.stubber.add_response(
+            "create_lf_tag",
+            {},
+            {
+                "CatalogId": "222222222222",
+                "TagKey": "domain",
+                "TagValues": ["sales"],
+            },
+        )
+
+        results = adapter.apply(change_plan, dry_run=False)
+
+        self.assertEqual(len(results), 1)
+        self.assertTrue(results[0].applied)
+        self.stubber.assert_no_pending_responses()
+
+    def test_apply_resource_tag_payload_catalog_id_overrides_adapter_default(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id="111111111111")
+        change_plan = Plan.from_dict(
+            {
+                "changes": [
+                    {
+                        "action": "resource_tag.add_values",
+                        "target": "table:catalog=222222222222:database=analytics:table=orders",
+                        "reason": "missing assignment",
+                        "payload": {
+                            "resource": {
+                                "kind": "table",
+                                "catalog_id": "222222222222",
+                                "database": "analytics",
+                                "table": "orders",
+                            },
+                            "tags": {"domain": ["sales"]},
+                        },
+                    }
+                ]
+            }
+        )
+
+        self.stubber.add_response(
+            "add_lf_tags_to_resource",
+            {},
+            {
+                "CatalogId": "222222222222",
+                "Resource": {
+                    "Table": {
+                        "CatalogId": "222222222222",
+                        "DatabaseName": "analytics",
+                        "Name": "orders",
+                    }
+                },
+                "LFTags": [
+                    {
+                        "CatalogId": "222222222222",
+                        "TagKey": "domain",
+                        "TagValues": ["sales"],
+                    }
+                ],
+            },
+        )
+
+        results = adapter.apply(change_plan, dry_run=False)
+
+        self.assertEqual(len(results), 1)
+        self.assertTrue(results[0].applied)
+        self.stubber.assert_no_pending_responses()
+
+    def test_apply_resource_tag_removal_payload_catalog_id_overrides_adapter_default(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id="111111111111")
+        change_plan = Plan.from_dict(
+            {
+                "changes": [
+                    {
+                        "action": "resource_tag.remove_values",
+                        "target": "table:catalog=222222222222:database=analytics:table=orders",
+                        "reason": "extra assignment",
+                        "destructive": True,
+                        "payload": {
+                            "resource": {
+                                "kind": "table",
+                                "catalog_id": "222222222222",
+                                "database": "analytics",
+                                "table": "orders",
+                            },
+                            "tags": {"domain": ["legacy"]},
+                        },
+                    }
+                ]
+            }
+        )
+
+        self.stubber.add_response(
+            "remove_lf_tags_from_resource",
+            {},
+            {
+                "CatalogId": "222222222222",
+                "Resource": {
+                    "Table": {
+                        "CatalogId": "222222222222",
+                        "DatabaseName": "analytics",
+                        "Name": "orders",
+                    }
+                },
+                "LFTags": [
+                    {
+                        "CatalogId": "222222222222",
+                        "TagKey": "domain",
+                        "TagValues": ["legacy"],
+                    }
+                ],
+            },
+        )
+
+        results = adapter.apply(change_plan, dry_run=False, allow_destructive=True)
+
+        self.assertEqual(len(results), 1)
+        self.assertTrue(results[0].applied)
+        self.stubber.assert_no_pending_responses()
+
+    def test_apply_table_grant_uses_resource_catalog_id_over_adapter_default(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id="111111111111")
+        change_plan = Plan.from_dict(
+            {
+                "changes": [
+                    {
+                        "action": "grant.add_permissions",
+                        "target": "principal -> table:catalog=222222222222:database=analytics:table=orders",
+                        "reason": "missing table permissions",
+                        "payload": {
+                            "principal": PRINCIPAL,
+                            "resource": {
+                                "kind": "table",
+                                "catalog_id": "222222222222",
+                                "database": "analytics",
+                                "table": "orders",
+                            },
+                            "permissions": ["SELECT"],
+                            "grantable_permissions": [],
+                        },
+                    }
+                ]
+            }
+        )
+
+        self.stubber.add_response(
+            "grant_permissions",
+            {},
+            {
+                "CatalogId": "222222222222",
+                "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                "Resource": {
+                    "Table": {
+                        "CatalogId": "222222222222",
+                        "DatabaseName": "analytics",
+                        "Name": "orders",
+                    }
+                },
+                "Permissions": ["SELECT"],
+                "PermissionsWithGrantOption": [],
+            },
+        )
+
+        results = adapter.apply(change_plan, dry_run=False)
+
+        self.assertEqual(len(results), 1)
+        self.assertTrue(results[0].applied)
+        self.stubber.assert_no_pending_responses()
+
+    def test_apply_data_location_grant_and_revoke_use_resource_catalog_id(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id="111111111111")
+        resource = {
+            "kind": "data_location",
+            "catalog_id": "222222222222",
+            "location": "arn:aws:s3:::analytics-lake/raw/",
+        }
+        change_plan = Plan.from_dict(
+            {
+                "changes": [
+                    {
+                        "action": "grant.add_permissions",
+                        "target": "principal -> data_location:catalog=222222222222:location=arn:aws:s3:::analytics-lake/raw/",
+                        "reason": "missing data location access",
+                        "payload": {
+                            "principal": PRINCIPAL,
+                            "resource": resource,
+                            "permissions": ["DATA_LOCATION_ACCESS"],
+                            "grantable_permissions": [],
+                        },
+                    },
+                    {
+                        "action": "grant.revoke_permissions",
+                        "target": "principal -> data_location:catalog=222222222222:location=arn:aws:s3:::analytics-lake/raw/",
+                        "reason": "extra data location access",
+                        "destructive": True,
+                        "payload": {
+                            "principal": PRINCIPAL,
+                            "resource": resource,
+                            "permissions": ["DATA_LOCATION_ACCESS"],
+                            "grantable_permissions": [],
+                        },
+                    },
+                ]
+            }
+        )
+        expected_resource = {
+            "DataLocation": {
+                "CatalogId": "222222222222",
+                "ResourceArn": "arn:aws:s3:::analytics-lake/raw/",
+            }
+        }
+
+        self.stubber.add_response(
+            "grant_permissions",
+            {},
+            {
+                "CatalogId": "222222222222",
+                "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                "Resource": expected_resource,
+                "Permissions": ["DATA_LOCATION_ACCESS"],
+                "PermissionsWithGrantOption": [],
+            },
+        )
+        self.stubber.add_response(
+            "revoke_permissions",
+            {},
+            {
+                "CatalogId": "222222222222",
+                "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                "Resource": expected_resource,
+                "Permissions": ["DATA_LOCATION_ACCESS"],
+                "PermissionsWithGrantOption": [],
+            },
+        )
+
+        results = adapter.apply(change_plan, dry_run=False, allow_destructive=True)
+
+        self.assertEqual(len(results), 2)
+        self.assertTrue(all(result.applied for result in results))
+        self.stubber.assert_no_pending_responses()
+
+    def test_apply_data_cells_filter_grant_uses_table_catalog_id(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id="111111111111")
+        change_plan = Plan.from_dict(
+            {
+                "changes": [
+                    {
+                        "action": "grant.add_permissions",
+                        "target": "principal -> data_cells_filter:catalog=222222222222:database=analytics:table=orders:filter_name=orders_public",
+                        "reason": "missing filtered table permissions",
+                        "payload": {
+                            "principal": PRINCIPAL,
+                            "resource": {
+                                "kind": "data_cells_filter",
+                                "catalog_id": "222222222222",
+                                "database": "analytics",
+                                "table": "orders",
+                                "filter_name": "orders_public",
+                            },
+                            "permissions": ["SELECT"],
+                            "grantable_permissions": [],
+                        },
+                    }
+                ]
+            }
+        )
+
+        self.stubber.add_response(
+            "grant_permissions",
+            {},
+            {
+                "CatalogId": "222222222222",
+                "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                "Resource": {
+                    "DataCellsFilter": {
+                        "TableCatalogId": "222222222222",
+                        "DatabaseName": "analytics",
+                        "TableName": "orders",
+                        "Name": "orders_public",
+                    }
+                },
+                "Permissions": ["SELECT"],
+                "PermissionsWithGrantOption": [],
+            },
+        )
+
+        results = adapter.apply(change_plan, dry_run=False)
+
+        self.assertEqual(len(results), 1)
+        self.assertTrue(results[0].applied)
+        self.stubber.assert_no_pending_responses()
+
+    def test_apply_data_cells_filter_revoke_uses_table_catalog_id(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id="111111111111")
+        change_plan = Plan.from_dict(
+            {
+                "changes": [
+                    {
+                        "action": "grant.revoke_permissions",
+                        "target": "principal -> data_cells_filter:catalog=222222222222:database=analytics:table=orders:filter_name=orders_public",
+                        "reason": "extra filtered table permissions",
+                        "destructive": True,
+                        "payload": {
+                            "principal": PRINCIPAL,
+                            "resource": {
+                                "kind": "data_cells_filter",
+                                "catalog_id": "222222222222",
+                                "database": "analytics",
+                                "table": "orders",
+                                "filter_name": "orders_public",
+                            },
+                            "permissions": ["SELECT"],
+                            "grantable_permissions": [],
+                        },
+                    }
+                ]
+            }
+        )
+
+        self.stubber.add_response(
+            "revoke_permissions",
+            {},
+            {
+                "CatalogId": "222222222222",
+                "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                "Resource": {
+                    "DataCellsFilter": {
+                        "TableCatalogId": "222222222222",
+                        "DatabaseName": "analytics",
+                        "TableName": "orders",
+                        "Name": "orders_public",
+                    }
+                },
+                "Permissions": ["SELECT"],
+                "PermissionsWithGrantOption": [],
+            },
+        )
+
+        results = adapter.apply(change_plan, dry_run=False, allow_destructive=True)
+
+        self.assertEqual(len(results), 1)
+        self.assertTrue(results[0].applied)
         self.stubber.assert_no_pending_responses()
 
     def test_apply_lf_tag_expression_changes_without_catalog_id(self):
@@ -440,8 +898,84 @@ class AwsAdapterStubberTests(unittest.TestCase):
         self.assertTrue(results[0].applied)
         self.stubber.assert_no_pending_responses()
 
-    def test_apply_catalog_grant_uses_resource_catalog_id_over_adapter_default(self):
+    def test_apply_lf_tag_expression_grant_and_revoke_use_resource_catalog_id(self):
         adapter = AWSLakeFormationAdapter(self.client, catalog_id="111111111111")
+        resource = {
+            "kind": "lf_tag_expression",
+            "catalog_id": "222222222222",
+            "expression_name": "sales_tables",
+        }
+        change_plan = Plan.from_dict(
+            {
+                "changes": [
+                    {
+                        "action": "grant.add_permissions",
+                        "target": "principal -> lf_tag_expression:catalog=222222222222:expression_name=sales_tables",
+                        "reason": "missing expression stewardship",
+                        "payload": {
+                            "principal": PRINCIPAL,
+                            "resource": resource,
+                            "permissions": ["DESCRIBE", "GRANT_WITH_LF_TAG_EXPRESSION"],
+                            "grantable_permissions": [],
+                        },
+                    },
+                    {
+                        "action": "grant.revoke_permissions",
+                        "target": "principal -> lf_tag_expression:catalog=222222222222:expression_name=sales_tables",
+                        "reason": "extra expression stewardship",
+                        "destructive": True,
+                        "payload": {
+                            "principal": PRINCIPAL,
+                            "resource": resource,
+                            "permissions": ["GRANT_WITH_LF_TAG_EXPRESSION"],
+                            "grantable_permissions": [],
+                        },
+                    },
+                ]
+            }
+        )
+        expected_resource = {
+            "LFTagExpression": {
+                "CatalogId": "222222222222",
+                "Name": "sales_tables",
+            }
+        }
+
+        self.stubber.add_response(
+            "grant_permissions",
+            {},
+            {
+                "CatalogId": "222222222222",
+                "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                "Resource": expected_resource,
+                "Permissions": ["DESCRIBE", "GRANT_WITH_LF_TAG_EXPRESSION"],
+                "PermissionsWithGrantOption": [],
+            },
+        )
+        self.stubber.add_response(
+            "revoke_permissions",
+            {},
+            {
+                "CatalogId": "222222222222",
+                "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                "Resource": expected_resource,
+                "Permissions": ["GRANT_WITH_LF_TAG_EXPRESSION"],
+                "PermissionsWithGrantOption": [],
+            },
+        )
+
+        results = adapter.apply(change_plan, dry_run=False, allow_destructive=True)
+
+        self.assertEqual(len(results), 2)
+        self.assertTrue(all(result.applied for result in results))
+        self.stubber.assert_no_pending_responses()
+
+    def test_apply_catalog_grant_and_revoke_use_resource_catalog_id_over_adapter_default(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id="111111111111")
+        resource = {
+            "kind": "catalog",
+            "catalog_id": "222222222222",
+        }
         change_plan = Plan.from_dict(
             {
                 "changes": [
@@ -451,10 +985,19 @@ class AwsAdapterStubberTests(unittest.TestCase):
                         "reason": "missing catalog permissions",
                         "payload": {
                             "principal": PRINCIPAL,
-                            "resource": {
-                                "kind": "catalog",
-                                "catalog_id": "222222222222",
-                            },
+                            "resource": resource,
+                            "permissions": ["CREATE_DATABASE"],
+                            "grantable_permissions": [],
+                        },
+                    },
+                    {
+                        "action": "grant.revoke_permissions",
+                        "target": "principal -> catalog:catalog=222222222222",
+                        "reason": "extra catalog permissions",
+                        "destructive": True,
+                        "payload": {
+                            "principal": PRINCIPAL,
+                            "resource": resource,
                             "permissions": ["CREATE_DATABASE"],
                             "grantable_permissions": [],
                         },
@@ -474,11 +1017,22 @@ class AwsAdapterStubberTests(unittest.TestCase):
                 "PermissionsWithGrantOption": [],
             },
         )
+        self.stubber.add_response(
+            "revoke_permissions",
+            {},
+            {
+                "CatalogId": "222222222222",
+                "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                "Resource": {"Catalog": {"Id": "222222222222"}},
+                "Permissions": ["CREATE_DATABASE"],
+                "PermissionsWithGrantOption": [],
+            },
+        )
 
-        results = adapter.apply(change_plan, dry_run=False)
+        results = adapter.apply(change_plan, dry_run=False, allow_destructive=True)
 
-        self.assertEqual(len(results), 1)
-        self.assertTrue(results[0].applied)
+        self.assertEqual(len(results), 2)
+        self.assertTrue(all(result.applied for result in results))
         self.stubber.assert_no_pending_responses()
 
     def test_load_current_state_fetches_lf_tag_expressions_by_catalog_id(self):
@@ -550,6 +1104,99 @@ class AwsAdapterStubberTests(unittest.TestCase):
         )
         self.stubber.assert_no_pending_responses()
 
+    def test_load_current_state_preserves_requested_catalog_for_expression_response_without_catalog_id(self):
+        adapter = AWSLakeFormationAdapter(self.client)
+        desired = DesiredState.from_dict(
+            {
+                "lf_tag_expressions": [
+                    {
+                        "name": "shared",
+                        "catalog_id": "222222222222",
+                        "expression": {"domain": ["sales"]},
+                    }
+                ],
+            }
+        )
+
+        self.stubber.add_response(
+            "get_lf_tag_expression",
+            {
+                "Name": "shared",
+                "Expression": [{"TagKey": "domain", "TagValues": ["sales"]}],
+            },
+            {"CatalogId": "222222222222", "Name": "shared"},
+        )
+
+        current = adapter.load_current_state_for(desired)
+
+        self.assertEqual(current.lf_tag_expressions[0].catalog_id, "222222222222")
+        self.stubber.assert_no_pending_responses()
+
+    def test_load_current_state_preserves_lf_tag_expression_grant_catalog_id(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id="111111111111")
+        desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": PRINCIPAL,
+                        "resource": {
+                            "kind": "lf_tag_expression",
+                            "catalog_id": "222222222222",
+                            "expression_name": "sales_tables",
+                        },
+                        "permissions": ["DESCRIBE", "GRANT_WITH_LF_TAG_EXPRESSION"],
+                    }
+                ]
+            }
+        )
+
+        self.stubber.add_response(
+            "get_lf_tag_expression",
+            {
+                "Name": "sales_tables",
+                "CatalogId": "222222222222",
+                "Expression": [{"TagKey": "domain", "TagValues": ["sales"]}],
+            },
+            {"CatalogId": "222222222222", "Name": "sales_tables"},
+        )
+        self.stubber.add_response(
+            "list_permissions",
+            {
+                "PrincipalResourcePermissions": [
+                    {
+                        "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                        "Resource": {"LFTagExpression": {"Name": "sales_tables"}},
+                        "Permissions": ["DESCRIBE", "GRANT_WITH_LF_TAG_EXPRESSION"],
+                        "PermissionsWithGrantOption": [],
+                    }
+                ]
+            },
+            {
+                "CatalogId": "222222222222",
+                "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                "Resource": {
+                    "LFTagExpression": {
+                        "CatalogId": "222222222222",
+                        "Name": "sales_tables",
+                    }
+                },
+                "MaxResults": 100,
+            },
+        )
+
+        current = adapter.load_current_state_for(desired)
+
+        self.assertEqual(current.lf_tag_expressions[0].catalog_id, "222222222222")
+        self.assertEqual(
+            current.grants[0].resource.to_dict(),
+            {
+                "kind": "lf_tag_expression",
+                "catalog_id": "222222222222",
+                "expression_name": "sales_tables",
+            },
+        )
+        self.stubber.assert_no_pending_responses()
+
     def test_load_current_state_preserves_catalog_id_for_catalog_grants(self):
         adapter = AWSLakeFormationAdapter(self.client, catalog_id="111111111111")
         desired = DesiredState.from_dict(
@@ -573,6 +1220,7 @@ class AwsAdapterStubberTests(unittest.TestCase):
             {
                 "CatalogId": "222222222222",
                 "Resource": {"Catalog": {"Id": "222222222222"}},
+                "ShowAssignedLFTags": True,
             },
         )
         self.stubber.add_response(
@@ -599,6 +1247,260 @@ class AwsAdapterStubberTests(unittest.TestCase):
 
         self.assertEqual(current.grants[0].resource.kind, "catalog")
         self.assertEqual(current.grants[0].resource.catalog_id, "222222222222")
+        self.stubber.assert_no_pending_responses()
+
+    def test_load_current_state_preserves_requested_catalog_for_grant_response_without_catalog_id(self):
+        adapter = AWSLakeFormationAdapter(self.client)
+        desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": PRINCIPAL,
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+
+        self.stubber.add_response(
+            "get_resource_lf_tags",
+            {},
+            {
+                "CatalogId": "222222222222",
+                "Resource": {
+                    "Table": {
+                        "CatalogId": "222222222222",
+                        "DatabaseName": "analytics",
+                        "Name": "orders",
+                    }
+                },
+                "ShowAssignedLFTags": True,
+            },
+        )
+        self.stubber.add_response(
+            "list_permissions",
+            {
+                "PrincipalResourcePermissions": [
+                    {
+                        "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                        "Resource": {"Table": {"DatabaseName": "analytics", "Name": "orders"}},
+                        "Permissions": ["SELECT"],
+                        "PermissionsWithGrantOption": [],
+                    }
+                ]
+            },
+            {
+                "CatalogId": "222222222222",
+                "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                "Resource": {
+                    "Table": {
+                        "CatalogId": "222222222222",
+                        "DatabaseName": "analytics",
+                        "Name": "orders",
+                    }
+                },
+                "MaxResults": 100,
+            },
+        )
+
+        current = adapter.load_current_state_for(desired)
+
+        self.assertEqual(current.grants[0].resource.catalog_id, "222222222222")
+        self.stubber.assert_no_pending_responses()
+
+    def test_load_current_state_preserves_data_location_grant_catalog_id(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id="111111111111")
+        desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": PRINCIPAL,
+                        "resource": {
+                            "kind": "data_location",
+                            "catalog_id": "222222222222",
+                            "location": "arn:aws:s3:::analytics-lake/raw/",
+                        },
+                        "permissions": ["DATA_LOCATION_ACCESS"],
+                    }
+                ]
+            }
+        )
+        resource = {
+            "DataLocation": {
+                "CatalogId": "222222222222",
+                "ResourceArn": "arn:aws:s3:::analytics-lake/raw/",
+            }
+        }
+
+        self.stubber.add_response(
+            "get_resource_lf_tags",
+            {},
+            {
+                "CatalogId": "222222222222",
+                "Resource": resource,
+                "ShowAssignedLFTags": True,
+            },
+        )
+        self.stubber.add_response(
+            "list_permissions",
+            {
+                "PrincipalResourcePermissions": [
+                    {
+                        "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                        "Resource": {"DataLocation": {"ResourceArn": "arn:aws:s3:::analytics-lake/raw/"}},
+                        "Permissions": ["DATA_LOCATION_ACCESS"],
+                        "PermissionsWithGrantOption": [],
+                    }
+                ]
+            },
+            {
+                "CatalogId": "222222222222",
+                "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                "Resource": resource,
+                "MaxResults": 100,
+            },
+        )
+
+        current = adapter.load_current_state_for(desired)
+
+        self.assertEqual(
+            current.grants[0].resource.to_dict(),
+            {
+                "kind": "data_location",
+                "catalog_id": "222222222222",
+                "location": "arn:aws:s3:::analytics-lake/raw/",
+            },
+        )
+        self.stubber.assert_no_pending_responses()
+
+    def test_load_current_state_preserves_data_cells_filter_grants(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id="111111111111")
+        desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": PRINCIPAL,
+                        "resource": {
+                            "kind": "data_cells_filter",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                            "filter_name": "orders_public",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+        resource = {
+            "DataCellsFilter": {
+                "TableCatalogId": "222222222222",
+                "DatabaseName": "analytics",
+                "TableName": "orders",
+                "Name": "orders_public",
+            }
+        }
+
+        self.stubber.add_response(
+            "get_resource_lf_tags",
+            {},
+            {
+                "CatalogId": "222222222222",
+                "Resource": resource,
+                "ShowAssignedLFTags": True,
+            },
+        )
+        self.stubber.add_response(
+            "list_permissions",
+            {
+                "PrincipalResourcePermissions": [
+                    {
+                        "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                        "Resource": resource,
+                        "Permissions": ["SELECT"],
+                        "PermissionsWithGrantOption": [],
+                    }
+                ]
+            },
+            {
+                "CatalogId": "222222222222",
+                "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                "Resource": resource,
+                "MaxResults": 100,
+            },
+        )
+
+        current = adapter.load_current_state_for(desired)
+
+        self.assertEqual(
+            current.grants[0].resource.to_dict(),
+            {
+                "kind": "data_cells_filter",
+                "catalog_id": "222222222222",
+                "database": "analytics",
+                "table": "orders",
+                "filter_name": "orders_public",
+            },
+        )
+        self.stubber.assert_no_pending_responses()
+
+    def test_import_resource_tags_discovers_resources_from_grants_without_returning_grants(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id=CATALOG_ID)
+
+        self.stubber.add_response(
+            "list_permissions",
+            {
+                "PrincipalResourcePermissions": [
+                    {
+                        "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                        "Resource": {"Database": {"Name": "analytics"}},
+                        "Permissions": ["DESCRIBE"],
+                        "PermissionsWithGrantOption": [],
+                    }
+                ]
+            },
+            {
+                "CatalogId": CATALOG_ID,
+                "MaxResults": 100,
+            },
+        )
+        self.stubber.add_response(
+            "get_resource_lf_tags",
+            {
+                "LFTagOnDatabase": [{"TagKey": "domain", "TagValues": ["sales"]}],
+            },
+            {
+                "CatalogId": CATALOG_ID,
+                "Resource": {
+                    "Database": {
+                        "CatalogId": CATALOG_ID,
+                        "Name": "analytics",
+                    }
+                },
+                "ShowAssignedLFTags": True,
+            },
+        )
+
+        current = adapter.import_state(include=("resource-tags",))
+
+        self.assertEqual(current.grants, ())
+        self.assertEqual(
+            current.resource_tags[0].to_dict(),
+            {
+                "resource": {
+                    "kind": "database",
+                    "catalog_id": CATALOG_ID,
+                    "database": "analytics",
+                },
+                "tags": {"domain": ["sales"]},
+            },
+        )
         self.stubber.assert_no_pending_responses()
 
 

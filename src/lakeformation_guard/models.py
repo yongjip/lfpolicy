@@ -14,6 +14,7 @@ RESOURCE_KINDS = {
     "table",
     "table_with_columns",
     "data_location",
+    "data_cells_filter",
     "lf_tag_policy",
     "lf_tag_expression",
 }
@@ -124,6 +125,7 @@ class ResourceRef:
     resource_type: Optional[str] = None
     expression: Tuple[LFTagValue, ...] = field(default_factory=tuple)
     expression_name: Optional[str] = None
+    filter_name: Optional[str] = None
     catalog_id: Optional[str] = None
 
     def __post_init__(self) -> None:
@@ -134,6 +136,7 @@ class ResourceRef:
         object.__setattr__(self, "location", _optional_str(self.location))
         object.__setattr__(self, "catalog_id", _optional_str(self.catalog_id))
         object.__setattr__(self, "expression_name", _optional_str(self.expression_name))
+        object.__setattr__(self, "filter_name", _optional_str(self.filter_name))
         if self.resource_type is not None:
             object.__setattr__(self, "resource_type", self.resource_type.strip().upper())
         object.__setattr__(self, "columns", tuple(sorted({column.strip() for column in self.columns if column.strip()})))
@@ -149,10 +152,13 @@ class ResourceRef:
             columns = [columns]
         database_name = _resource_name(raw, "database", "database_name")
         expression_name = _resource_name(raw, "expression_name", "ExpressionName")
+        filter_name = _resource_name(raw, "filter_name", "filter")
         if kind == "database":
             database_name = database_name or _resource_name(raw, "name")
         if kind == "lf_tag_expression":
             expression_name = expression_name or _resource_name(raw, "name", "Name")
+        if kind == "data_cells_filter":
+            filter_name = filter_name or _resource_name(raw, "name", "Name")
         return cls(
             kind=kind,
             database_name=database_name,
@@ -162,6 +168,7 @@ class ResourceRef:
             resource_type=_resource_name(raw, "resource_type"),
             expression=expression,
             expression_name=expression_name,
+            filter_name=filter_name,
             catalog_id=_resource_name(raw, "catalog_id", "catalog"),
         )
 
@@ -196,6 +203,9 @@ class ResourceRef:
                 raise ValueError("table_with_columns resources require columns")
         if self.kind == "data_location" and not self.location:
             raise ValueError("data_location resources require location")
+        if self.kind == "data_cells_filter":
+            if not self.database_name or not self.table_name or not self.filter_name:
+                raise ValueError("data_cells_filter resources require database, table, and filter_name")
         if self.kind == "lf_tag_policy":
             if self.resource_type not in {"DATABASE", "TABLE"}:
                 raise ValueError("lf_tag_policy resources require resource_type DATABASE or TABLE")
@@ -221,6 +231,8 @@ class ResourceRef:
             parts.append("resource_type={}".format(self.resource_type))
         if self.expression_name:
             parts.append("expression_name={}".format(self.expression_name))
+        if self.filter_name:
+            parts.append("filter_name={}".format(self.filter_name))
         if self.expression:
             rendered = ",".join(
                 "{}={}".format(item.key, "|".join(item.values)) for item in self.expression
@@ -244,6 +256,8 @@ class ResourceRef:
             data["resource_type"] = self.resource_type
         if self.expression_name:
             data["expression_name"] = self.expression_name
+        if self.filter_name:
+            data["filter_name"] = self.filter_name
         if self.expression:
             data["expression"] = {item.key: list(item.values) for item in self.expression}
         return data
@@ -255,19 +269,46 @@ class LFTagDefinition:
 
     key: str
     values: Tuple[str, ...]
+    catalog_id: Optional[str] = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "key", self.key.strip())
         object.__setattr__(self, "values", _string_tuple(self.values, field_name="LF-Tag values"))
+        object.__setattr__(self, "catalog_id", _optional_str(self.catalog_id))
         if not self.key:
             raise ValueError("LF-Tag key must not be empty")
 
     @classmethod
     def from_raw(cls, key: str, values: Any) -> "LFTagDefinition":
-        return cls(key=str(key), values=_values_from_raw(values, field_name="LF-Tag values"))
+        catalog_id = None
+        raw_values = values
+        if isinstance(values, Mapping):
+            raw_values = values.get("values", ())
+            catalog_id = _resource_name(values, "catalog_id", "catalog")
+        return cls(
+            key=str(key),
+            values=_values_from_raw(raw_values, field_name="LF-Tag values"),
+            catalog_id=catalog_id,
+        )
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "LFTagDefinition":
+        return cls.from_raw(str(raw.get("key", "")), raw)
+
+    @property
+    def identity(self) -> str:
+        if not self.catalog_id:
+            return "lf_tag:{}".format(self.key)
+        parts = ["lf_tag"]
+        parts.append("catalog={}".format(self.catalog_id))
+        parts.append("key={}".format(self.key))
+        return ":".join(parts)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {"key": self.key, "values": list(self.values)}
+        data: Dict[str, Any] = {"key": self.key, "values": list(self.values)}
+        if self.catalog_id:
+            data["catalog_id"] = self.catalog_id
+        return data
 
 
 @dataclass(frozen=True, order=True)
@@ -336,9 +377,11 @@ class LFTagKeyMetadata:
 
     key: str
     assignable_to: Tuple[str, ...]
+    catalog_id: Optional[str] = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "key", self.key.strip())
+        object.__setattr__(self, "catalog_id", _optional_str(self.catalog_id))
         object.__setattr__(
             self,
             "assignable_to",
@@ -349,17 +392,31 @@ class LFTagKeyMetadata:
 
     @classmethod
     def from_raw(cls, key: str, raw: Any) -> "LFTagKeyMetadata":
+        catalog_id = None
         if isinstance(raw, Mapping):
             assignable_to = raw.get("assignable_to", ())
+            catalog_id = _resource_name(raw, "catalog_id", "catalog")
         else:
             assignable_to = raw
         return cls(
             key=str(key),
             assignable_to=_values_from_raw(assignable_to, field_name="LF-Tag assignable_to"),
+            catalog_id=catalog_id,
         )
 
+    @property
+    def identity(self) -> str:
+        parts = ["lf_tag_key_metadata"]
+        if self.catalog_id:
+            parts.append("catalog={}".format(self.catalog_id))
+        parts.append("key={}".format(self.key))
+        return ":".join(parts)
+
     def to_dict(self) -> Dict[str, Any]:
-        return {"key": self.key, "assignable_to": list(self.assignable_to)}
+        data: Dict[str, Any] = {"key": self.key, "assignable_to": list(self.assignable_to)}
+        if self.catalog_id:
+            data["catalog_id"] = self.catalog_id
+        return data
 
 
 @dataclass(frozen=True)
@@ -457,6 +514,7 @@ class ResourcePattern:
     table_name: Optional[str] = None
     location: Optional[str] = None
     expression_name: Optional[str] = None
+    filter_name: Optional[str] = None
 
     def __post_init__(self) -> None:
         kind = _optional_str(self.kind)
@@ -468,7 +526,8 @@ class ResourcePattern:
         object.__setattr__(self, "table_name", _optional_str(self.table_name))
         object.__setattr__(self, "location", _optional_str(self.location))
         object.__setattr__(self, "expression_name", _optional_str(self.expression_name))
-        if not any((self.kind, self.catalog_id, self.database_name, self.table_name, self.location, self.expression_name)):
+        object.__setattr__(self, "filter_name", _optional_str(self.filter_name))
+        if not any((self.kind, self.catalog_id, self.database_name, self.table_name, self.location, self.expression_name, self.filter_name)):
             raise ValueError("Resource ignore/ownership pattern must not be empty")
 
     @classmethod
@@ -489,13 +548,21 @@ class ResourcePattern:
                 return cls(location=str(value))
             if key_text in {"lf_tag_expression", "expression_name"}:
                 return cls(expression_name=str(value))
+            if key_text in {"data_cells_filter", "filter_name", "filter"}:
+                return cls(filter_name=str(value))
+        kind = _resource_name(raw_mapping, "kind")
+        kind_key = kind.strip().lower().replace("-", "_") if kind else None
+        name = _resource_name(raw_mapping, "name")
         return cls(
-            kind=_resource_name(raw_mapping, "kind"),
+            kind=kind,
             catalog_id=_resource_name(raw_mapping, "catalog_id", "catalog"),
             database_name=_resource_name(raw_mapping, "database", "database_name"),
             table_name=_resource_name(raw_mapping, "table", "table_name"),
             location=_resource_name(raw_mapping, "location", "resource_arn", "arn"),
-            expression_name=_resource_name(raw_mapping, "expression_name", "name"),
+            expression_name=_resource_name(raw_mapping, "expression_name")
+            or (name if kind_key == "lf_tag_expression" else None),
+            filter_name=_resource_name(raw_mapping, "filter_name", "filter")
+            or (name if kind_key == "data_cells_filter" else None),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -512,6 +579,8 @@ class ResourcePattern:
             data["location"] = self.location
         if self.expression_name:
             data["expression_name"] = self.expression_name
+        if self.filter_name:
+            data["filter_name"] = self.filter_name
         return data
 
 
@@ -779,10 +848,7 @@ class GuardrailState:
             lf_tags = tuple(LFTagDefinition.from_raw(str(key), values) for key, values in lf_tags_raw.items())
         elif isinstance(lf_tags_raw, Iterable):
             lf_tags = tuple(
-                LFTagDefinition.from_raw(
-                    str(_require_mapping(item, "lf_tags[]").get("key", "")),
-                    _require_mapping(item, "lf_tags[]").get("values", ()),
-                )
+                LFTagDefinition.from_dict(_require_mapping(item, "lf_tags[]"))
                 for item in lf_tags_raw
             )
         else:
@@ -844,9 +910,12 @@ class GuardrailState:
         return load_state(Path(path), cls)
 
     def to_dict(self) -> Dict[str, Any]:
-        data: Dict[str, Any] = {
-            "lf_tags": {tag.key: list(tag.values) for tag in self.lf_tags},
-        }
+        tag_keys = [tag.key for tag in self.lf_tags]
+        if any(tag.catalog_id for tag in self.lf_tags) or len(tag_keys) != len(set(tag_keys)):
+            lf_tags: Any = [tag.to_dict() for tag in self.lf_tags]
+        else:
+            lf_tags = {tag.key: list(tag.values) for tag in self.lf_tags}
+        data: Dict[str, Any] = {"lf_tags": lf_tags}
         if self.lf_tag_expressions:
             expression_names = [expression.name for expression in self.lf_tag_expressions]
             if len(expression_names) != len(set(expression_names)):
@@ -863,10 +932,16 @@ class GuardrailState:
                     for expression in self.lf_tag_expressions
                 }
         if self.lf_tag_key_metadata:
-            data["lf_tag_key_metadata"] = {
-                metadata.key: {"assignable_to": list(metadata.assignable_to)}
-                for metadata in self.lf_tag_key_metadata
-            }
+            metadata_keys = [metadata.key for metadata in self.lf_tag_key_metadata]
+            if any(metadata.catalog_id for metadata in self.lf_tag_key_metadata) or len(metadata_keys) != len(set(metadata_keys)):
+                data["lf_tag_key_metadata"] = [
+                    metadata.to_dict() for metadata in self.lf_tag_key_metadata
+                ]
+            else:
+                data["lf_tag_key_metadata"] = {
+                    metadata.key: {"assignable_to": list(metadata.assignable_to)}
+                    for metadata in self.lf_tag_key_metadata
+                }
         data["resource_tags"] = [assignment.to_dict() for assignment in self.resource_tags]
         data["grants"] = [grant.to_dict() for grant in self.grants]
         if not self.config.is_default():

@@ -50,6 +50,25 @@ class PolicyAuthoringTests(unittest.TestCase):
         self.assertEqual(tag_key.values, ("sales",))
         self.assertEqual(tag_key.assignable_to, (TagAssignmentScope.TABLE,))
 
+    def test_tag_key_accepts_catalog_scoped_duplicate_names(self):
+        policy = LakePolicy()
+
+        first = policy.tag_key(
+            "domain",
+            catalog_id="111111111111",
+            values=["sales"],
+            assignable_to=[TagAssignmentScope.DATABASE, TagAssignmentScope.TABLE],
+        )
+        second = policy.tag_key(
+            "domain",
+            catalog_id="222222222222",
+            values=["finance"],
+            assignable_to=[TagAssignmentScope.DATABASE, TagAssignmentScope.TABLE],
+        )
+
+        self.assertEqual(first.identity, "111111111111:domain")
+        self.assertEqual(second.identity, "222222222222:domain")
+
     def test_reader_group_can_use_column_narrowing_tag(self):
         policy = LakePolicy()
         _define_common_tags(policy)
@@ -271,6 +290,60 @@ class PolicyAuthoringTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "already has LF-Tag"):
             policy.tag_table("sales_curated", "customers", domain="finance")
 
+    def test_to_desired_state_generates_catalog_scoped_lf_tags_resources_and_grants(self):
+        policy = LakePolicy()
+        policy.tag_key(
+            "domain",
+            catalog_id="111111111111",
+            values=["finance"],
+            assignable_to=[TagAssignmentScope.DATABASE, TagAssignmentScope.TABLE],
+        )
+        policy.tag_key(
+            "domain",
+            catalog_id="222222222222",
+            values=["sales"],
+            assignable_to=[TagAssignmentScope.DATABASE, TagAssignmentScope.TABLE],
+        )
+        policy.tag_database("sales_curated", catalog_id="222222222222", domain="sales")
+        policy.group("dataconsumer", reader(catalog_id="222222222222").where(domain="sales"))
+        policy.bind_role("arn:aws:iam::111122223333:role/DataConsumer", "dataconsumer")
+
+        desired = policy.to_desired_state()
+
+        self.assertEqual(
+            {(tag.catalog_id, tag.key, tag.values) for tag in desired.lf_tags},
+            {
+                ("111111111111", "domain", ("finance",)),
+                ("222222222222", "domain", ("sales",)),
+            },
+        )
+        self.assertEqual(desired.resource_tags[0].resource.catalog_id, "222222222222")
+        self.assertEqual(
+            {grant.resource.catalog_id for grant in desired.grants},
+            {"222222222222"},
+        )
+        self.assertIsInstance(desired.to_dict()["lf_tag_key_metadata"], list)
+        self.assertFalse(lint_desired(desired))
+
+    def test_catalog_scoped_policy_group_requires_catalog_when_tag_key_is_ambiguous(self):
+        policy = LakePolicy()
+        policy.tag_key(
+            "domain",
+            catalog_id="111111111111",
+            values=["finance"],
+            assignable_to=[TagAssignmentScope.DATABASE],
+        )
+        policy.tag_key(
+            "domain",
+            catalog_id="222222222222",
+            values=["sales"],
+            assignable_to=[TagAssignmentScope.DATABASE],
+        )
+        policy.group("dataconsumer", reader().where(domain="sales"))
+
+        with self.assertRaisesRegex(ValueError, "undefined tag key"):
+            policy.validate()
+
     def test_to_desired_state_generates_table_creator_grants_that_lint_without_errors(self):
         policy = LakePolicy()
         policy.tag_key(
@@ -317,7 +390,7 @@ class PolicyAuthoringTests(unittest.TestCase):
 
     def test_to_desired_state_generates_database_creator_catalog_grant(self):
         policy = LakePolicy()
-        policy.group("catalog_admin", database_creator())
+        policy.group("catalog_admin", database_creator(catalog_id="111111111111"))
         policy.bind_role(
             "arn:aws:iam::111122223333:role/CatalogAdmin",
             "catalog_admin",
@@ -327,6 +400,7 @@ class PolicyAuthoringTests(unittest.TestCase):
 
         self.assertEqual(len(desired.grants), 1)
         self.assertEqual(desired.grants[0].resource.kind, "catalog")
+        self.assertEqual(desired.grants[0].resource.catalog_id, "111111111111")
         self.assertEqual(desired.grants[0].permissions, ("CREATE_DATABASE",))
 
     def test_to_desired_state_generates_direct_bundle_grants(self):

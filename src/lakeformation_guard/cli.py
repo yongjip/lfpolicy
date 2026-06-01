@@ -29,7 +29,12 @@ from .models import (
 from .planner import Plan, PlanOptions, plan
 from .provider import CurrentStateProvider, SnapshotFileCurrentStateProvider
 from .schema import state_json_schema
-from .state_index import lf_tag_expression_index
+from .state_index import (
+    duplicate_lf_tag_key_metadata_keys,
+    lf_tag_expression_index,
+    lf_tag_index,
+    lf_tag_key_metadata_identity,
+)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -307,6 +312,10 @@ def build_parser() -> argparse.ArgumentParser:
     explain_parser.add_argument(
         "--columns",
         help="Comma-separated columns to explain. Requires --database and --table.",
+    )
+    explain_parser.add_argument(
+        "--data-cells-filter",
+        help="Lake Formation data cells filter name to explain. Requires --database and --table.",
     )
     explain_parser.add_argument(
         "--location",
@@ -663,9 +672,19 @@ def _cmd_validate(args: argparse.Namespace) -> int:
 
 def _validate_state_model(state: GuardrailState, label: str) -> None:
     try:
+        lf_tag_index(state.lf_tags)
         lf_tag_expression_index(state.lf_tag_expressions)
     except ValueError as exc:
         raise ValueError("{}: {}".format(label, exc)) from exc
+    duplicate_metadata = duplicate_lf_tag_key_metadata_keys(state.lf_tag_key_metadata)
+    if duplicate_metadata:
+        first = duplicate_metadata[0]
+        raise ValueError(
+            "{}: Duplicate LF-Tag key metadata identity: {}".format(
+                label,
+                lf_tag_key_metadata_identity(first),
+            )
+        )
 
 
 def _cmd_snapshot(args: argparse.Namespace) -> int:
@@ -785,13 +804,25 @@ def _current_state_provider(args: argparse.Namespace) -> CurrentStateProvider:
 
 def _explain_resource(args: argparse.Namespace) -> ResourceRef:
     if args.location:
-        if args.database or args.table or args.columns:
-            raise RuntimeError("--location cannot be combined with --database, --table, or --columns")
+        if args.database or args.table or args.columns or args.data_cells_filter:
+            raise RuntimeError("--location cannot be combined with --database, --table, --columns, or --data-cells-filter")
         return ResourceRef(kind="data_location", location=args.location, catalog_id=args.catalog_id)
     if not args.database:
         raise RuntimeError("explain requires --database or --location")
     if args.columns and not args.table:
         raise RuntimeError("--columns requires --table")
+    if args.data_cells_filter:
+        if not args.table:
+            raise RuntimeError("--data-cells-filter requires --table")
+        if args.columns:
+            raise RuntimeError("--data-cells-filter cannot be combined with --columns")
+        return ResourceRef(
+            kind="data_cells_filter",
+            database_name=args.database,
+            table_name=args.table,
+            filter_name=args.data_cells_filter,
+            catalog_id=args.catalog_id,
+        )
     if args.table and args.columns:
         return ResourceRef(
             kind="table_with_columns",
@@ -854,7 +885,7 @@ def _explain_resource_scope(resource: ResourceRef) -> Tuple[ResourceRef, ...]:
         return (resource,)
     if resource.kind == "table":
         return (_database_resource(resource), resource)
-    if resource.kind == "table_with_columns":
+    if resource.kind in {"table_with_columns", "data_cells_filter"}:
         return (_database_resource(resource), _table_resource(resource), resource)
     return (resource,)
 
@@ -862,7 +893,7 @@ def _explain_resource_scope(resource: ResourceRef) -> Tuple[ResourceRef, ...]:
 def _explain_grant_scope(resource: ResourceRef) -> Tuple[ResourceRef, ...]:
     if resource.kind == "table":
         return (_database_resource(resource), resource)
-    if resource.kind == "table_with_columns":
+    if resource.kind in {"table_with_columns", "data_cells_filter"}:
         return (_database_resource(resource), _table_resource(resource), resource)
     return (resource,)
 
@@ -881,7 +912,7 @@ def _table_resource(resource: ResourceRef) -> ResourceRef:
 
 
 def _scope_permission(resource: ResourceRef) -> str:
-    if resource.kind == "table" or resource.kind == "table_with_columns":
+    if resource.kind in {"table", "table_with_columns", "data_cells_filter"}:
         return "SELECT"
     if resource.kind == "data_location":
         return "DATA_LOCATION_ACCESS"
@@ -1027,14 +1058,18 @@ def _state_profile(state: GuardrailState) -> dict:
     resource_kinds = Counter(assignment.resource.kind for assignment in state.resource_tags)
     grant_resource_kinds = Counter(grant.resource.kind for grant in state.grants)
     resource_tag_keys = sorted({key for assignment in state.resource_tags for key in assignment.tags})
+    lf_tag_keys = [tag.key for tag in state.lf_tags]
+    lf_tag_ids = [tag.identity for tag in state.lf_tags]
     permissions = sorted({permission for grant in state.grants for permission in grant.permissions})
     grantable_permissions = sorted(
         {permission for grant in state.grants for permission in grant.grantable_permissions}
     )
     return {
         "lf_tags": len(state.lf_tags),
-        "lf_tag_keys": [tag.key for tag in state.lf_tags],
+        "lf_tag_keys": lf_tag_keys,
+        "lf_tag_ids": lf_tag_ids,
         "lf_tag_values": {tag.key: list(tag.values) for tag in state.lf_tags},
+        "lf_tag_values_by_id": {tag.identity: list(tag.values) for tag in state.lf_tags},
         "lf_tag_expressions": len(state.lf_tag_expressions),
         "lf_tag_expression_names": [expression.name for expression in state.lf_tag_expressions],
         "lf_tag_expression_ids": [expression.identity for expression in state.lf_tag_expressions],
@@ -1465,6 +1500,7 @@ _COMPLETION_OPTIONS = {
         "--database",
         "--table",
         "--columns",
+        "--data-cells-filter",
         "--location",
         "--permissions",
         "--output",
@@ -1767,8 +1803,11 @@ def _render_state_profile_lines(profile: dict) -> list:
 
 
 def _state_profile_metrics(profile: dict) -> tuple:
+    lf_tag_labels = profile["lf_tag_keys"]
+    if len(lf_tag_labels) != len(set(lf_tag_labels)):
+        lf_tag_labels = profile.get("lf_tag_ids", lf_tag_labels)
     return (
-        ("LF-Tag definitions", _count_with_list(profile["lf_tags"], profile["lf_tag_keys"])),
+        ("LF-Tag definitions", _count_with_list(profile["lf_tags"], lf_tag_labels)),
         (
             "LF-Tag expressions",
             _count_with_list(
@@ -2825,6 +2864,10 @@ def _render_explain(report: ExplainReport, output: str) -> str:
         lines.append("Effective LF-Tags: {}".format(rendered_tags))
     else:
         lines.append("Effective LF-Tags: none")
+    catalog_tag_lines = _render_effective_lf_tag_catalog_lines(report)
+    if catalog_tag_lines:
+        lines.append("Effective LF-Tags by catalog:")
+        lines.extend(catalog_tag_lines)
     if report.findings:
         lines.append("Explanation:")
         for finding in report.findings:
@@ -2866,6 +2909,17 @@ def _render_explain_markdown(report: ExplainReport) -> str:
             lines.append("| {} | {} |".format(_markdown_cell(key), _markdown_cell(", ".join(values))))
     else:
         lines.extend(["", "No effective LF-Tags found for the target in current state."])
+    if _should_render_effective_lf_tag_catalogs(report):
+        lines.extend(["", "#### Effective LF-Tags By Catalog", "", "| Catalog ID | Key | Values |", "| --- | --- | --- |"])
+        for catalog_id, tags in sorted(report.effective_lf_tags_by_catalog.items(), key=lambda item: item[0] or ""):
+            for key, values in sorted(tags.items()):
+                lines.append(
+                    "| {} | {} | {} |".format(
+                        _markdown_cell(catalog_id or ""),
+                        _markdown_cell(key),
+                        _markdown_cell(", ".join(values)),
+                    )
+                )
     if report.findings:
         lines.extend(
             [
@@ -2891,6 +2945,23 @@ def _render_explain_markdown(report: ExplainReport) -> str:
         for note in report.notes:
             lines.append("- {}".format(note))
     return "\n".join(lines) + "\n"
+
+
+def _should_render_effective_lf_tag_catalogs(report: ExplainReport) -> bool:
+    return any(catalog_id for catalog_id in report.effective_lf_tags_by_catalog)
+
+
+def _render_effective_lf_tag_catalog_lines(report: ExplainReport) -> list:
+    if not _should_render_effective_lf_tag_catalogs(report):
+        return []
+    lines = []
+    for catalog_id, tags in sorted(report.effective_lf_tags_by_catalog.items(), key=lambda item: item[0] or ""):
+        rendered_tags = ", ".join(
+            "{}={}".format(key, "|".join(values))
+            for key, values in sorted(tags.items())
+        )
+        lines.append("- {}: {}".format(catalog_id or "unscoped", rendered_tags or "none"))
+    return lines
 
 
 def _print_plan(change_plan: Plan, output: str, *, prefix: Optional[str] = None) -> None:

@@ -22,7 +22,8 @@ Use the same lifecycle for every Lake Formation permission change:
 
 Some issues are treated as hard policy defects rather than workflow preferences:
 
-- Duplicate LF-Tag expression identities are rejected by `(catalog_id, name)`.
+- Duplicate LF-Tag, LF-Tag key metadata, and LF-Tag expression identities are
+  rejected by catalog-scoped identity.
 - Undefined LF-Tag keys, values, and named expressions are lint errors.
 - Dangerous grants such as broad principals, `ALL`/`SUPER`, mutating
   permissions, grant option, and named database/table grants require explicit

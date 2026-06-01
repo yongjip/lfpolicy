@@ -187,6 +187,57 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(change_plan.changes[0].payload["catalog_id"], "222222222222")
         self.assertEqual(change_plan.changes[1].payload["catalog_id"], "111111111111")
 
+    def test_plan_keys_lf_tags_by_catalog_id(self):
+        desired = DesiredState.from_dict(
+            {
+                "lf_tags": [
+                    {
+                        "key": "domain",
+                        "catalog_id": "222222222222",
+                        "values": ["sales"],
+                    }
+                ]
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "lf_tags": [
+                    {
+                        "key": "domain",
+                        "catalog_id": "111111111111",
+                        "values": ["sales"],
+                    }
+                ]
+            }
+        )
+
+        change_plan = plan(desired, current)
+
+        self.assertEqual([change.action for change in change_plan.changes], ["lf_tag.create"])
+        self.assertEqual(change_plan.changes[0].target, "lf_tag:catalog=222222222222:key=domain")
+        self.assertEqual(change_plan.changes[0].payload["catalog_id"], "222222222222")
+
+    def test_plan_rejects_duplicate_lf_tag_identity(self):
+        desired = DesiredState.from_dict(
+            {
+                "lf_tags": [
+                    {
+                        "key": "domain",
+                        "catalog_id": "111111111111",
+                        "values": ["sales"],
+                    },
+                    {
+                        "key": "domain",
+                        "catalog_id": "111111111111",
+                        "values": ["finance"],
+                    },
+                ]
+            }
+        )
+
+        with self.assertRaisesRegex(ValueError, "Duplicate LF-Tag identity"):
+            plan(desired, CurrentState.empty())
+
     def test_plan_rejects_duplicate_lf_tag_expression_identity(self):
         desired = DesiredState.from_dict(
             {
@@ -240,6 +291,213 @@ class PlannerTests(unittest.TestCase):
         )
         self.assertEqual(findings[0].details["catalog_id"], "222222222222")
         self.assertEqual(findings[1].details["catalog_id"], "111111111111")
+
+    def test_audit_keys_lf_tags_by_catalog_id(self):
+        desired = DesiredState.from_dict(
+            {
+                "lf_tags": [
+                    {
+                        "key": "domain",
+                        "catalog_id": "222222222222",
+                        "values": ["sales"],
+                    }
+                ]
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "lf_tags": [
+                    {
+                        "key": "domain",
+                        "catalog_id": "111111111111",
+                        "values": ["sales"],
+                    }
+                ]
+            }
+        )
+
+        findings = audit(desired, current)
+
+        self.assertEqual([finding.code for finding in findings], ["LF_TAG_MISSING", "LF_TAG_UNMANAGED"])
+        self.assertEqual(findings[0].details["catalog_id"], "222222222222")
+        self.assertEqual(findings[1].details["catalog_id"], "111111111111")
+        self.assertEqual(findings[1].details["current"]["values"], ["sales"])
+
+    def test_audit_ignores_unmanaged_lf_tags_by_catalog_resource_rule(self):
+        desired = DesiredState.from_dict(
+            {
+                "ignore": {
+                    "resources": [{"kind": "catalog", "catalog_id": "111111111111"}],
+                },
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "lf_tags": [
+                    {
+                        "key": "domain",
+                        "catalog_id": "111111111111",
+                        "values": ["sales"],
+                    }
+                ]
+            }
+        )
+
+        findings = audit(desired, current)
+
+        self.assertEqual(findings, ())
+
+    def test_plan_removes_unmanaged_resource_tags_when_allowed(self):
+        current = CurrentState.from_dict(
+            {
+                "resource_tags": [
+                    {
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "tags": {
+                            "domain": ["legacy"],
+                            "sensitivity": ["restricted"],
+                        },
+                    }
+                ]
+            }
+        )
+
+        default_plan = plan(DesiredState.empty(), current)
+        removal_plan = plan(
+            DesiredState.empty(),
+            current,
+            PlanOptions(allow_resource_tag_removals=True),
+        )
+
+        self.assertEqual(default_plan.changes, ())
+        self.assertEqual([change.action for change in removal_plan.changes], ["resource_tag.remove_values"])
+        change = removal_plan.changes[0]
+        expected_resource = {
+            "kind": "table",
+            "catalog_id": "222222222222",
+            "database": "analytics",
+            "table": "orders",
+        }
+        self.assertEqual(change.target, "table:catalog=222222222222:database=analytics:table=orders")
+        self.assertTrue(change.destructive)
+        self.assertEqual(change.requires_flag, "--allow-resource-tag-removals")
+        self.assertEqual(change.aws_api, "remove_lf_tags_from_resource")
+        self.assertEqual(change.payload["resource"], expected_resource)
+        self.assertEqual(
+            change.payload["tags"],
+            {"domain": ["legacy"], "sensitivity": ["restricted"]},
+        )
+        self.assertEqual(
+            change.before,
+            {
+                "resource": expected_resource,
+                "tags": {"domain": ["legacy"], "sensitivity": ["restricted"]},
+            },
+        )
+        self.assertEqual(change.after, {"resource": expected_resource, "tags": {}})
+
+    def test_plan_resource_tag_changes_have_deterministic_order(self):
+        desired = DesiredState.from_dict(
+            {
+                "resource_tags": [
+                    {
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders_z",
+                        },
+                        "tags": {"sensitivity": ["internal"], "domain": ["sales"]},
+                    },
+                    {
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "111111111111",
+                            "database": "analytics",
+                            "table": "orders_a",
+                        },
+                        "tags": {"sensitivity": ["internal"], "domain": ["sales"]},
+                    },
+                ]
+            }
+        )
+
+        change_plan = plan(desired, CurrentState.empty())
+
+        self.assertEqual(
+            [change.target for change in change_plan.changes],
+            [
+                "table:catalog=111111111111:database=analytics:table=orders_a",
+                "table:catalog=222222222222:database=analytics:table=orders_z",
+            ],
+        )
+        self.assertEqual(
+            change_plan.changes[0].payload["tags"],
+            {"domain": ["sales"], "sensitivity": ["internal"]},
+        )
+
+    def test_plan_removes_unmanaged_resource_tag_keys_when_resource_is_desired(self):
+        desired = DesiredState.from_dict(
+            {
+                "resource_tags": [
+                    {
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "tags": {"domain": ["sales"]},
+                    }
+                ]
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "resource_tags": [
+                    {
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "tags": {
+                            "domain": ["sales"],
+                            "sensitivity": ["restricted"],
+                        },
+                    }
+                ]
+            }
+        )
+
+        default_plan = plan(desired, current)
+        removal_plan = plan(
+            desired,
+            current,
+            PlanOptions(allow_resource_tag_removals=True),
+        )
+
+        self.assertEqual(default_plan.changes, ())
+        self.assertEqual([change.action for change in removal_plan.changes], ["resource_tag.remove_values"])
+        self.assertEqual(removal_plan.changes[0].payload["tags"], {"sensitivity": ["restricted"]})
+        self.assertEqual(
+            removal_plan.changes[0].after,
+            {
+                "resource": {
+                    "kind": "table",
+                    "catalog_id": "222222222222",
+                    "database": "analytics",
+                    "table": "orders",
+                },
+                "tags": {"domain": ["sales"]},
+            },
+        )
 
     def test_plan_includes_destructive_changes_when_allowed(self):
         desired = DesiredState.from_dict(
@@ -295,6 +553,116 @@ class PlannerTests(unittest.TestCase):
             [change.aws_api for change in change_plan.changes],
             ["update_lf_tag", "revoke_permissions", "revoke_permissions"],
         )
+
+    def test_plan_only_adds_all_covered_desired_permission_when_revoking_current_all(self):
+        desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                        "permissions": ["ALL"],
+                    }
+                ]
+            }
+        )
+
+        default_plan = plan(desired, current)
+        revoke_plan = plan(desired, current, PlanOptions(allow_permission_revokes=True))
+
+        self.assertEqual(default_plan.changes, ())
+        self.assertEqual(
+            [change.action for change in revoke_plan.changes],
+            ["grant.add_permissions", "grant.revoke_permissions"],
+        )
+        self.assertEqual(revoke_plan.changes[0].payload["permissions"], ["SELECT"])
+        self.assertEqual(revoke_plan.changes[1].payload["permissions"], ["ALL"])
+        self.assertEqual(revoke_plan.changes[1].after["permissions"], [])
+
+    def test_plan_adds_desired_grantable_permission_when_revoking_current_all_grantable(self):
+        desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                        "permissions": ["SELECT"],
+                        "grantable_permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                        "permissions": ["ALL"],
+                        "grantable_permissions": ["ALL"],
+                    }
+                ]
+            }
+        )
+
+        revoke_plan = plan(desired, current, PlanOptions(allow_permission_revokes=True))
+
+        self.assertEqual(
+            [change.action for change in revoke_plan.changes],
+            ["grant.add_permissions", "grant.revoke_permissions"],
+        )
+        self.assertEqual(revoke_plan.changes[0].payload["permissions"], ["SELECT"])
+        self.assertEqual(revoke_plan.changes[0].payload["grantable_permissions"], ["SELECT"])
+        self.assertEqual(revoke_plan.changes[1].payload["permissions"], ["ALL"])
+        self.assertEqual(revoke_plan.changes[1].payload["grantable_permissions"], ["ALL"])
+
+    def test_plan_revoke_preserves_data_cells_filter_resource_identity(self):
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "data_cells_filter",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                            "filter_name": "orders_public",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+
+        change_plan = plan(DesiredState.empty(), current, PlanOptions(allow_permission_revokes=True))
+
+        self.assertEqual(len(change_plan.changes), 1)
+        change = change_plan.changes[0]
+        self.assertEqual(change.action, "grant.revoke_permissions")
+        self.assertEqual(
+            change.payload["resource"],
+            {
+                "kind": "data_cells_filter",
+                "catalog_id": "222222222222",
+                "database": "analytics",
+                "table": "orders",
+                "filter_name": "orders_public",
+            },
+        )
+        self.assertEqual(change.requires_flag, "--allow-permission-revokes")
+        self.assertEqual(change.aws_api, "revoke_permissions")
 
     def test_plan_from_dict_accepts_current_schema_and_preserves_ids(self):
         payload = {

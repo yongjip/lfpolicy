@@ -8,18 +8,118 @@ from .models import (
     Grant,
     LFTagDefinition,
     LFTagExpressionDefinition,
+    LFTagKeyMetadata,
     ResourceRef,
     ResourceTagAssignment,
 )
 
 LFTagExpressionKey = Tuple[Optional[str], str]
+LFTagKey = Tuple[Optional[str], str]
 
 
-def lf_tag_index(tags: Iterable[LFTagDefinition]) -> Dict[str, LFTagDefinition]:
-    merged: Dict[str, set] = {}
+def lf_tag_key(catalog_id: Optional[str], key: str) -> LFTagKey:
+    return (catalog_id, key)
+
+
+def lf_tag_definition_key(tag: LFTagDefinition) -> LFTagKey:
+    return lf_tag_key(tag.catalog_id, tag.key)
+
+
+def lf_tag_key_identity(key: LFTagKey) -> str:
+    if not key[0]:
+        return "lf_tag:{}".format(key[1])
+    parts = ["lf_tag"]
+    parts.append("catalog={}".format(key[0]))
+    parts.append("key={}".format(key[1]))
+    return ":".join(parts)
+
+
+def lf_tag_sort_key(key: LFTagKey) -> str:
+    return "{}:{}".format(key[0] or "", key[1])
+
+
+def duplicate_lf_tag_keys(
+    tags: Iterable[LFTagDefinition],
+) -> Tuple[LFTagKey, ...]:
+    seen: Set[LFTagKey] = set()
+    duplicates: Set[LFTagKey] = set()
     for tag in tags:
-        merged.setdefault(tag.key, set()).update(tag.values)
-    return {key: LFTagDefinition(key, tuple(values)) for key, values in merged.items()}
+        key = lf_tag_definition_key(tag)
+        if key in seen:
+            duplicates.add(key)
+        seen.add(key)
+    return tuple(sorted(duplicates, key=lf_tag_sort_key))
+
+
+def lf_tag_index(
+    tags: Iterable[LFTagDefinition],
+    *,
+    allow_duplicates: bool = False,
+) -> Dict[LFTagKey, LFTagDefinition]:
+    merged: Dict[LFTagKey, set] = {}
+    for tag in tags:
+        key = lf_tag_definition_key(tag)
+        if key in merged and not allow_duplicates:
+            raise ValueError(
+                "Duplicate LF-Tag identity: {}".format(
+                    lf_tag_key_identity(key)
+                )
+            )
+        merged.setdefault(key, set()).update(tag.values)
+    return {
+        key: LFTagDefinition(key[1], tuple(values), catalog_id=key[0])
+        for key, values in merged.items()
+    }
+
+
+def resolve_lf_tag_key(
+    tag_index: Mapping[LFTagKey, object],
+    catalog_id: Optional[str],
+    key: str,
+) -> Optional[LFTagKey]:
+    if catalog_id:
+        scoped_key = lf_tag_key(catalog_id, key)
+        if scoped_key in tag_index:
+            return scoped_key
+        unscoped_key = lf_tag_key(None, key)
+        return unscoped_key if unscoped_key in tag_index else None
+    unscoped_key = lf_tag_key(None, key)
+    if unscoped_key in tag_index:
+        return unscoped_key
+    scoped_matches = {
+        candidate
+        for candidate in tag_index
+        if candidate[0] and candidate[1] == key
+    }
+    if len(scoped_matches) == 1:
+        return next(iter(scoped_matches))
+    return None
+
+
+def lf_tag_key_metadata_key(metadata: LFTagKeyMetadata) -> LFTagKey:
+    return lf_tag_key(metadata.catalog_id, metadata.key)
+
+
+def lf_tag_key_metadata_identity(key: LFTagKey) -> str:
+    if not key[0]:
+        return "lf_tag_key_metadata:key={}".format(key[1])
+    parts = ["lf_tag_key_metadata"]
+    parts.append("catalog={}".format(key[0]))
+    parts.append("key={}".format(key[1]))
+    return ":".join(parts)
+
+
+def duplicate_lf_tag_key_metadata_keys(
+    metadata_items: Iterable[LFTagKeyMetadata],
+) -> Tuple[LFTagKey, ...]:
+    seen: Set[LFTagKey] = set()
+    duplicates: Set[LFTagKey] = set()
+    for metadata in metadata_items:
+        key = lf_tag_key_metadata_key(metadata)
+        if key in seen:
+            duplicates.add(key)
+        seen.add(key)
+    return tuple(sorted(duplicates, key=lf_tag_sort_key))
 
 
 def lf_tag_expression_key(catalog_id: Optional[str], name: str) -> LFTagExpressionKey:

@@ -82,7 +82,9 @@ flag is supplied:
 
 Pass `--catalog-id` to add a Glue Data Catalog ID to live inventory and apply
 requests. Resource-level `catalog_id` values in state files are also preserved
-when rendering Lake Formation resource payloads.
+when rendering Lake Formation resource payloads. LF-Tag definitions can also
+carry `catalog_id`; those scoped definitions override the adapter default for
+`get_lf_tag`, `create_lf_tag`, and `update_lf_tag` request shapes.
 
 ## Error Handling
 

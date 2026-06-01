@@ -28,6 +28,38 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(state.resource_tags[0].resource.identity, "table:database=analytics:table=orders")
         self.assertEqual(state.grants[0].permissions, ("DESCRIBE",))
 
+    def test_state_serializes_catalog_scoped_lf_tags_as_list(self):
+        state = DesiredState.from_dict(
+            {
+                "lf_tags": [
+                    {
+                        "key": "domain",
+                        "catalog_id": "111111111111",
+                        "values": ["sales"],
+                    },
+                    {
+                        "key": "domain",
+                        "catalog_id": "222222222222",
+                        "values": ["finance"],
+                    },
+                ]
+            }
+        )
+
+        payload = state.to_dict()
+        tags = payload["lf_tags"]
+        round_tripped = DesiredState.from_dict(payload)
+
+        self.assertIsInstance(tags, list)
+        self.assertEqual(
+            {(item["catalog_id"], item["key"]) for item in tags},
+            {("111111111111", "domain"), ("222222222222", "domain")},
+        )
+        self.assertEqual(
+            {(tag.catalog_id, tag.key) for tag in round_tripped.lf_tags},
+            {("111111111111", "domain"), ("222222222222", "domain")},
+        )
+
     def test_lf_tag_policy_resource_identity_is_stable(self):
         first = ResourceRef.from_dict(
             {
@@ -78,10 +110,64 @@ class ModelTests(unittest.TestCase):
     def test_resource_name_aliases_stay_kind_specific(self):
         database = ResourceRef.from_dict({"kind": "database", "name": "analytics"})
         expression = ResourceRef.from_dict({"kind": "lf_tag_expression", "name": "sales_public"})
+        data_filter = ResourceRef.from_dict(
+            {
+                "kind": "data_cells_filter",
+                "catalog_id": "222222222222",
+                "database": "analytics",
+                "table": "orders",
+                "name": "orders_public",
+            }
+        )
 
         self.assertEqual(database.identity, "database:database=analytics")
         self.assertEqual(expression.identity, "lf_tag_expression:expression_name=sales_public")
         self.assertEqual(expression.to_dict(), {"kind": "lf_tag_expression", "expression_name": "sales_public"})
+        self.assertEqual(
+            data_filter.identity,
+            "data_cells_filter:catalog=222222222222:database=analytics:table=orders:filter_name=orders_public",
+        )
+        self.assertEqual(
+            data_filter.to_dict(),
+            {
+                "kind": "data_cells_filter",
+                "catalog_id": "222222222222",
+                "database": "analytics",
+                "table": "orders",
+                "filter_name": "orders_public",
+            },
+        )
+
+    def test_resource_pattern_supports_data_cells_filter_name(self):
+        state = DesiredState.from_dict(
+            {
+                "ignore": {
+                    "resources": [
+                        {
+                            "kind": "data_cells_filter",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                            "filter_name": "orders_*",
+                        }
+                    ]
+                }
+            }
+        )
+
+        pattern = state.config.ignore.resources[0]
+
+        self.assertEqual(pattern.filter_name, "orders_*")
+        self.assertEqual(
+            pattern.to_dict(),
+            {
+                "kind": "data_cells_filter",
+                "catalog_id": "222222222222",
+                "database": "analytics",
+                "table": "orders",
+                "filter_name": "orders_*",
+            },
+        )
 
     def test_state_parses_config_and_named_lf_tag_expressions(self):
         state = DesiredState.from_dict(
@@ -162,6 +248,39 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(
             state.to_dict()["lf_tag_key_metadata"],
             {"domain": {"assignable_to": ["database", "table", "column"]}},
+        )
+
+    def test_state_serializes_catalog_scoped_lf_tag_key_metadata_as_list(self):
+        state = DesiredState.from_dict(
+            {
+                "lf_tags": {"domain": ["sales"]},
+                "lf_tag_key_metadata": [
+                    {
+                        "key": "domain",
+                        "catalog_id": "111111111111",
+                        "assignable_to": ["table"],
+                    },
+                    {
+                        "key": "domain",
+                        "catalog_id": "222222222222",
+                        "assignable_to": ["column"],
+                    },
+                ],
+            }
+        )
+
+        payload = state.to_dict()
+        metadata = payload["lf_tag_key_metadata"]
+        round_tripped = DesiredState.from_dict(payload)
+
+        self.assertIsInstance(metadata, list)
+        self.assertEqual(
+            {(item["catalog_id"], item["key"]) for item in metadata},
+            {("111111111111", "domain"), ("222222222222", "domain")},
+        )
+        self.assertEqual(
+            {(item.catalog_id, item.key) for item in round_tripped.lf_tag_key_metadata},
+            {("111111111111", "domain"), ("222222222222", "domain")},
         )
 
     def test_state_parses_policy_exceptions(self):

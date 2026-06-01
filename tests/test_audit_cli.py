@@ -55,6 +55,36 @@ class AuditCliTests(unittest.TestCase):
             ["finding_001", "finding_002", "finding_003", "finding_004"],
         )
 
+    def test_audit_treats_current_all_permission_as_covering_desired_permissions(self):
+        desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                        "permissions": ["ALL"],
+                    }
+                ]
+            }
+        )
+
+        findings = audit(desired, current)
+
+        self.assertNotIn("GRANT_PERMISSIONS_MISSING", {finding.code for finding in findings})
+        self.assertEqual([finding.code for finding in findings], ["GRANT_PERMISSIONS_UNMANAGED"])
+        self.assertEqual(findings[0].details["unmanaged_permissions"], ["ALL"])
+
     def test_cli_plan_outputs_json(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -1640,6 +1670,90 @@ class AuditCliTests(unittest.TestCase):
                 stderr.getvalue(),
             )
 
+    def test_cli_validate_rejects_duplicate_lf_tag_identity_in_snapshot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            desired_path = tmp_path / "desired.json"
+            current_path = tmp_path / "current.json"
+            desired_path.write_text(json.dumps({"lf_tags": {}, "resource_tags": [], "grants": []}), encoding="utf-8")
+            current_path.write_text(
+                json.dumps(
+                    {
+                        "lf_tags": [
+                            {
+                                "key": "domain",
+                                "catalog_id": "111111111111",
+                                "values": ["sales"],
+                            },
+                            {
+                                "key": "domain",
+                                "catalog_id": "111111111111",
+                                "values": ["finance"],
+                            },
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                exit_code = main(
+                    [
+                        "validate",
+                        "--desired",
+                        str(desired_path),
+                        "--current-snapshot",
+                        str(current_path),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 2)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertIn(
+                "current snapshot: Duplicate LF-Tag identity: lf_tag:catalog=111111111111:key=domain",
+                stderr.getvalue(),
+            )
+
+    def test_cli_validate_rejects_duplicate_lf_tag_key_metadata_identity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            desired_path = tmp_path / "desired.json"
+            desired_path.write_text(
+                json.dumps(
+                    {
+                        "lf_tags": {"domain": ["sales"]},
+                        "lf_tag_key_metadata": [
+                            {
+                                "key": "domain",
+                                "catalog_id": "111111111111",
+                                "assignable_to": ["table"],
+                            },
+                            {
+                                "key": "domain",
+                                "catalog_id": "111111111111",
+                                "assignable_to": ["column"],
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                exit_code = main(["validate", "--desired", str(desired_path)])
+
+            self.assertEqual(exit_code, 2)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertIn(
+                "desired state: Duplicate LF-Tag key metadata identity: "
+                "lf_tag_key_metadata:catalog=111111111111:key=domain",
+                stderr.getvalue(),
+            )
+
     def test_lint_desired_api_reports_undefined_tag_references(self):
         desired = DesiredState.from_dict(
             {
@@ -1751,7 +1865,7 @@ class AuditCliTests(unittest.TestCase):
                     {
                         "principal": "arn:aws:iam::111122223333:role/Owner",
                         "resource": {"kind": "table", "database": "analytics", "table": "orders"},
-                        "permissions": ["ALL"],
+                        "permissions": ["SUPER_USER"],
                     },
                 ],
             }
@@ -1905,6 +2019,102 @@ class AuditCliTests(unittest.TestCase):
         self.assertEqual(
             findings_by_code["LF_TAG_POLICY_TABLE_SELECT_MUTATION_CONFLICT"].details["conflicting_permissions"],
             ["DELETE", "INSERT"],
+        )
+
+    def test_lint_uses_named_lf_tag_expression_body_for_column_narrowing(self):
+        desired = DesiredState.from_dict(
+            {
+                "lf_tags": [
+                    {
+                        "key": "domain",
+                        "catalog_id": "222222222222",
+                        "values": ["sales"],
+                    }
+                ],
+                "lf_tag_key_metadata": [
+                    {
+                        "key": "domain",
+                        "catalog_id": "222222222222",
+                        "assignable_to": ["table"],
+                    }
+                ],
+                "lf_tag_expressions": [
+                    {
+                        "name": "sales_tables",
+                        "catalog_id": "222222222222",
+                        "expression": {"domain": ["sales"]},
+                    }
+                ],
+                "grants": [
+                    {
+                        "principal": "arn:aws:iam::111122223333:role/NamedPolicy",
+                        "resource": {
+                            "kind": "lf_tag_policy",
+                            "catalog_id": "222222222222",
+                            "resource_type": "TABLE",
+                            "expression_name": "sales_tables",
+                        },
+                        "permissions": ["SELECT", "DELETE", "INSERT"],
+                    },
+                    {
+                        "principal": "arn:aws:iam::111122223333:role/SplitNamedPolicy",
+                        "resource": {
+                            "kind": "lf_tag_policy",
+                            "catalog_id": "222222222222",
+                            "resource_type": "TABLE",
+                            "expression_name": "sales_tables",
+                        },
+                        "permissions": ["SELECT"],
+                    },
+                    {
+                        "principal": "arn:aws:iam::111122223333:role/SplitNamedPolicy",
+                        "resource": {
+                            "kind": "lf_tag_policy",
+                            "catalog_id": "222222222222",
+                            "resource_type": "TABLE",
+                            "expression_name": "sales_tables",
+                        },
+                        "permissions": ["INSERT"],
+                    },
+                ],
+            }
+        )
+
+        findings = lint_desired(desired)
+
+        self.assertEqual(findings, ())
+
+    def test_lint_flags_data_cells_filter_mutating_and_named_resource_grants(self):
+        desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "arn:aws:iam::111122223333:role/FilteredWriter",
+                        "resource": {
+                            "kind": "data_cells_filter",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                            "filter_name": "orders_public",
+                        },
+                        "permissions": ["SELECT", "DROP"],
+                    }
+                ],
+            }
+        )
+
+        findings = lint_desired(desired)
+        codes = [finding.code for finding in findings]
+
+        self.assertIn("NAMED_RESOURCE_GRANT_REVIEW", codes)
+        self.assertIn("COLUMN_FILTER_MUTATING_PERMISSION_CONFLICT", codes)
+        self.assertEqual(
+            next(
+                finding
+                for finding in findings
+                if finding.code == "COLUMN_FILTER_MUTATING_PERMISSION_CONFLICT"
+            ).details["resource"]["kind"],
+            "data_cells_filter",
         )
 
     def test_cli_lint_outputs_json_and_can_fail_on_findings(self):
@@ -2557,6 +2767,75 @@ class AuditCliTests(unittest.TestCase):
         self.assertEqual([finding.code for finding in findings], ["LF_TAG_POLICY_EXPRESSION_NAME_UNDEFINED"])
         self.assertEqual(findings[0].details["catalog_id"], "222222222222")
 
+    def test_lint_checks_resource_tag_values_by_catalog_id(self):
+        desired = DesiredState.from_dict(
+            {
+                "lf_tags": [
+                    {
+                        "key": "domain",
+                        "catalog_id": "111111111111",
+                        "values": ["sales"],
+                    },
+                    {
+                        "key": "domain",
+                        "catalog_id": "222222222222",
+                        "values": ["finance"],
+                    },
+                ],
+                "resource_tags": [
+                    {
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "tags": {"domain": ["sales"]},
+                    }
+                ],
+            }
+        )
+
+        findings = lint_desired(desired)
+
+        self.assertEqual([finding.code for finding in findings], ["RESOURCE_TAG_VALUE_UNDEFINED"])
+        self.assertEqual(findings[0].details["catalog_id"], "222222222222")
+
+    def test_lint_checks_inline_lf_tag_policy_expression_by_catalog_id(self):
+        desired = DesiredState.from_dict(
+            {
+                "lf_tags": [
+                    {
+                        "key": "domain",
+                        "catalog_id": "111111111111",
+                        "values": ["sales"],
+                    },
+                    {
+                        "key": "domain",
+                        "catalog_id": "222222222222",
+                        "values": ["finance"],
+                    },
+                ],
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "lf_tag_policy",
+                            "catalog_id": "222222222222",
+                            "resource_type": "TABLE",
+                            "expression": {"domain": ["sales"]},
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ],
+            }
+        )
+
+        findings = lint_desired(desired)
+
+        self.assertEqual([finding.code for finding in findings], ["LF_TAG_POLICY_VALUE_UNDEFINED"])
+        self.assertEqual(findings[0].details["catalog_id"], "222222222222")
+
     def test_lint_rejects_duplicate_lf_tag_expression_identity(self):
         desired = DesiredState.from_dict(
             {
@@ -2581,6 +2860,58 @@ class AuditCliTests(unittest.TestCase):
         self.assertEqual([finding.code for finding in findings], ["LF_TAG_EXPRESSION_DUPLICATE_IDENTITY"])
         self.assertEqual(findings[0].target, "lf_tag_expression:catalog=111111111111:name=shared")
         self.assertEqual(findings[0].details, {"catalog_id": "111111111111", "name": "shared"})
+
+    def test_lint_rejects_duplicate_lf_tag_identity(self):
+        desired = DesiredState.from_dict(
+            {
+                "lf_tags": [
+                    {
+                        "key": "domain",
+                        "catalog_id": "111111111111",
+                        "values": ["sales"],
+                    },
+                    {
+                        "key": "domain",
+                        "catalog_id": "111111111111",
+                        "values": ["finance"],
+                    },
+                ],
+            }
+        )
+
+        findings = lint_desired(desired)
+
+        self.assertEqual([finding.code for finding in findings], ["LF_TAG_DUPLICATE_IDENTITY"])
+        self.assertEqual(findings[0].target, "lf_tag:catalog=111111111111:key=domain")
+        self.assertEqual(findings[0].details, {"catalog_id": "111111111111", "tag_key": "domain"})
+
+    def test_lint_rejects_duplicate_lf_tag_key_metadata_identity(self):
+        desired = DesiredState.from_dict(
+            {
+                "lf_tags": {"domain": ["sales"]},
+                "lf_tag_key_metadata": [
+                    {
+                        "key": "domain",
+                        "catalog_id": "111111111111",
+                        "assignable_to": ["table"],
+                    },
+                    {
+                        "key": "domain",
+                        "catalog_id": "111111111111",
+                        "assignable_to": ["column"],
+                    },
+                ],
+            }
+        )
+
+        findings = lint_desired(desired)
+
+        self.assertEqual(
+            [finding.code for finding in findings],
+            ["LF_TAG_KEY_METADATA_DUPLICATE_IDENTITY"],
+        )
+        self.assertEqual(findings[0].target, "lf_tag_key_metadata:catalog=111111111111:key=domain")
+        self.assertEqual(findings[0].details, {"catalog_id": "111111111111", "tag_key": "domain"})
 
     def test_lint_unscoped_named_lf_tag_expression_reference_requires_unambiguous_match(self):
         desired = DesiredState.from_dict(
@@ -2701,6 +3032,190 @@ class AuditCliTests(unittest.TestCase):
 
         self.assertEqual([finding.code for finding in findings], ["RESOURCE_TAG_VALUES_UNMANAGED"])
         self.assertEqual(findings[0].severity, "warning")
+
+    def test_audit_reports_unmanaged_resource_tag_assignment(self):
+        current = CurrentState.from_dict(
+            {
+                "resource_tags": [
+                    {
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "111111111111",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "tags": {"domain": ["sales"]},
+                    }
+                ]
+            }
+        )
+
+        findings = audit(DesiredState.empty(), current)
+
+        self.assertEqual([finding.code for finding in findings], ["RESOURCE_TAG_UNMANAGED"])
+        self.assertEqual(findings[0].details["resource"]["catalog_id"], "111111111111")
+        self.assertEqual(findings[0].details["current_tags"], {"domain": ["sales"]})
+
+    def test_audit_ignores_unmanaged_resource_tag_assignment_by_resource_rule(self):
+        desired = DesiredState.from_dict(
+            {
+                "ignore": {
+                    "resources": [
+                        {
+                            "kind": "table",
+                            "catalog_id": "111111111111",
+                            "database": "analytics",
+                            "table": "orders",
+                        }
+                    ]
+                },
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "resource_tags": [
+                    {
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "111111111111",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "tags": {"domain": ["sales"]},
+                    }
+                ]
+            }
+        )
+
+        findings = audit(desired, current)
+
+        self.assertEqual(findings, ())
+
+    def test_audit_ignores_unmanaged_data_cells_filter_grant_by_filter_pattern(self):
+        desired = DesiredState.from_dict(
+            {
+                "ignore": {
+                    "resources": [
+                        {
+                            "kind": "data_cells_filter",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                            "filter_name": "orders_*",
+                        }
+                    ]
+                },
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "data_cells_filter",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                            "filter_name": "orders_public",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ],
+            }
+        )
+
+        findings = audit(desired, current)
+
+        self.assertEqual(findings, ())
+
+    def test_audit_managed_resources_can_select_data_cells_filter_grants(self):
+        desired = DesiredState.from_dict(
+            {
+                "ownership": {
+                    "managed_resources": [
+                        {
+                            "kind": "data_cells_filter",
+                            "catalog_id": "222222222222",
+                            "filter_name": "orders_*",
+                        }
+                    ],
+                    "unmanaged_action": "error",
+                },
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "data_cells_filter",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                            "filter_name": "orders_public",
+                        },
+                        "permissions": ["SELECT"],
+                    },
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "data_cells_filter",
+                            "catalog_id": "333333333333",
+                            "database": "analytics",
+                            "table": "orders",
+                            "filter_name": "orders_public",
+                        },
+                        "permissions": ["SELECT"],
+                    },
+                ],
+            }
+        )
+
+        findings = audit(desired, current)
+
+        self.assertEqual([finding.code for finding in findings], ["GRANT_UNMANAGED"])
+        self.assertEqual(findings[0].severity, "error")
+        self.assertEqual(findings[0].details["resource"]["catalog_id"], "222222222222")
+
+    def test_audit_catalog_scoped_ownership_includes_unscoped_current_grants(self):
+        desired = DesiredState.from_dict(
+            {
+                "ownership": {
+                    "managed_resources": [
+                        {
+                            "kind": "table",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                        }
+                    ],
+                    "unmanaged_action": "error",
+                },
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "table",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+
+        findings = audit(desired, current)
+
+        self.assertEqual([finding.code for finding in findings], ["GRANT_UNMANAGED"])
+        self.assertEqual(findings[0].severity, "error")
+        self.assertNotIn("catalog_id", findings[0].details["resource"])
 
     def test_audit_named_lf_tag_expression_drift(self):
         desired = DesiredState.from_dict(

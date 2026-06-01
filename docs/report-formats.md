@@ -38,12 +38,21 @@ JSON audit reports contain a severity summary and an ordered list of findings:
       "message": "Desired LF-Tag values are missing",
       "details": {
         "tag_key": "sensitivity",
+        "catalog_id": null,
         "missing_values": ["internal", "restricted"]
       }
     }
   ]
 }
 ```
+
+LF-Tag audit findings include `catalog_id` in their details. Completely
+unmanaged current LF-Tag definitions are reported as `LF_TAG_UNMANAGED` and
+respect the configured ownership and ignore rules.
+
+Current LF-Tag assignments on resources that are absent from desired state are
+reported as `RESOURCE_TAG_UNMANAGED`. These findings include the resource
+identity and current tag values, and also respect ownership and ignore rules.
 
 Finding severities have these meanings:
 
@@ -247,6 +256,15 @@ explanation status, and ordered findings:
     "domain": ["sales"],
     "sensitivity": ["internal"]
   },
+  "effective_lf_tags_by_catalog": [
+    {
+      "catalog_id": null,
+      "lf_tags": {
+        "domain": ["sales"],
+        "sensitivity": ["internal"]
+      }
+    }
+  ],
   "summary": {
     "matched": 1,
     "not_matched": 0,
@@ -287,7 +305,12 @@ Finding statuses have these meanings:
 - `context`: related current state exists, such as a data-location grant, but
   `lfguard` cannot prove it grants the requested catalog access by itself.
 
-Markdown explain reports include the same summary, effective LF-Tag table, and
+When the target omits `catalog_id`, explain reports also expose
+`effective_lf_tags_by_catalog` so reviewers can see whether the answer was
+derived from one catalog or from multiple same-name resources. Scoped LF-Tag
+policy grants use the grant catalog's effective tags for matching.
+
+Markdown explain reports include the same summary, effective LF-Tag tables, and
 finding table for pull request comments or GitHub Actions summaries.
 
 ## Plan Reports

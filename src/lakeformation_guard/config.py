@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from fnmatch import fnmatchcase
 from typing import Iterable, Optional
 
@@ -75,6 +76,7 @@ def resource_pattern_matches(pattern: ResourcePattern, resource: ResourceRef) ->
         (pattern.table_name, resource.table_name),
         (pattern.location, resource.location),
         (pattern.expression_name, resource.expression_name),
+        (pattern.filter_name, resource.filter_name),
     )
     for expected, actual in checks:
         if expected is None:
@@ -89,9 +91,17 @@ def _owned_by_config(config: GuardrailConfig, principal: Optional[str], resource
         principal is None or _matches_any(principal, config.ownership.managed_principals)
     )
     resource_owned = not config.ownership.managed_resources or any(
-        resource_pattern_matches(pattern, resource) for pattern in config.ownership.managed_resources
+        _ownership_resource_matches(pattern, resource) for pattern in config.ownership.managed_resources
     )
     return principal_owned and resource_owned
+
+
+def _ownership_resource_matches(pattern: ResourcePattern, resource: ResourceRef) -> bool:
+    if resource_pattern_matches(pattern, resource):
+        return True
+    if pattern.catalog_id and resource.catalog_id is None:
+        return resource_pattern_matches(pattern, replace(resource, catalog_id=pattern.catalog_id))
+    return False
 
 
 def _matches_any(value: str, patterns: Iterable[str]) -> bool:

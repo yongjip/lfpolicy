@@ -94,6 +94,27 @@ columns. `reader()` may use it. `editor()`, `producer()`, and
 When a reader filter key is also assignable to databases, the builder can use
 that same key for database `DESCRIBE` and table `SELECT`/`DESCRIBE`.
 
+Catalog-scoped policies can attach `catalog_id` to tag definitions, resource
+tag assignments, and permission templates:
+
+```python
+policy.tag_key(
+    "domain",
+    catalog_id="111122223333",
+    values=["sales"],
+    assignable_to=[TagAssignmentScope.DATABASE, TagAssignmentScope.TABLE],
+)
+policy.tag_database("sales_curated", catalog_id="111122223333", domain="sales")
+policy.group("dataconsumer", reader(catalog_id="111122223333").where(domain="sales"))
+```
+
+Use `catalog_id` on `reader()`, `editor()`, `producer()`, and
+`table_creator()` when the generated LF-Tag policy grants must target a
+specific catalog. `database_creator(catalog_id=...)`, `admin(catalog_id=...)`,
+`steward(..., catalog_id=...)`, and `data_location_access(..., catalog_id=...)`
+produce scoped direct grants. If the same tag key is defined in multiple
+catalogs, unscoped permission groups must be made explicit with `catalog_id`.
+
 Resource tags use the same scope declaration:
 
 ```python

@@ -45,6 +45,31 @@ The equivalent list form is also accepted:
 }
 ```
 
+Use list form or object values when the same LF-Tag key must be managed in
+multiple Glue Data Catalogs:
+
+```json
+{
+  "lf_tags": [
+    {"key": "domain", "catalog_id": "111122223333", "values": ["sales"]},
+    {"key": "domain", "catalog_id": "444455556666", "values": ["finance"]}
+  ]
+}
+```
+
+The mapping form can also carry a catalog ID for one key:
+
+```json
+{
+  "lf_tags": {
+    "domain": {
+      "catalog_id": "111122223333",
+      "values": ["sales", "finance"]
+    }
+  }
+}
+```
+
 ## Named LF-Tag Expressions
 
 Use `lf_tag_expressions` to manage AWS Lake Formation named LF-Tag expressions.
@@ -194,6 +219,21 @@ With an explicit catalog:
 {
   "kind": "data_location",
   "location": "arn:aws:s3:::analytics-lake/raw/"
+}
+```
+
+### Data Cells Filter
+
+Data cells filter resources are used for grants on existing Lake Formation row
+and column filters. `catalog_id` maps to the filter's `TableCatalogId`.
+
+```json
+{
+  "kind": "data_cells_filter",
+  "catalog_id": "111122223333",
+  "database": "analytics",
+  "table": "orders",
+  "filter_name": "orders_public"
 }
 ```
 
@@ -356,8 +396,9 @@ visible only where `lfguard` is intended to manage it:
 patterns use shell-style wildcards. A resource pattern can constrain only the
 fields it names, so `{"database": "legacy_*"}` matches database-scoped resources
 with that database name even when the resource kind is `table` or
-`table_with_columns`. Use `{"kind": "database", "database": "legacy_*"}` when
-the kind itself should also be constrained.
+`table_with_columns`. Patterns can also use `filter_name` for
+`data_cells_filter` grants. Use `{"kind": "database", "database": "legacy_*"}`
+when the kind itself should also be constrained.
 
 ## Policy Exceptions
 

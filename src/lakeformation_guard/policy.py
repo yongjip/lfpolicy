@@ -89,9 +89,11 @@ class TagKey:
     key: str
     values: Tuple[str, ...]
     assignable_to: Tuple[TagAssignmentScope, ...]
+    catalog_id: Optional[str] = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "key", _clean_lower_token(self.key, field_name="tag key"))
+        object.__setattr__(self, "catalog_id", _optional_str(self.catalog_id))
         object.__setattr__(
             self,
             "values",
@@ -109,6 +111,12 @@ class TagKey:
 
         return TagAssignmentScope.COLUMN in self.assignable_to
 
+    @property
+    def identity(self) -> str:
+        if not self.catalog_id:
+            return self.key
+        return "{}:{}".format(self.catalog_id, self.key)
+
 
 @dataclass(frozen=True)
 class PermissionIntent:
@@ -118,6 +126,7 @@ class PermissionIntent:
     filters: Mapping[str, Tuple[str, ...]]
     resource: Optional[ResourceRef] = None
     permissions: Tuple[str, ...] = field(default_factory=tuple)
+    catalog_id: Optional[str] = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -136,6 +145,7 @@ class PermissionIntent:
             )
         object.__setattr__(self, "filters", normalized)
         object.__setattr__(self, "permissions", _permission_tuple(self.permissions))
+        object.__setattr__(self, "catalog_id", _optional_str(self.catalog_id))
 
     def where(
         self,
@@ -152,12 +162,24 @@ class PermissionIntent:
             filters=merged,
             resource=self.resource,
             permissions=self.permissions,
+            catalog_id=self.catalog_id,
         )
 
     def where_tags(self, filters: Mapping[str, Any]) -> "PermissionIntent":
         """Return a copy with tag filters from a mapping."""
 
         return self.where(filters)
+
+    def in_catalog(self, catalog_id: str) -> "PermissionIntent":
+        """Return a copy scoped to a Glue Data Catalog."""
+
+        return PermissionIntent(
+            permission_template=self.permission_template,
+            filters=self.filters,
+            resource=_resource_with_catalog(self.resource, catalog_id),
+            permissions=self.permissions,
+            catalog_id=catalog_id,
+        )
 
 
 @dataclass(frozen=True)
@@ -200,7 +222,7 @@ class LakePolicy:
     """Container for tag keys, permission groups, and role bindings."""
 
     def __init__(self) -> None:
-        self._tag_keys: Dict[str, TagKey] = {}
+        self._tag_keys: Dict[Tuple[Optional[str], str], TagKey] = {}
         self._groups: Dict[str, PermissionGroup] = {}
         self._bindings: list[RoleBinding] = []
         self._resource_tag_values: Dict[ResourceRef, Dict[str, str]] = {}
@@ -208,7 +230,7 @@ class LakePolicy:
 
     @property
     def tag_keys(self) -> Tuple[TagKey, ...]:
-        return tuple(self._tag_keys[key] for key in sorted(self._tag_keys))
+        return tuple(self._tag_keys[key] for key in sorted(self._tag_keys, key=_tag_key_sort_key))
 
     @property
     def groups(self) -> Tuple[PermissionGroup, ...]:
@@ -237,6 +259,7 @@ class LakePolicy:
         *,
         values: Union[str, Iterable[str]],
         assignable_to: TagAssignmentScopeInput,
+        catalog_id: Optional[str] = None,
     ) -> TagKey:
         """Define an LF-Tag key and where it may be assigned."""
 
@@ -248,10 +271,12 @@ class LakePolicy:
                 TagAssignmentScope,
                 field_name="assignable_to",
             ),
+            catalog_id=catalog_id,
         )
-        if tag_key.key in self._tag_keys:
-            raise ValueError("tag key {!r} is already defined".format(tag_key.key))
-        self._tag_keys[tag_key.key] = tag_key
+        identity = _tag_key_identity(tag_key.catalog_id, tag_key.key)
+        if identity in self._tag_keys:
+            raise ValueError("tag key {!r} is already defined".format(tag_key.identity))
+        self._tag_keys[identity] = tag_key
         return tag_key
 
     def group(self, name: str, intent: PermissionIntent) -> PermissionGroup:
@@ -269,13 +294,14 @@ class LakePolicy:
         self,
         database: str,
         *,
+        catalog_id: Optional[str] = None,
         tags: Optional[Mapping[str, str]] = None,
         **tag_kwargs: str,
     ) -> ResourceTagAssignment:
         """Assign LF-Tags to a database."""
 
         return self._tag_resource(
-            ResourceRef(kind="database", database_name=database),
+            ResourceRef(kind="database", database_name=database, catalog_id=catalog_id),
             TagAssignmentScope.DATABASE,
             _merge_tag_mapping(tags, tag_kwargs, field_name="resource tag assignment"),
         )
@@ -285,13 +311,14 @@ class LakePolicy:
         database: str,
         table: str,
         *,
+        catalog_id: Optional[str] = None,
         tags: Optional[Mapping[str, str]] = None,
         **tag_kwargs: str,
     ) -> ResourceTagAssignment:
         """Assign LF-Tags to a table."""
 
         return self._tag_resource(
-            ResourceRef(kind="table", database_name=database, table_name=table),
+            ResourceRef(kind="table", database_name=database, table_name=table, catalog_id=catalog_id),
             TagAssignmentScope.TABLE,
             _merge_tag_mapping(tags, tag_kwargs, field_name="resource tag assignment"),
         )
@@ -302,6 +329,7 @@ class LakePolicy:
         table: str,
         columns: Union[str, Iterable[str]],
         *,
+        catalog_id: Optional[str] = None,
         tags: Optional[Mapping[str, str]] = None,
         **tag_kwargs: str,
     ) -> ResourceTagAssignment:
@@ -314,6 +342,7 @@ class LakePolicy:
                 database_name=database,
                 table_name=table,
                 columns=tuple(column_names),
+                catalog_id=catalog_id,
             ),
             TagAssignmentScope.COLUMN,
             _merge_tag_mapping(tags, tag_kwargs, field_name="resource tag assignment"),
@@ -360,9 +389,9 @@ class LakePolicy:
                 grants.extend(self._grants_for_group(binding.principal, group))
 
         desired = DesiredState(
-            lf_tags=tuple(LFTagDefinition(tag.key, tag.values) for tag in self.tag_keys),
+            lf_tags=tuple(LFTagDefinition(tag.key, tag.values, catalog_id=tag.catalog_id) for tag in self.tag_keys),
             lf_tag_key_metadata=tuple(
-                LFTagKeyMetadata(tag.key, tuple(scope.value for scope in tag.assignable_to))
+                LFTagKeyMetadata(tag.key, tuple(scope.value for scope in tag.assignable_to), catalog_id=tag.catalog_id)
                 for tag in self.tag_keys
             ),
             resource_tags=self.resource_tags,
@@ -429,7 +458,7 @@ class LakePolicy:
     def _validate_resource_tags(self, resource: ResourceRef, tags: Mapping[str, str]) -> None:
         assignment_scope = self._resource_tag_scopes[resource]
         for tag_key, value in tags.items():
-            definition = self._tag_keys.get(tag_key)
+            definition = self._tag_key_definition(tag_key, resource.catalog_id)
             if definition is None:
                 raise ValueError(
                     "resource {} references undefined tag key {!r}".format(
@@ -503,7 +532,7 @@ class LakePolicy:
             )
 
         for tag_key, values in group.intent.filters.items():
-            definition = self._tag_keys.get(tag_key)
+            definition = self._tag_key_definition(tag_key, group.intent.catalog_id)
             if definition is None:
                 raise ValueError(
                     "permission group {!r} references undefined tag key {!r}".format(
@@ -554,7 +583,7 @@ class LakePolicy:
             return (
                 Grant(
                     principal=principal,
-                    resource=ResourceRef(kind="catalog"),
+                    resource=ResourceRef(kind="catalog", catalog_id=group.intent.catalog_id),
                     permissions=("CREATE_DATABASE",),
                 ),
             )
@@ -589,6 +618,7 @@ class LakePolicy:
                     kind="lf_tag_policy",
                     resource_type="DATABASE",
                     expression=self._database_filter_items(group),
+                    catalog_id=group.intent.catalog_id,
                 ),
                 permissions=database_permissions,
             ),
@@ -598,6 +628,7 @@ class LakePolicy:
                     kind="lf_tag_policy",
                     resource_type="TABLE",
                     expression=_expression_items(group.intent.filters),
+                    catalog_id=group.intent.catalog_id,
                 ),
                 permissions=table_permissions,
             ),
@@ -608,39 +639,58 @@ class LakePolicy:
             {
                 key: values
                 for key, values in group.intent.filters.items()
-                if TagAssignmentScope.DATABASE in self._tag_keys[key].assignable_to
+                if TagAssignmentScope.DATABASE in self._tag_key_definition(key, group.intent.catalog_id).assignable_to
             }
         )
 
+    def _tag_key_definition(self, key: str, catalog_id: Optional[str]) -> Optional[TagKey]:
+        key = _clean_lower_token(key, field_name="tag key")
+        if catalog_id:
+            scoped = self._tag_keys.get(_tag_key_identity(catalog_id, key))
+            if scoped:
+                return scoped
+            return self._tag_keys.get(_tag_key_identity(None, key))
+        unscoped = self._tag_keys.get(_tag_key_identity(None, key))
+        if unscoped:
+            return unscoped
+        scoped_matches = [
+            tag_key
+            for tag_identity, tag_key in self._tag_keys.items()
+            if tag_identity[0] and tag_identity[1] == key
+        ]
+        if len(scoped_matches) == 1:
+            return scoped_matches[0]
+        return None
 
-def reader() -> PermissionIntent:
+
+def reader(*, catalog_id: Optional[str] = None) -> PermissionIntent:
     """Read approved existing tables."""
 
-    return PermissionIntent(permission_template=PermissionTemplate.READER, filters={})
+    return PermissionIntent(permission_template=PermissionTemplate.READER, filters={}, catalog_id=catalog_id)
 
 
-def editor() -> PermissionIntent:
+def editor(*, catalog_id: Optional[str] = None) -> PermissionIntent:
     """Read and mutate approved existing tables without creating tables."""
 
-    return PermissionIntent(permission_template=PermissionTemplate.EDITOR, filters={})
+    return PermissionIntent(permission_template=PermissionTemplate.EDITOR, filters={}, catalog_id=catalog_id)
 
 
-def producer() -> PermissionIntent:
+def producer(*, catalog_id: Optional[str] = None) -> PermissionIntent:
     """Create tables in approved databases, and read/mutate approved tables."""
 
-    return PermissionIntent(permission_template=PermissionTemplate.PRODUCER, filters={})
+    return PermissionIntent(permission_template=PermissionTemplate.PRODUCER, filters={}, catalog_id=catalog_id)
 
 
-def table_creator() -> PermissionIntent:
+def table_creator(*, catalog_id: Optional[str] = None) -> PermissionIntent:
     """Create tables in approved databases, and read/mutate approved tables."""
 
-    return PermissionIntent(permission_template=PermissionTemplate.TABLE_CREATOR, filters={})
+    return PermissionIntent(permission_template=PermissionTemplate.TABLE_CREATOR, filters={}, catalog_id=catalog_id)
 
 
-def database_creator() -> PermissionIntent:
+def database_creator(*, catalog_id: Optional[str] = None) -> PermissionIntent:
     """Create new databases in the catalog."""
 
-    return PermissionIntent(permission_template=PermissionTemplate.DATABASE_CREATOR, filters={})
+    return PermissionIntent(permission_template=PermissionTemplate.DATABASE_CREATOR, filters={}, catalog_id=catalog_id)
 
 
 def steward(expression_name: str, *, catalog_id: Optional[str] = None) -> PermissionIntent:
@@ -651,6 +701,7 @@ def steward(expression_name: str, *, catalog_id: Optional[str] = None) -> Permis
         filters={},
         resource=ResourceRef(kind="lf_tag_expression", expression_name=expression_name, catalog_id=catalog_id),
         permissions=("DESCRIBE", "GRANT_WITH_LF_TAG_EXPRESSION"),
+        catalog_id=catalog_id,
     )
 
 
@@ -662,6 +713,7 @@ def admin(*, catalog_id: Optional[str] = None) -> PermissionIntent:
         filters={},
         resource=ResourceRef(kind="catalog", catalog_id=catalog_id),
         permissions=("CREATE_DATABASE", "CREATE_LF_TAG", "CREATE_LF_TAG_EXPRESSION", "DESCRIBE"),
+        catalog_id=catalog_id,
     )
 
 
@@ -673,6 +725,7 @@ def data_location_access(location: str, *, catalog_id: Optional[str] = None) -> 
         filters={},
         resource=ResourceRef(kind="data_location", location=location, catalog_id=catalog_id),
         permissions=("DATA_LOCATION_ACCESS",),
+        catalog_id=catalog_id,
     )
 
 
@@ -733,6 +786,38 @@ def _expression_items(filters: Mapping[str, Tuple[str, ...]]) -> Tuple[Any, ...]
     from .models import LFTagValue
 
     return tuple(LFTagValue(key, values) for key, values in sorted(filters.items()))
+
+
+def _optional_str(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _tag_key_identity(catalog_id: Optional[str], key: str) -> Tuple[Optional[str], str]:
+    return (_optional_str(catalog_id), key)
+
+
+def _tag_key_sort_key(identity: Tuple[Optional[str], str]) -> str:
+    return "{}:{}".format(identity[0] or "", identity[1])
+
+
+def _resource_with_catalog(resource: Optional[ResourceRef], catalog_id: Optional[str]) -> Optional[ResourceRef]:
+    if resource is None:
+        return None
+    return ResourceRef(
+        kind=resource.kind,
+        database_name=resource.database_name,
+        table_name=resource.table_name,
+        columns=resource.columns,
+        location=resource.location,
+        resource_type=resource.resource_type,
+        expression=resource.expression,
+        expression_name=resource.expression_name,
+        filter_name=resource.filter_name,
+        catalog_id=catalog_id,
+    )
 
 
 def _coerce_enum(value: Union[TEnum, str], enum_type: Type[TEnum], *, field_name: str) -> TEnum:

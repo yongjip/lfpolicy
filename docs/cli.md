@@ -494,6 +494,8 @@ Target options:
 - `--database NAME`: explain a database resource.
 - `--database NAME --table NAME`: explain a table resource.
 - `--database NAME --table NAME --columns c1,c2`: explain a column subset.
+- `--database NAME --table NAME --data-cells-filter FILTER`: explain a Lake
+  Formation data cells filter grant.
 - `--location S3_ARN_OR_PATH`: explain a data-location resource instead of a
   catalog resource.
 
@@ -552,8 +554,9 @@ Useful options:
 - `--force`: overwrite an existing output file.
 
 Resource-tag import is intentionally bounded. `lfguard` reads LF-Tag
-assignments for resources discovered through imported grants; it does not crawl
-the whole Glue Data Catalog.
+assignments for resources discovered through Lake Formation grants, even when
+`resource-tags` is requested without including `grants` in the generated file.
+It does not crawl the whole Glue Data Catalog.
 
 ## `apply`
 
