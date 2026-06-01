@@ -1536,8 +1536,20 @@ class AuditCliTests(unittest.TestCase):
             self.assertEqual(
                 payload,
                 {
-                    "current_snapshot": {"grants": 0, "lf_tags": 0, "resource_tags": 0, "valid": True},
-                    "desired": {"grants": 1, "lf_tags": 1, "resource_tags": 1, "valid": True},
+                    "current_snapshot": {
+                        "grants": 0,
+                        "lf_tag_expressions": 0,
+                        "lf_tags": 0,
+                        "resource_tags": 0,
+                        "valid": True,
+                    },
+                    "desired": {
+                        "grants": 1,
+                        "lf_tag_expressions": 0,
+                        "lf_tags": 1,
+                        "resource_tags": 1,
+                        "valid": True,
+                    },
                 },
             )
 
@@ -2261,6 +2273,207 @@ class AuditCliTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             self.assertTrue(adapter_class.from_boto3.return_value.apply.call_args.kwargs["allow_destructive"])
+
+    def test_cli_import_writes_starter_desired_state_from_aws(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_path = Path(tmp) / "desired.json"
+            imported = CurrentState.from_dict(
+                {
+                    "lf_tags": {"domain": ["sales"]},
+                    "lf_tag_expressions": {"sales_tables": {"expression": {"domain": ["sales"]}}},
+                    "grants": [
+                        {
+                            "principal": "role",
+                            "resource": {
+                                "kind": "lf_tag_policy",
+                                "resource_type": "TABLE",
+                                "expression_name": "sales_tables",
+                            },
+                            "permissions": ["SELECT"],
+                        }
+                    ],
+                }
+            )
+
+            stdout = io.StringIO()
+            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter") as adapter_class:
+                adapter_class.from_boto3.return_value.import_state.return_value = imported
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "import",
+                            "--catalog-id",
+                            "123456789012",
+                            "--include",
+                            "lf-tags,lf-tag-expressions,grants",
+                            "--output",
+                            str(output_path),
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            adapter_class.from_boto3.assert_called_once_with(
+                profile_name=None,
+                region_name=None,
+                catalog_id="123456789012",
+            )
+            adapter_class.from_boto3.return_value.import_state.assert_called_once_with(
+                include=("lf-tags", "lf-tag-expressions", "grants")
+            )
+            payload = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["lf_tag_expressions"]["sales_tables"]["expression"], {"domain": ["sales"]})
+            self.assertIn("Wrote imported desired state", stdout.getvalue())
+
+    def test_lint_config_overrides_severity_and_can_ignore_rule(self):
+        desired = DesiredState.from_dict(
+            {
+                "lf_tags": {"Sensitivity": ["Internal"]},
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {"kind": "database", "database": "analytics"},
+                        "permissions": ["DESCRIBE"],
+                    }
+                ],
+                "lint": {
+                    "lf_tag_case_normalization": "warning",
+                    "named_resource_grant_review": "ignore",
+                },
+            }
+        )
+
+        findings = lint_desired(desired)
+
+        self.assertEqual([finding.code for finding in findings], ["LF_TAG_CASE_NORMALIZATION"])
+        self.assertEqual(findings[0].severity, "warning")
+
+    def test_lint_checks_named_lf_tag_expressions_and_grants_by_name(self):
+        desired = DesiredState.from_dict(
+            {
+                "lf_tags": {"domain": ["sales"]},
+                "lf_tag_expressions": {"sales_tables": {"expression": {"domain": ["sales"]}}},
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "lf_tag_policy",
+                            "resource_type": "TABLE",
+                            "expression_name": "missing_expression",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ],
+            }
+        )
+
+        findings = lint_desired(desired)
+
+        self.assertEqual(
+            {finding.code for finding in findings},
+            {"LF_TAG_POLICY_EXPRESSION_NAME_UNDEFINED"},
+        )
+
+    def test_lint_named_lf_tag_expression_only_state_is_not_empty(self):
+        desired = DesiredState.from_dict(
+            {
+                "lf_tag_expressions": {"sales_tables": {"expression": {"domain": ["sales"]}}},
+            }
+        )
+
+        findings = lint_desired(desired)
+
+        self.assertEqual([finding.code for finding in findings], ["LF_TAG_EXPRESSION_KEY_UNDEFINED"])
+
+    def test_audit_ownership_and_ignore_control_unmanaged_grants(self):
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "arn:aws:iam::111122223333:role/data-analyst",
+                        "resource": {"kind": "database", "database": "analytics"},
+                        "permissions": ["DESCRIBE"],
+                    },
+                    {
+                        "principal": "arn:aws:iam::111122223333:role/app",
+                        "resource": {"kind": "database", "database": "analytics"},
+                        "permissions": ["DESCRIBE"],
+                    },
+                    {
+                        "principal": "IAM_ALLOWED_PRINCIPALS",
+                        "resource": {"kind": "database", "database": "analytics"},
+                        "permissions": ["DESCRIBE"],
+                    },
+                    {
+                        "principal": "arn:aws:iam::111122223333:role/data-legacy",
+                        "resource": {"kind": "table", "database": "legacy_raw", "table": "orders"},
+                        "permissions": ["DESCRIBE"],
+                    },
+                ]
+            }
+        )
+        desired = DesiredState.from_dict(
+            {
+                "ownership": {
+                    "managed_principals": ["arn:aws:iam::*:role/data-*"],
+                    "unmanaged_action": "error",
+                },
+                "ignore": {
+                    "principals": ["IAM_ALLOWED_PRINCIPALS"],
+                    "resources": [{"database": "legacy_*"}],
+                },
+            }
+        )
+
+        findings = audit(desired, current)
+
+        self.assertEqual([finding.details["principal"] for finding in findings], ["arn:aws:iam::111122223333:role/data-analyst"])
+        self.assertEqual(findings[0].severity, "error")
+
+    def test_audit_managed_principal_boundary_does_not_hide_resource_drift(self):
+        desired = DesiredState.from_dict(
+            {
+                "resource_tags": [
+                    {
+                        "resource": {"kind": "database", "database": "analytics"},
+                        "tags": {"domain": ["sales"]},
+                    }
+                ],
+                "ownership": {
+                    "managed_principals": ["arn:aws:iam::*:role/data-*"],
+                },
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "resource_tags": [
+                    {
+                        "resource": {"kind": "database", "database": "analytics"},
+                        "tags": {"domain": ["sales", "finance"]},
+                    }
+                ]
+            }
+        )
+
+        findings = audit(desired, current)
+
+        self.assertEqual([finding.code for finding in findings], ["RESOURCE_TAG_VALUES_UNMANAGED"])
+        self.assertEqual(findings[0].severity, "warning")
+
+    def test_audit_named_lf_tag_expression_drift(self):
+        desired = DesiredState.from_dict(
+            {
+                "lf_tag_expressions": {"sales_tables": {"expression": {"domain": ["sales"]}}},
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "lf_tag_expressions": {"sales_tables": {"expression": {"domain": ["finance"]}}},
+            }
+        )
+
+        findings = audit(desired, current)
+
+        self.assertEqual([finding.code for finding in findings], ["LF_TAG_EXPRESSION_BODY_DRIFT"])
 
 
 def _saved_plan_payload(destructive=False):

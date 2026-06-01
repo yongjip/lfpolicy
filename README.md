@@ -14,12 +14,14 @@ The import package is `lakeformation_guard`; the CLI command is `lfguard`.
 ## What it manages
 
 - LF-Tag definitions and allowed values.
+- Named LF-Tag expressions.
 - LF-Tag assignments on Lake Formation Data Catalog resources.
 - Lake Formation grants on catalog, database, table, column, data location, and
   LF-Tag policy resources.
 - Python-native permission groups that generate reviewable desired state.
 - Offline audit and plan workflows from JSON or YAML snapshots.
 - Live AWS inventory and apply workflows through the optional `boto3` adapter.
+- Live AWS import for starter desired-state scaffolds.
 
 By default, plans only add missing definitions, tag assignments, and permissions.
 Potentially destructive changes, such as revoking permissions or removing tag
@@ -64,13 +66,18 @@ tags, mixed-case LF-Tags, multiple values for one key on a resource, broad
 principals, `ALL`/`SUPER`, LF-Tag table policies that mix `SELECT` with
 `ALTER`/`DELETE`/`DROP`/`INSERT`, and other patterns that make a lake harder to
 govern like a controlled database.
+Existing environments can tune lint severities in desired state with a top-level
+`lint` section while strict defaults remain in place when no override is set.
 
 ## Common use cases
 
 - Fail a CI check when production Lake Formation state drifts from a reviewed
   desired-state file.
+- Import live Lake Formation state into a starter desired-state file that a
+  platform owner can review and then commit.
 - Generate a safe change plan for new LF-Tag values, table tag assignments, and
-  LF-Tag policy grants.
+  LF-Tag policy grants, including grants that reference named LF-Tag
+  expressions.
 - Let platform teams review destructive operations separately from additive
   changes.
 - Keep data access policy as code without writing direct boto3 orchestration for
@@ -230,6 +237,14 @@ shape:
     "sensitivity": ["public", "internal", "restricted"],
     "domain": ["sales", "finance"]
   },
+  "lf_tag_expressions": {
+    "sales_tables": {
+      "expression": {
+        "domain": ["sales"],
+        "sensitivity": ["public", "internal"]
+      }
+    }
+  },
   "resource_tags": [
     {
       "resource": {
@@ -249,10 +264,7 @@ shape:
       "resource": {
         "kind": "lf_tag_policy",
         "resource_type": "TABLE",
-        "expression": {
-          "domain": ["sales"],
-          "sensitivity": ["public", "internal"]
-        }
+        "expression_name": "sales_tables"
       },
       "permissions": ["SELECT", "DESCRIBE"]
     }
@@ -261,7 +273,8 @@ shape:
 ```
 
 Supported resource kinds are `catalog`, `database`, `table`,
-`table_with_columns`, `data_location`, and `lf_tag_policy`.
+`table_with_columns`, `data_location`, `lf_tag_policy`, and
+`lf_tag_expression`.
 Write LF-Tag keys and values in lower case. AWS stores them in lower case, and
 allows only one value for a given LF-Tag key on a single resource.
 See [`docs/state-format.md`](docs/state-format.md) for copyable examples of
@@ -293,6 +306,7 @@ lfguard generate policy.py --output-file policy/desired.json
 lfguard generate policy.py --output-file policy/desired.json --check
 lfguard sample --output-dir lfguard-demo
 lfguard bootstrap --output-dir lfguard-policy
+lfguard import --catalog-id 123456789012 --output policy/imported-desired.json
 lfguard schema --output-file policy/lfguard.schema.json
 lfguard doctor --require aws
 lfguard permissions --template read-only --include-glue-read

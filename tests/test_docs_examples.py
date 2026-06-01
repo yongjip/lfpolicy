@@ -58,10 +58,16 @@ class DocumentationExampleTests(unittest.TestCase):
         source_text = (root / "src" / "lakeformation_guard" / "aws.py").read_text(encoding="utf-8")
         methods = (
             "get_lf_tag",
+            "get_lf_tag_expression",
             "get_resource_lf_tags",
+            "list_lf_tags",
+            "list_lf_tag_expressions",
             "list_permissions",
             "create_lf_tag",
             "update_lf_tag",
+            "create_lf_tag_expression",
+            "update_lf_tag_expression",
+            "delete_lf_tag_expression",
             "add_lf_tags_to_resource",
             "remove_lf_tags_from_resource",
             "grant_permissions",
@@ -74,10 +80,16 @@ class DocumentationExampleTests(unittest.TestCase):
 
         for action in (
             "lakeformation:GetLFTag",
+            "lakeformation:GetLFTagExpression",
             "lakeformation:GetResourceLFTags",
+            "lakeformation:ListLFTags",
+            "lakeformation:ListLFTagExpressions",
             "lakeformation:ListPermissions",
             "lakeformation:CreateLFTag",
             "lakeformation:UpdateLFTag",
+            "lakeformation:CreateLFTagExpression",
+            "lakeformation:UpdateLFTagExpression",
+            "lakeformation:DeleteLFTagExpression",
             "lakeformation:AddLFTagsToResource",
             "lakeformation:RemoveLFTagsFromResource",
             "lakeformation:GrantPermissions",

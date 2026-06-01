@@ -59,6 +59,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return _cmd_validate(args)
         if args.command == "snapshot":
             return _cmd_snapshot(args)
+        if args.command == "import":
+            return _cmd_import(args)
         if args.command == "apply":
             return _cmd_apply(args)
     except (StateFormatError, ValueError, RuntimeError) as exc:
@@ -281,6 +283,21 @@ def build_parser() -> argparse.ArgumentParser:
     snapshot_parser.add_argument("--desired", required=True, help="Desired state JSON/YAML file that defines the snapshot scope.")
     _add_aws_args(snapshot_parser)
     snapshot_parser.add_argument("--output-file", help="Write snapshot JSON to this file instead of stdout.")
+
+    import_parser = subparsers.add_parser("import", help="Import live AWS state into a starter desired-state file.")
+    _add_aws_args(import_parser)
+    import_parser.add_argument(
+        "--include",
+        default="lf-tags,lf-tag-expressions,resource-tags,grants",
+        help="Comma-separated sections to import: lf-tags, lf-tag-expressions, resource-tags, grants.",
+    )
+    import_parser.add_argument("--output", required=True, help="Write imported desired state to this JSON/YAML file.")
+    import_parser.add_argument(
+        "--format",
+        choices=("json", "yaml"),
+        help="Imported desired-state output format. Defaults to the output extension, or json.",
+    )
+    import_parser.add_argument("--force", action="store_true", help="Overwrite the output file if it already exists.")
 
     apply_parser = subparsers.add_parser("apply", help="Dry-run or execute a Lake Formation change plan.")
     apply_parser.add_argument("--desired", help="Desired state JSON/YAML file.")
@@ -594,6 +611,17 @@ def _cmd_snapshot(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_import(args: argparse.Namespace) -> int:
+    output_path = Path(args.output)
+    if output_path.exists() and not args.force:
+        raise RuntimeError("{} already exists; pass --force to overwrite it".format(output_path))
+    imported = _aws_adapter(args).import_state(include=_parse_import_include(args.include))
+    output_format = _resolve_init_format(args.format, str(output_path))
+    _write_text_file(output_path, _dump_state_data(imported.to_dict(), output_format), "imported desired state")
+    print("Wrote imported desired state to {}.".format(output_path))
+    return 0
+
+
 def _cmd_apply(args: argparse.Namespace) -> int:
     change_plan = _load_apply_plan(args)
     change_plan = _filter_apply_plan(change_plan, args)
@@ -666,6 +694,8 @@ def _add_github_summary_arg(parser: argparse.ArgumentParser) -> None:
 
 def _add_plan_option_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--allow-lf-tag-value-removals", action="store_true", help="Plan LF-Tag value removals.")
+    parser.add_argument("--allow-lf-tag-expression-updates", action="store_true", help="Plan LF-Tag expression updates.")
+    parser.add_argument("--allow-lf-tag-expression-deletes", action="store_true", help="Plan LF-Tag expression deletes.")
     parser.add_argument("--allow-resource-tag-removals", action="store_true", help="Plan LF-Tag assignment removals.")
     parser.add_argument("--allow-permission-revokes", action="store_true", help="Plan Lake Formation permission revokes.")
 
@@ -687,6 +717,8 @@ def _aws_adapter(args: argparse.Namespace) -> AWSLakeFormationAdapter:
 def _plan_options(args: argparse.Namespace) -> PlanOptions:
     return PlanOptions(
         allow_lf_tag_value_removals=args.allow_lf_tag_value_removals,
+        allow_lf_tag_expression_updates=args.allow_lf_tag_expression_updates,
+        allow_lf_tag_expression_deletes=args.allow_lf_tag_expression_deletes,
         allow_resource_tag_removals=args.allow_resource_tag_removals,
         allow_permission_revokes=args.allow_permission_revokes,
     )
@@ -695,6 +727,8 @@ def _plan_options(args: argparse.Namespace) -> PlanOptions:
 def _has_destructive_allowance(args: argparse.Namespace) -> bool:
     return bool(
         args.allow_lf_tag_value_removals
+        or args.allow_lf_tag_expression_updates
+        or args.allow_lf_tag_expression_deletes
         or args.allow_resource_tag_removals
         or args.allow_permission_revokes
     )
@@ -787,9 +821,21 @@ def _flag_dest(flag: str) -> str:
     return flag[2:].replace("-", "_")
 
 
+def _parse_import_include(raw: str) -> Tuple[str, ...]:
+    supported = {"lf-tags", "lf-tag-expressions", "resource-tags", "grants"}
+    includes = tuple(item.strip() for item in raw.split(",") if item.strip())
+    unsupported = sorted(set(includes) - supported)
+    if unsupported:
+        raise RuntimeError("Unsupported import section(s): {}".format(", ".join(unsupported)))
+    if not includes:
+        raise RuntimeError("--include requires at least one section")
+    return includes
+
+
 def _state_summary(state: GuardrailState) -> dict:
     return {
         "lf_tags": len(state.lf_tags),
+        "lf_tag_expressions": len(state.lf_tag_expressions),
         "resource_tags": len(state.resource_tags),
         "grants": len(state.grants),
     }
@@ -807,6 +853,8 @@ def _state_profile(state: GuardrailState) -> dict:
         "lf_tags": len(state.lf_tags),
         "lf_tag_keys": [tag.key for tag in state.lf_tags],
         "lf_tag_values": {tag.key: list(tag.values) for tag in state.lf_tags},
+        "lf_tag_expressions": len(state.lf_tag_expressions),
+        "lf_tag_expression_names": [expression.name for expression in state.lf_tag_expressions],
         "resource_tags": len(state.resource_tags),
         "resource_kinds": dict(sorted(resource_kinds.items())),
         "resource_tag_keys": resource_tag_keys,
@@ -821,6 +869,7 @@ def _state_profile(state: GuardrailState) -> dict:
 def _format_validation_summary(prefix: str, summary: dict) -> str:
     return (
         "{prefix}: {lf_tags} LF-Tag definition(s), "
+        "{lf_tag_expressions} LF-Tag expression(s), "
         "{resource_tags} resource tag assignment(s), {grants} grant(s)."
     ).format(prefix=prefix, **summary)
 
@@ -1053,6 +1102,9 @@ def _iam_policy_template(template: str, *, include_glue_read: bool = False) -> d
                 "ReadLakeFormationState",
                 (
                     "lakeformation:GetLFTag",
+                    "lakeformation:ListLFTags",
+                    "lakeformation:GetLFTagExpression",
+                    "lakeformation:ListLFTagExpressions",
                     "lakeformation:GetResourceLFTags",
                     "lakeformation:ListPermissions",
                 ),
@@ -1064,6 +1116,7 @@ def _iam_policy_template(template: str, *, include_glue_read: bool = False) -> d
                 "ApplyAdditiveLakeFormationChanges",
                 (
                     "lakeformation:CreateLFTag",
+                    "lakeformation:CreateLFTagExpression",
                     "lakeformation:UpdateLFTag",
                     "lakeformation:AddLFTagsToResource",
                     "lakeformation:GrantPermissions",
@@ -1076,6 +1129,8 @@ def _iam_policy_template(template: str, *, include_glue_read: bool = False) -> d
                 "ApplyDestructiveLakeFormationChanges",
                 (
                     "lakeformation:RemoveLFTagsFromResource",
+                    "lakeformation:UpdateLFTagExpression",
+                    "lakeformation:DeleteLFTagExpression",
                     "lakeformation:RevokePermissions",
                 ),
             )
@@ -1138,6 +1193,7 @@ _COMPLETION_COMMANDS = (
     "audit",
     "plan",
     "snapshot",
+    "import",
     "apply",
 )
 
@@ -1208,12 +1264,15 @@ _COMPLETION_OPTIONS = {
         "--output-file",
         "--github-summary",
         "--allow-lf-tag-value-removals",
+        "--allow-lf-tag-expression-updates",
+        "--allow-lf-tag-expression-deletes",
         "--allow-resource-tag-removals",
         "--allow-permission-revokes",
         "--fail-on-changes",
         "--help",
     ),
     "snapshot": ("--desired", "--profile", "--region", "--catalog-id", "--output-file", "--help"),
+    "import": ("--profile", "--region", "--catalog-id", "--include", "--output", "--format", "--force", "--help"),
     "apply": (
         "--desired",
         "--current-snapshot",
@@ -1225,6 +1284,8 @@ _COMPLETION_OPTIONS = {
         "--output-file",
         "--github-summary",
         "--allow-lf-tag-value-removals",
+        "--allow-lf-tag-expression-updates",
+        "--allow-lf-tag-expression-deletes",
         "--allow-resource-tag-removals",
         "--allow-permission-revokes",
         "--only",
@@ -1507,6 +1568,7 @@ def _render_state_profile_lines(profile: dict) -> list:
 def _state_profile_metrics(profile: dict) -> tuple:
     return (
         ("LF-Tag definitions", _count_with_list(profile["lf_tags"], profile["lf_tag_keys"])),
+        ("LF-Tag expressions", _count_with_list(profile["lf_tag_expressions"], profile["lf_tag_expression_names"])),
         ("Resource tag assignments", str(profile["resource_tags"])),
         ("Resource kinds", _format_counts(profile["resource_kinds"])),
         ("Resource tag keys", _format_list(profile["resource_tag_keys"])),

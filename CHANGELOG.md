@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Adds configurable lint severities through desired-state `lint` overrides.
+- Adds ownership boundaries and ignore rules for unmanaged current-state drift.
+- Adds named LF-Tag expression state, drift detection, planning, and AWS
+  adapter support.
+- Adds `lfguard import` for live AWS starter desired-state scaffolds.
+
 ## 0.2.2
 
 - Adds stable plan JSON metadata with `schema_version`, deterministic change IDs,

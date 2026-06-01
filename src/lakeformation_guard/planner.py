@@ -5,7 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, FrozenSet, Iterable, List, Mapping, Optional, Tuple
 
-from .models import CurrentState, DesiredState, Grant, LFTagDefinition, ResourceRef, ResourceTagAssignment
+from .models import (
+    CurrentState,
+    DesiredState,
+    Grant,
+    LFTagDefinition,
+    LFTagExpressionDefinition,
+    ResourceRef,
+    ResourceTagAssignment,
+)
 
 
 PLAN_SCHEMA_VERSION = "lfguard.plan.v1"
@@ -15,6 +23,9 @@ _ACTION_AWS_API = {
     "lf_tag.create": "create_lf_tag",
     "lf_tag.add_values": "update_lf_tag",
     "lf_tag.remove_values": "update_lf_tag",
+    "lf_tag_expression.create": "create_lf_tag_expression",
+    "lf_tag_expression.update": "update_lf_tag_expression",
+    "lf_tag_expression.delete": "delete_lf_tag_expression",
     "resource_tag.add_values": "add_lf_tags_to_resource",
     "resource_tag.remove_values": "remove_lf_tags_from_resource",
     "grant.add_permissions": "grant_permissions",
@@ -23,6 +34,8 @@ _ACTION_AWS_API = {
 
 _ACTION_REQUIRED_FLAG = {
     "lf_tag.remove_values": "--allow-lf-tag-value-removals",
+    "lf_tag_expression.update": "--allow-lf-tag-expression-updates",
+    "lf_tag_expression.delete": "--allow-lf-tag-expression-deletes",
     "resource_tag.remove_values": "--allow-resource-tag-removals",
     "grant.revoke_permissions": "--allow-permission-revokes",
 }
@@ -33,6 +46,8 @@ class PlanOptions:
     """Controls whether destructive drift remediation is included in a plan."""
 
     allow_lf_tag_value_removals: bool = False
+    allow_lf_tag_expression_updates: bool = False
+    allow_lf_tag_expression_deletes: bool = False
     allow_resource_tag_removals: bool = False
     allow_permission_revokes: bool = False
 
@@ -158,6 +173,7 @@ def plan(desired: DesiredState, current: CurrentState, options: PlanOptions = Pl
 
     changes: List[Change] = []
     changes.extend(_plan_lf_tags(desired, current, options))
+    changes.extend(_plan_lf_tag_expressions(desired, current, options))
     changes.extend(_plan_resource_tags(desired, current, options))
     changes.extend(_plan_grants(desired, current, options))
     return Plan(tuple(changes))
@@ -200,6 +216,49 @@ def _plan_lf_tags(desired: DesiredState, current: CurrentState, options: PlanOpt
                 destructive=True,
                 before={"tag_key": desired_tag.key, "tag_values": sorted(current_values)},
                 after={"tag_key": desired_tag.key, "tag_values": sorted(current_values - set(extra_values))},
+            )
+
+
+def _plan_lf_tag_expressions(desired: DesiredState, current: CurrentState, options: PlanOptions) -> Iterable[Change]:
+    current_expressions = _lf_tag_expression_index(current.lf_tag_expressions)
+    desired_expressions = _lf_tag_expression_index(desired.lf_tag_expressions)
+    for name, desired_expression in desired_expressions.items():
+        current_expression = current_expressions.get(name)
+        if current_expression is None:
+            yield Change(
+                action="lf_tag_expression.create",
+                target=desired_expression.identity,
+                reason="LF-Tag expression is missing",
+                payload=_lf_tag_expression_payload(desired_expression),
+                before=None,
+                after=desired_expression.to_dict(),
+            )
+            continue
+        if (
+            current_expression.expression != desired_expression.expression
+            or current_expression.description != desired_expression.description
+        ) and options.allow_lf_tag_expression_updates:
+            yield Change(
+                action="lf_tag_expression.update",
+                target=desired_expression.identity,
+                reason="LF-Tag expression body differs from desired state",
+                payload=_lf_tag_expression_payload(desired_expression),
+                destructive=True,
+                before=current_expression.to_dict(),
+                after=desired_expression.to_dict(),
+            )
+    if options.allow_lf_tag_expression_deletes:
+        for name, current_expression in current_expressions.items():
+            if name in desired_expressions:
+                continue
+            yield Change(
+                action="lf_tag_expression.delete",
+                target=current_expression.identity,
+                reason="LF-Tag expression is not present in desired state",
+                payload={"name": current_expression.name, "catalog_id": current_expression.catalog_id},
+                destructive=True,
+                before=current_expression.to_dict(),
+                after=None,
             )
 
 
@@ -326,6 +385,10 @@ def _lf_tag_index(tags: Iterable[LFTagDefinition]) -> Dict[str, LFTagDefinition]
     return {key: LFTagDefinition(key, tuple(values)) for key, values in merged.items()}
 
 
+def _lf_tag_expression_index(expressions: Iterable[LFTagExpressionDefinition]) -> Dict[str, LFTagExpressionDefinition]:
+    return {expression.name: expression for expression in expressions}
+
+
 def _resource_tag_index(assignments: Iterable[ResourceTagAssignment]) -> Dict[ResourceRef, Dict[str, FrozenSet[str]]]:
     merged: Dict[ResourceRef, Dict[str, set]] = {}
     for assignment in assignments:
@@ -357,6 +420,18 @@ def _grant_index(grants: Iterable[Grant]) -> Dict[Tuple[str, ResourceRef], Grant
 
 def _grant_target(grant: Grant) -> str:
     return "{} -> {}".format(grant.principal, grant.resource.identity)
+
+
+def _lf_tag_expression_payload(expression: LFTagExpressionDefinition) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "name": expression.name,
+        "expression": [item.to_dict() for item in expression.expression],
+    }
+    if expression.description is not None:
+        payload["description"] = expression.description
+    if expression.catalog_id:
+        payload["catalog_id"] = expression.catalog_id
+    return payload
 
 
 def _change_id(index: int) -> str:

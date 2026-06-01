@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Tuple
 
+from .config import lint_severity
 from .models import DesiredState, Grant, ResourceTagAssignment
 
 
@@ -34,18 +35,27 @@ class LintFinding:
             "details": dict(self.details),
         }
 
+    def with_severity(self, severity: str) -> "LintFinding":
+        return LintFinding(
+            code=self.code,
+            severity=severity,
+            target=self.target,
+            message=self.message,
+            details=self.details,
+        )
+
 
 def lint_desired(desired: DesiredState) -> Tuple[LintFinding, ...]:
     """Return semantic desired-policy findings without making AWS calls."""
 
     findings: List[LintFinding] = []
-    if not desired.lf_tags and not desired.resource_tags and not desired.grants:
+    if not desired.lf_tags and not desired.lf_tag_expressions and not desired.resource_tags and not desired.grants:
         findings.append(
             LintFinding(
                 code="DESIRED_STATE_EMPTY",
                 severity="warning",
                 target="desired_state",
-                message="Desired state does not define any LF-Tags, resource tag assignments, or grants",
+                message="Desired state does not define any LF-Tags, LF-Tag expressions, resource tag assignments, or grants",
                 details={},
             )
         )
@@ -56,6 +66,8 @@ def lint_desired(desired: DesiredState) -> Tuple[LintFinding, ...]:
         for metadata in desired.lf_tag_key_metadata
     }
     findings.extend(_lint_lf_tag_definitions(tag_values))
+    for expression in desired.lf_tag_expressions:
+        findings.extend(_lint_lf_tag_expression_definition(expression, tag_values))
     for assignment in desired.resource_tags:
         findings.extend(
             _lint_resource_tag_assignment(
@@ -65,9 +77,9 @@ def lint_desired(desired: DesiredState) -> Tuple[LintFinding, ...]:
             )
         )
     for grant in desired.grants:
-        findings.extend(_lint_grant(grant, tag_values, tag_assignment_scopes))
+        findings.extend(_lint_grant(grant, tag_values, tag_assignment_scopes, desired))
     findings.extend(_lint_combined_grant_conflicts(desired.grants, tag_assignment_scopes))
-    return tuple(findings)
+    return tuple(_apply_lint_config(findings, desired))
 
 
 def _lint_lf_tag_definitions(tag_values: Mapping[str, set]) -> List[LintFinding]:
@@ -212,6 +224,37 @@ def _lint_resource_tag_assignment(
     return findings
 
 
+def _lint_lf_tag_expression_definition(
+    expression_definition: Any,
+    tag_values: Mapping[str, set],
+) -> List[LintFinding]:
+    findings: List[LintFinding] = []
+    if len(expression_definition.expression) > 50:
+        findings.append(
+            LintFinding(
+                code="LF_TAG_EXPRESSION_TOO_LARGE",
+                severity="error",
+                target=expression_definition.identity,
+                message="AWS Lake Formation supports at most 50 LF-Tag keys in a named expression",
+                details={
+                    "name": expression_definition.name,
+                    "expression_key_count": len(expression_definition.expression),
+                },
+            )
+        )
+    for expression_item in expression_definition.expression:
+        findings.extend(
+            _lint_expression_item(
+                expression_item,
+                tag_values,
+                target=expression_definition.identity,
+                details={"name": expression_definition.name},
+                code_prefix="LF_TAG_EXPRESSION",
+            )
+        )
+    return findings
+
+
 def _resource_tag_assignment_scope(resource_kind: str) -> Any:
     if resource_kind == "database":
         return "database"
@@ -226,9 +269,27 @@ def _lint_grant(
     grant: Grant,
     tag_values: Mapping[str, set],
     tag_assignment_scopes: Mapping[str, set],
+    desired: DesiredState,
 ) -> List[LintFinding]:
     findings = _lint_grant_governance(grant, tag_assignment_scopes)
     if grant.resource.kind != "lf_tag_policy":
+        return findings
+    if grant.resource.expression_name:
+        expression_names = {expression.name for expression in desired.lf_tag_expressions}
+        if grant.resource.expression_name not in expression_names:
+            findings.append(
+                LintFinding(
+                    code="LF_TAG_POLICY_EXPRESSION_NAME_UNDEFINED",
+                    severity="error",
+                    target=_grant_target(grant),
+                    message="LF-Tag policy references a named LF-Tag expression that is not defined",
+                    details={
+                        "principal": grant.principal,
+                        "resource": grant.resource.to_dict(),
+                        "expression_name": grant.resource.expression_name,
+                    },
+                )
+            )
         return findings
 
     if len(grant.resource.expression) > 50:
@@ -246,85 +307,94 @@ def _lint_grant(
             )
         )
     for expression_item in grant.resource.expression:
-        if len(expression_item.values) > 1000:
-            findings.append(
-                LintFinding(
-                    code="LF_TAG_POLICY_VALUE_LIMIT_EXCEEDED",
-                    severity="error",
-                    target=_grant_target(grant),
-                    message="AWS Lake Formation supports at most 1000 values per LF-Tag key in an expression",
-                    details={
-                        "principal": grant.principal,
-                        "resource": grant.resource.to_dict(),
-                        "tag_key": expression_item.key,
-                        "value_count": len(expression_item.values),
-                    },
-                )
+        findings.extend(
+            _lint_expression_item(
+                expression_item,
+                tag_values,
+                target=_grant_target(grant),
+                details={"principal": grant.principal, "resource": grant.resource.to_dict()},
+                code_prefix="LF_TAG_POLICY",
             )
-        case_sensitive_values = sorted(_case_sensitive_values((expression_item.key, *expression_item.values)))
-        if case_sensitive_values:
-            findings.append(
-                LintFinding(
-                    code="LF_TAG_CASE_NORMALIZATION",
-                    severity="error",
-                    target=_grant_target(grant),
-                    message="AWS Lake Formation stores LF-Tag keys and values in lower case",
-                    details={
-                        "principal": grant.principal,
-                        "resource": grant.resource.to_dict(),
-                        "values": case_sensitive_values,
-                    },
-                )
-            )
-        wildcard_values = sorted(value for value in expression_item.values if value == "*")
-        if wildcard_values:
-            findings.append(
-                LintFinding(
-                    code="LF_TAG_POLICY_WILDCARD_VALUE",
-                    severity="warning",
-                    target=_grant_target(grant),
-                    message="LF-Tag policy uses * and grants access to all values for a key",
-                    details={
-                        "principal": grant.principal,
-                        "resource": grant.resource.to_dict(),
-                        "tag_key": expression_item.key,
-                    },
-                )
-            )
-        if expression_item.key not in tag_values:
-            findings.append(
-                LintFinding(
-                    code="LF_TAG_POLICY_KEY_UNDEFINED",
-                    severity="error",
-                    target=_grant_target(grant),
-                    message="LF-Tag policy expression references an LF-Tag key that is not defined",
-                    details={
-                        "principal": grant.principal,
-                        "resource": grant.resource.to_dict(),
-                        "tag_key": expression_item.key,
-                        "tag_values": list(expression_item.values),
-                    },
-                )
-            )
-            continue
-        undefined_values = sorted(
-            value for value in set(expression_item.values) - tag_values[expression_item.key] if value != "*"
         )
-        if undefined_values:
-            findings.append(
-                LintFinding(
-                    code="LF_TAG_POLICY_VALUE_UNDEFINED",
-                    severity="error",
-                    target=_grant_target(grant),
-                    message="LF-Tag policy expression uses LF-Tag values that are not defined",
-                    details={
-                        "principal": grant.principal,
-                        "resource": grant.resource.to_dict(),
-                        "tag_key": expression_item.key,
-                        "undefined_values": undefined_values,
-                    },
-                )
+    return findings
+
+
+def _lint_expression_item(
+    expression_item: Any,
+    tag_values: Mapping[str, set],
+    *,
+    target: str,
+    details: Mapping[str, Any],
+    code_prefix: str,
+) -> List[LintFinding]:
+    findings: List[LintFinding] = []
+    common_details = dict(details)
+    if len(expression_item.values) > 1000:
+        finding_details = dict(common_details)
+        finding_details.update({"tag_key": expression_item.key, "value_count": len(expression_item.values)})
+        findings.append(
+            LintFinding(
+                code="{}_VALUE_LIMIT_EXCEEDED".format(code_prefix),
+                severity="error",
+                target=target,
+                message="AWS Lake Formation supports at most 1000 values per LF-Tag key in an expression",
+                details=finding_details,
             )
+        )
+    case_sensitive_values = sorted(_case_sensitive_values((expression_item.key, *expression_item.values)))
+    if case_sensitive_values:
+        finding_details = dict(common_details)
+        finding_details["values"] = case_sensitive_values
+        findings.append(
+            LintFinding(
+                code="LF_TAG_CASE_NORMALIZATION",
+                severity="error",
+                target=target,
+                message="AWS Lake Formation stores LF-Tag keys and values in lower case",
+                details=finding_details,
+            )
+        )
+    wildcard_values = sorted(value for value in expression_item.values if value == "*")
+    if wildcard_values:
+        finding_details = dict(common_details)
+        finding_details["tag_key"] = expression_item.key
+        findings.append(
+            LintFinding(
+                code="{}_WILDCARD_VALUE".format(code_prefix),
+                severity="warning",
+                target=target,
+                message="LF-Tag expression uses * and grants access to all values for a key",
+                details=finding_details,
+            )
+        )
+    if expression_item.key not in tag_values:
+        finding_details = dict(common_details)
+        finding_details.update({"tag_key": expression_item.key, "tag_values": list(expression_item.values)})
+        findings.append(
+            LintFinding(
+                code="{}_KEY_UNDEFINED".format(code_prefix),
+                severity="error",
+                target=target,
+                message="LF-Tag expression references an LF-Tag key that is not defined",
+                details=finding_details,
+            )
+        )
+        return findings
+    undefined_values = sorted(
+        value for value in set(expression_item.values) - tag_values[expression_item.key] if value != "*"
+    )
+    if undefined_values:
+        finding_details = dict(common_details)
+        finding_details.update({"tag_key": expression_item.key, "undefined_values": undefined_values})
+        findings.append(
+            LintFinding(
+                code="{}_VALUE_UNDEFINED".format(code_prefix),
+                severity="error",
+                target=target,
+                message="LF-Tag expression uses LF-Tag values that are not defined",
+                details=finding_details,
+            )
+        )
     return findings
 
 
@@ -564,3 +634,13 @@ def _normalize_principal(principal: str) -> str:
 
 def _grant_target(grant: Grant) -> str:
     return "{} -> {}".format(grant.principal, grant.resource.identity)
+
+
+def _apply_lint_config(findings: List[LintFinding], desired: DesiredState) -> List[LintFinding]:
+    configured: List[LintFinding] = []
+    for finding in findings:
+        severity = lint_severity(desired.config, finding.code, finding.severity)
+        if severity is None:
+            continue
+        configured.append(finding.with_severity(severity))
+    return configured

@@ -34,7 +34,10 @@ Use this for `lfguard snapshot`, or for `lfguard audit` and `lfguard plan` when
       "Effect": "Allow",
       "Action": [
         "lakeformation:GetLFTag",
+        "lakeformation:GetLFTagExpression",
         "lakeformation:GetResourceLFTags",
+        "lakeformation:ListLFTags",
+        "lakeformation:ListLFTagExpressions",
         "lakeformation:ListPermissions"
       ],
       "Resource": "*"
@@ -62,7 +65,8 @@ catalog discovery handled outside `lfguard`, such as:
 ## Additive Apply Role
 
 Use this for reviewed apply workflows that only create LF-Tags, add LF-Tag
-values, add resource tags, or grant permissions.
+values, create named LF-Tag expressions, add resource tags, or grant
+permissions.
 
 The `lfguard permissions` apply templates include the read-only inventory
 statement too, so live `plan` and `apply` can load current state when
@@ -77,6 +81,7 @@ that separate additive and destructive workflows.
       "Effect": "Allow",
       "Action": [
         "lakeformation:CreateLFTag",
+        "lakeformation:CreateLFTagExpression",
         "lakeformation:UpdateLFTag",
         "lakeformation:AddLFTagsToResource",
         "lakeformation:GrantPermissions"
@@ -89,8 +94,9 @@ that separate additive and destructive workflows.
 
 ## Destructive Apply Role
 
-Use this only for separately reviewed workflows that intentionally remove LF-Tag
-assignments or revoke Lake Formation permissions.
+Use this only for separately reviewed workflows that intentionally update or
+delete named LF-Tag expressions, remove LF-Tag assignments, or revoke Lake
+Formation permissions.
 
 ```json
 {
@@ -99,7 +105,9 @@ assignments or revoke Lake Formation permissions.
     {
       "Effect": "Allow",
       "Action": [
+        "lakeformation:DeleteLFTagExpression",
         "lakeformation:RemoveLFTagsFromResource",
+        "lakeformation:UpdateLFTagExpression",
         "lakeformation:RevokePermissions"
       ],
       "Resource": "*"

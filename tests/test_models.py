@@ -53,6 +53,66 @@ class ModelTests(unittest.TestCase):
             "lf_tag_policy:resource_type=TABLE:expression=domain=sales,sensitivity=internal|public",
         )
 
+    def test_lf_tag_policy_can_reference_named_expression(self):
+        resource = ResourceRef.from_dict(
+            {
+                "kind": "lf_tag_policy",
+                "resource_type": "TABLE",
+                "expression_name": "sales_public",
+            }
+        )
+
+        self.assertEqual(
+            resource.identity,
+            "lf_tag_policy:resource_type=TABLE:expression_name=sales_public",
+        )
+        self.assertEqual(
+            resource.to_dict(),
+            {
+                "kind": "lf_tag_policy",
+                "resource_type": "TABLE",
+                "expression_name": "sales_public",
+            },
+        )
+
+    def test_resource_name_aliases_stay_kind_specific(self):
+        database = ResourceRef.from_dict({"kind": "database", "name": "analytics"})
+        expression = ResourceRef.from_dict({"kind": "lf_tag_expression", "name": "sales_public"})
+
+        self.assertEqual(database.identity, "database:database=analytics")
+        self.assertEqual(expression.identity, "lf_tag_expression:expression_name=sales_public")
+        self.assertEqual(expression.to_dict(), {"kind": "lf_tag_expression", "expression_name": "sales_public"})
+
+    def test_state_parses_config_and_named_lf_tag_expressions(self):
+        state = DesiredState.from_dict(
+            {
+                "lf_tags": {"domain": ["sales"]},
+                "lf_tag_expressions": {
+                    "sales_tables": {
+                        "description": "Sales tables",
+                        "expression": {"domain": ["sales"]},
+                    }
+                },
+                "lint": {"named_resource_grant_review": "ignore"},
+                "ownership": {
+                    "managed_principals": ["arn:aws:iam::*:role/data-*"],
+                    "unmanaged_action": "ignore",
+                },
+                "ignore": {
+                    "principals": ["IAM_ALLOWED_PRINCIPALS"],
+                    "resources": [{"database": "legacy_*"}],
+                },
+            }
+        )
+
+        self.assertEqual(state.lf_tag_expressions[0].name, "sales_tables")
+        self.assertEqual(state.lf_tag_expressions[0].description, "Sales tables")
+        self.assertEqual(state.config.lint["NAMED_RESOURCE_GRANT_REVIEW"], "ignore")
+        self.assertEqual(state.config.ownership.unmanaged_action, "ignore")
+        self.assertEqual(state.config.ignore.resources[0].database_name, "legacy_*")
+        self.assertIn("lf_tag_expressions", state.to_dict())
+        self.assertIn("lint", state.to_dict())
+
     def test_state_parses_optional_lf_tag_key_metadata(self):
         state = DesiredState.from_dict(
             {

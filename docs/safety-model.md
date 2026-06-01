@@ -11,6 +11,7 @@ only:
 
 - create missing LF-Tag definitions;
 - add missing LF-Tag values;
+- create missing named LF-Tag expressions;
 - add missing LF-Tag assignments to resources;
 - add missing Lake Formation permissions.
 
@@ -23,6 +24,10 @@ depend on.
 Destructive changes are included only when the matching flag is supplied:
 
 - `--allow-lf-tag-value-removals`: plan or apply LF-Tag value removals.
+- `--allow-lf-tag-expression-updates`: plan or apply named LF-Tag expression
+  body or description updates.
+- `--allow-lf-tag-expression-deletes`: plan or apply named LF-Tag expression
+  deletes.
 - `--allow-resource-tag-removals`: plan or apply LF-Tag assignment removals.
 - `--allow-permission-revokes`: plan or apply Lake Formation permission revokes.
 

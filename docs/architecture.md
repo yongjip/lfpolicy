@@ -7,8 +7,11 @@ pure audit and planning functions, and an optional boto3 adapter.
 ## Module Boundaries
 
 - `lakeformation_guard.models` defines desired and current state objects,
-  resource references, LF-Tag definitions, tag assignments, and grants. These
-  classes normalize input and expose JSON-compatible dictionaries.
+  resource references, LF-Tag definitions, named LF-Tag expressions, tag
+  assignments, grants, and optional guardrail config. These classes normalize
+  input and expose JSON-compatible dictionaries.
+- `lakeformation_guard.config` contains the matching helpers for lint severity
+  overrides, ownership boundaries, and ignore rules.
 - `lakeformation_guard.audit` compares desired and current state and returns
   findings. It does not create a change plan and does not call AWS.
 - `lakeformation_guard.lint` checks desired-state semantic consistency, such as
@@ -52,12 +55,16 @@ The safety model is enforced in several places:
 - `lint_desired()` is read-only and only inspects local desired state.
 - `audit()` is read-only and reports drift without planning remediation.
 - `plan()` is additive by default. It plans missing LF-Tags, missing tag values,
-  missing resource tag assignments, and missing permissions.
-- Permission revokes, resource tag removals, and LF-Tag value removals require
-  explicit planner options and CLI flags.
+  missing named LF-Tag expressions, missing resource tag assignments, and
+  missing permissions.
+- Permission revokes, named LF-Tag expression updates/deletes, resource tag
+  removals, and LF-Tag value removals require explicit planner options and CLI
+  flags.
 - `Plan.executable_changes()` excludes destructive changes unless explicitly
   allowed.
 - `lfguard apply` is a dry run unless `--execute` is provided.
+- Saved-plan apply can be limited by change ID, action type, and safety budgets
+  before any AWS call is made.
 - The boto3 adapter applies only actions represented by planner `Change`
   objects.
 
@@ -72,9 +79,11 @@ state. Users who only run offline lint, audit, plan, sample, schema, or
 validation workflows do not need the `aws` extra.
 
 The adapter scopes live inventory from desired state. It reads only the LF-Tags,
-resources, and grants needed for the requested comparison, then returns a normal
-`CurrentState` object to the same audit and planner code used by offline
-workflows.
+named LF-Tag expressions, resources, and grants needed for the requested
+comparison, then returns a normal `CurrentState` object to the same audit and
+planner code used by offline workflows. The separate import path can scaffold a
+starter desired-state file from live LF-Tags, named LF-Tag expressions, grants,
+and resource tags discovered through imported grants.
 
 ## Public API
 

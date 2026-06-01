@@ -7,9 +7,13 @@ now.
 ```json
 {
   "lf_tags": {},
+  "lf_tag_expressions": {},
   "lf_tag_key_metadata": {},
   "resource_tags": [],
-  "grants": []
+  "grants": [],
+  "lint": {},
+  "ownership": {},
+  "ignore": {}
 }
 ```
 
@@ -36,6 +40,41 @@ The equivalent list form is also accepted:
   "lf_tags": [
     {"key": "domain", "values": ["sales", "finance"]},
     {"key": "sensitivity", "values": ["public", "internal", "restricted"]}
+  ]
+}
+```
+
+## Named LF-Tag Expressions
+
+Use `lf_tag_expressions` to manage AWS Lake Formation named LF-Tag expressions.
+The name is later referenced from LF-Tag policy grants with `expression_name`.
+
+```json
+{
+  "lf_tag_expressions": {
+    "sales_internal": {
+      "description": "Sales tables with public or internal sensitivity",
+      "expression": {
+        "domain": ["sales"],
+        "sensitivity": ["public", "internal"]
+      }
+    }
+  }
+}
+```
+
+The equivalent list form is also accepted:
+
+```json
+{
+  "lf_tag_expressions": [
+    {
+      "name": "sales_internal",
+      "expression": [
+        {"key": "domain", "values": ["sales"]},
+        {"key": "sensitivity", "values": ["public", "internal"]}
+      ]
+    }
   ]
 }
 ```
@@ -161,7 +200,8 @@ With an explicit catalog:
 
 LF-Tag policy resources are used for grants. `resource_type` must be `DATABASE`
 or `TABLE`. Multiple values for one key are OR, multiple keys are AND, and `*`
-means all values for a key in an LF-Tag policy grant.
+means all values for a key in an LF-Tag policy grant. Use either inline
+`expression` or a named `expression_name`, but not both.
 See [`tag-permission-matrix.md`](tag-permission-matrix.md) for inheritance and
 permission examples.
 
@@ -176,6 +216,16 @@ permission examples.
 }
 ```
 
+Named-expression form:
+
+```json
+{
+  "kind": "lf_tag_policy",
+  "resource_type": "TABLE",
+  "expression_name": "sales_internal"
+}
+```
+
 Expression list form is also accepted:
 
 ```json
@@ -186,6 +236,19 @@ Expression list form is also accepted:
     {"key": "domain", "values": ["sales"]},
     {"key": "sensitivity", "values": ["public", "internal"]}
   ]
+}
+```
+
+### LF-Tag Expression
+
+LF-Tag expression resources are used when granting permissions on a named
+LF-Tag expression itself, for example stewardship permissions that let another
+principal delegate access through that expression.
+
+```json
+{
+  "kind": "lf_tag_expression",
+  "expression_name": "sales_internal"
 }
 ```
 
@@ -240,6 +303,60 @@ Use LF-Tag policy grants for attribute-based access:
   "permissions": ["SELECT", "DESCRIBE"]
 }
 ```
+
+Use named LF-Tag expressions when the same expression is shared by multiple
+grants:
+
+```json
+{
+  "principal": "arn:aws:iam::111122223333:role/Analyst",
+  "resource": {
+    "kind": "lf_tag_policy",
+    "resource_type": "TABLE",
+    "expression_name": "sales_internal"
+  },
+  "permissions": ["SELECT", "DESCRIBE"]
+}
+```
+
+## Lint, Ownership, and Ignore Config
+
+Strict lint severities remain the default. Override a rule only when an existing
+environment needs gradual cleanup:
+
+```json
+{
+  "lint": {
+    "lf_tag_case_normalization": "warning",
+    "broad_permission_grant": "error",
+    "named_resource_grant_review": "ignore"
+  }
+}
+```
+
+Use ownership boundaries and ignore rules to keep unmanaged current-state drift
+visible only where `lfguard` is intended to manage it:
+
+```json
+{
+  "ownership": {
+    "managed_principals": ["arn:aws:iam::*:role/data-*"],
+    "managed_resources": [{"kind": "database", "database": "analytics_*"}],
+    "unmanaged_action": "warn"
+  },
+  "ignore": {
+    "principals": ["IAM_ALLOWED_PRINCIPALS"],
+    "resources": [{"database": "legacy_*"}]
+  }
+}
+```
+
+`unmanaged_action` accepts `warn`, `error`, or `ignore`. Principal and resource
+patterns use shell-style wildcards. A resource pattern can constrain only the
+fields it names, so `{"database": "legacy_*"}` matches database-scoped resources
+with that database name even when the resource kind is `table` or
+`table_with_columns`. Use `{"kind": "database", "database": "legacy_*"}` when
+the kind itself should also be constrained.
 
 ## Normalization
 

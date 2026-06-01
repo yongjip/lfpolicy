@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Tuple
 
+from .config import unmanaged_severity
 from .models import CurrentState, DesiredState, Grant, ResourceRef
-from .planner import _grant_index, _grant_target, _lf_tag_index, _resource_tag_index
+from .planner import _grant_index, _grant_target, _lf_tag_expression_index, _lf_tag_index, _resource_tag_index
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,7 @@ def audit(desired: DesiredState, current: CurrentState) -> Tuple[AuditFinding, .
 
     findings: List[AuditFinding] = []
     findings.extend(_audit_lf_tags(desired, current))
+    findings.extend(_audit_lf_tag_expressions(desired, current))
     findings.extend(_audit_resource_tags(desired, current))
     findings.extend(_audit_grants(desired, current))
     return tuple(findings)
@@ -69,13 +71,71 @@ def _audit_lf_tags(desired: DesiredState, current: CurrentState) -> List[AuditFi
             )
         extra = sorted(set(current_tag.values) - set(desired_tag.values))
         if extra:
+            severity = unmanaged_severity(desired.config, None, ResourceRef(kind="catalog"))
+            if severity:
+                findings.append(
+                    AuditFinding(
+                        code="LF_TAG_VALUES_UNMANAGED",
+                        severity=severity,
+                        target="lf_tag:{}".format(key),
+                        message="Current LF-Tag has values not present in desired state",
+                        details={"tag_key": key, "unmanaged_values": extra},
+                    )
+                )
+    return findings
+
+
+def _audit_lf_tag_expressions(desired: DesiredState, current: CurrentState) -> List[AuditFinding]:
+    findings: List[AuditFinding] = []
+    desired_expressions = _lf_tag_expression_index(desired.lf_tag_expressions)
+    current_expressions = _lf_tag_expression_index(current.lf_tag_expressions)
+    for name, desired_expression in sorted(desired_expressions.items()):
+        current_expression = current_expressions.get(name)
+        if current_expression is None:
             findings.append(
                 AuditFinding(
-                    code="LF_TAG_VALUES_UNMANAGED",
-                    severity="warning",
-                    target="lf_tag:{}".format(key),
-                    message="Current LF-Tag has values not present in desired state",
-                    details={"tag_key": key, "unmanaged_values": extra},
+                    code="LF_TAG_EXPRESSION_MISSING",
+                    severity="error",
+                    target=desired_expression.identity,
+                    message="Desired LF-Tag expression is missing",
+                    details={"name": name, "desired_expression": desired_expression.to_dict()},
+                )
+            )
+            continue
+        if (
+            current_expression.expression != desired_expression.expression
+            or current_expression.description != desired_expression.description
+        ):
+            findings.append(
+                AuditFinding(
+                    code="LF_TAG_EXPRESSION_BODY_DRIFT",
+                    severity="error",
+                    target=desired_expression.identity,
+                    message="Current LF-Tag expression body differs from desired state",
+                    details={
+                        "name": name,
+                        "desired": desired_expression.to_dict(),
+                        "current": current_expression.to_dict(),
+                    },
+                )
+            )
+    for name, current_expression in sorted(current_expressions.items()):
+        if name in desired_expressions:
+            continue
+        resource = ResourceRef(
+            kind="lf_tag_expression",
+            expression_name=current_expression.name,
+            catalog_id=current_expression.catalog_id,
+        )
+        severity = unmanaged_severity(desired.config, None, resource)
+        if severity:
+            findings.append(
+                AuditFinding(
+                    code="LF_TAG_EXPRESSION_UNMANAGED",
+                    severity=severity,
+                    target=current_expression.identity,
+                    message="Current LF-Tag expression is not present in desired state",
+                    details={"name": name, "current": current_expression.to_dict()},
                 )
             )
     return findings
@@ -103,26 +163,30 @@ def _audit_resource_tags(desired: DesiredState, current: CurrentState) -> List[A
                 )
             extra = sorted(current_values - desired_values)
             if extra:
-                findings.append(
-                    AuditFinding(
-                        code="RESOURCE_TAG_VALUES_UNMANAGED",
-                        severity="warning",
-                        target=resource.identity,
-                        message="Resource has LF-Tag values not present in desired state",
-                        details={"resource": resource.to_dict(), "tag_key": key, "unmanaged_values": extra},
+                severity = unmanaged_severity(desired.config, None, resource)
+                if severity:
+                    findings.append(
+                        AuditFinding(
+                            code="RESOURCE_TAG_VALUES_UNMANAGED",
+                            severity=severity,
+                            target=resource.identity,
+                            message="Resource has LF-Tag values not present in desired state",
+                            details={"resource": resource.to_dict(), "tag_key": key, "unmanaged_values": extra},
+                        )
                     )
-                )
         unmanaged_keys = sorted(set(current_tags) - set(desired_tags))
         for key in unmanaged_keys:
-            findings.append(
-                AuditFinding(
-                    code="RESOURCE_TAG_KEY_UNMANAGED",
-                    severity="warning",
-                    target=resource.identity,
-                    message="Resource has LF-Tag key not present in desired state",
-                    details={"resource": resource.to_dict(), "tag_key": key, "unmanaged_values": sorted(current_tags[key])},
+            severity = unmanaged_severity(desired.config, None, resource)
+            if severity:
+                findings.append(
+                    AuditFinding(
+                        code="RESOURCE_TAG_KEY_UNMANAGED",
+                        severity=severity,
+                        target=resource.identity,
+                        message="Resource has LF-Tag key not present in desired state",
+                        details={"resource": resource.to_dict(), "tag_key": key, "unmanaged_values": sorted(current_tags[key])},
+                    )
                 )
-            )
     return findings
 
 
@@ -149,17 +213,21 @@ def _audit_grants(desired: DesiredState, current: CurrentState) -> List[AuditFin
         extra_permissions = sorted(set(current_grant.permissions) - set(desired_grant.permissions))
         extra_grantables = sorted(set(current_grant.grantable_permissions) - set(desired_grant.grantable_permissions))
         if extra_permissions or extra_grantables:
-            findings.append(_grant_finding("GRANT_PERMISSIONS_UNMANAGED", "warning", current_grant, "Principal has permissions not present in desired state", {
-                "unmanaged_permissions": extra_permissions,
-                "unmanaged_grantable_permissions": extra_grantables,
-            }))
+            severity = unmanaged_severity(desired.config, current_grant.principal, current_grant.resource)
+            if severity:
+                findings.append(_grant_finding("GRANT_PERMISSIONS_UNMANAGED", severity, current_grant, "Principal has permissions not present in desired state", {
+                    "unmanaged_permissions": extra_permissions,
+                    "unmanaged_grantable_permissions": extra_grantables,
+                }))
 
     for identity, current_grant in sorted(current_grants.items(), key=lambda item: _grant_sort_key(item[0])):
         if identity not in desired_grants:
-            findings.append(_grant_finding("GRANT_UNMANAGED", "warning", current_grant, "Principal grant is not present in desired state", {
-                "permissions": list(current_grant.permissions),
-                "grantable_permissions": list(current_grant.grantable_permissions),
-            }))
+            severity = unmanaged_severity(desired.config, current_grant.principal, current_grant.resource)
+            if severity:
+                findings.append(_grant_finding("GRANT_UNMANAGED", severity, current_grant, "Principal grant is not present in desired state", {
+                    "permissions": list(current_grant.permissions),
+                    "grantable_permissions": list(current_grant.grantable_permissions),
+                }))
     return findings
 
 

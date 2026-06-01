@@ -21,6 +21,19 @@ lfguard plan \
 
 This proves the CLI works without AWS credentials.
 
+When adopting an existing account, use `import` to create a reviewed starter
+file instead of treating live state as automatically owned:
+
+```bash
+lfguard import \
+  --catalog-id 123456789012 \
+  --include lf-tags,lf-tag-expressions,resource-tags,grants \
+  --output policy/imported-desired.json
+```
+
+Review the output, add `ownership` and `ignore` rules for unmanaged legacy
+surface area, then move the curated result into `policy/desired.json`.
+
 Before mapping real access policy, read
 [`lake-formation-guide.md`](lake-formation-guide.md) and confirm the team
 understands the Lake Formation/IAM split, LF-Tag inheritance, `IAMAllowedPrincipals`,

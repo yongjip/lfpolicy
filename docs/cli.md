@@ -15,7 +15,7 @@ Start with the core workflow:
 
 Everything else is supporting workflow. Use `sample`, `init`, `generate`,
 `bootstrap`, `schema`, `doctor`, `permissions`, `completion`, `validate`,
-`lint`, `summary`, and `snapshot` when they remove real setup or review
+`lint`, `summary`, `snapshot`, and `import` when they remove real setup or review
 friction. They are not the reason to adopt the package.
 
 ## Command Overview
@@ -38,6 +38,7 @@ friction. They are not the reason to adopt the package.
 | `lint` | Check desired policy semantics, such as undefined LF-Tag references. | No |
 | `summary` | Summarize desired and optional current state for review. | No |
 | `snapshot` | Export live AWS state for a desired policy scope. | Yes |
+| `import` | Import live AWS state into a starter desired-state file for review. | Yes |
 
 ## Common Options
 
@@ -55,7 +56,8 @@ State-aware commands use these options:
 - `--output-file PATH`: write the command report to a file instead of stdout
   where supported. `doctor`, `permissions`, `completion`, `check`, `validate`,
   `lint`, `summary`, `audit`, `plan`, and `apply` support this for reports;
-  `init`, `schema`, and `snapshot` use it for generated files.
+  `init`, `schema`, and `snapshot` use it for generated files. `import` uses
+  `--output` for the generated desired-state path and `--format` for JSON/YAML.
 - `--github-summary`: append a Markdown report to `$GITHUB_STEP_SUMMARY` where
   supported.
 
@@ -461,6 +463,8 @@ lfguard plan --desired desired.json --output json --output-file plan.json
 Destructive planning flags:
 
 - `--allow-lf-tag-value-removals`
+- `--allow-lf-tag-expression-updates`
+- `--allow-lf-tag-expression-deletes`
 - `--allow-resource-tag-removals`
 - `--allow-permission-revokes`
 
@@ -479,6 +483,34 @@ lfguard snapshot \
 
 `snapshot` uses the desired policy as the scope so it does not attempt to
 inventory an entire account.
+
+## `import`
+
+Import live AWS state into a starter desired-state file:
+
+```bash
+lfguard import \
+  --catalog-id 123456789012 \
+  --include lf-tags,lf-tag-expressions,resource-tags,grants \
+  --output policy/imported-desired.json
+```
+
+`import` is for adoption scaffolding, not automatic synchronization. Review the
+generated file, remove unmanaged legacy access that should stay outside
+`lfguard`, then commit the desired state you intend to own.
+
+Useful options:
+
+- `--include`: comma-separated sections to import. Supported values are
+  `lf-tags`, `lf-tag-expressions`, `resource-tags`, and `grants`.
+- `--output PATH`: write the starter desired-state file. This is required.
+- `--format json|yaml`: force the output format. When omitted, `.yaml` and
+  `.yml` paths produce YAML; other paths produce JSON.
+- `--force`: overwrite an existing output file.
+
+Resource-tag import is intentionally bounded. `lfguard` reads LF-Tag
+assignments for resources discovered through imported grants; it does not crawl
+the whole Glue Data Catalog.
 
 ## `apply`
 

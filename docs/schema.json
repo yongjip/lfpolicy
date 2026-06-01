@@ -110,6 +110,26 @@
       ],
       "type": "object"
     },
+    "ignoreConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "principals": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "resources": {
+          "items": {
+            "$ref": "#/$defs/resourcePattern"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "lfTagDefinition": {
       "additionalProperties": false,
       "properties": {
@@ -138,6 +158,101 @@
       "required": [
         "key",
         "values"
+      ],
+      "type": "object"
+    },
+    "lfTagExpression": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "expression": {
+          "$ref": "#/$defs/lfTagExpressionBody"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "expression"
+      ],
+      "type": "object"
+    },
+    "lfTagExpressionBody": {
+      "oneOf": [
+        {
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              }
+            ]
+          },
+          "type": "object"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/lfTagDefinition"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      ]
+    },
+    "lfTagExpressionResource": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "expression_name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "const": "lf_tag_expression"
+        }
+      },
+      "required": [
+        "kind",
+        "expression_name"
+      ],
+      "type": "object"
+    },
+    "lfTagExpressionValue": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "expression": {
+          "$ref": "#/$defs/lfTagExpressionBody"
+        }
+      },
+      "required": [
+        "expression"
       ],
       "type": "object"
     },
@@ -172,37 +287,29 @@
     },
     "lfTagPolicyResource": {
       "additionalProperties": false,
-      "properties": {
-        "expression": {
-          "oneOf": [
-            {
-              "additionalProperties": {
-                "oneOf": [
-                  {
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  {
-                    "items": {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "minItems": 1,
-                    "type": "array",
-                    "uniqueItems": true
-                  }
-                ]
-              },
-              "type": "object"
-            },
-            {
-              "items": {
-                "$ref": "#/$defs/lfTagDefinition"
-              },
-              "minItems": 1,
-              "type": "array"
-            }
+      "oneOf": [
+        {
+          "required": [
+            "expression"
           ]
+        },
+        {
+          "required": [
+            "expression_name"
+          ]
+        }
+      ],
+      "properties": {
+        "catalog_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "expression": {
+          "$ref": "#/$defs/lfTagExpressionBody"
+        },
+        "expression_name": {
+          "minLength": 1,
+          "type": "string"
         },
         "kind": {
           "const": "lf_tag_policy"
@@ -216,9 +323,36 @@
       },
       "required": [
         "kind",
-        "resource_type",
-        "expression"
+        "resource_type"
       ],
+      "type": "object"
+    },
+    "ownershipConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "managed_principals": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "managed_resources": {
+          "items": {
+            "$ref": "#/$defs/resourcePattern"
+          },
+          "type": "array"
+        },
+        "unmanaged_action": {
+          "enum": [
+            "warn",
+            "warning",
+            "error",
+            "ignore"
+          ]
+        }
+      },
       "type": "object"
     },
     "resource": {
@@ -240,6 +374,51 @@
         },
         {
           "$ref": "#/$defs/lfTagPolicyResource"
+        },
+        {
+          "$ref": "#/$defs/lfTagExpressionResource"
+        }
+      ]
+    },
+    "resourcePattern": {
+      "oneOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "database": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "expression_name": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "catalog",
+                "database",
+                "table",
+                "table_with_columns",
+                "data_location",
+                "lf_tag_policy",
+                "lf_tag_expression"
+              ]
+            },
+            "location": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "table": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "type": "object"
         }
       ]
     },
@@ -373,6 +552,26 @@
       },
       "type": "array"
     },
+    "ignore": {
+      "$ref": "#/$defs/ignoreConfig"
+    },
+    "lf_tag_expressions": {
+      "description": "Named LF-Tag expressions.",
+      "oneOf": [
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/lfTagExpressionValue"
+          },
+          "type": "object"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/lfTagExpression"
+          },
+          "type": "array"
+        }
+      ]
+    },
     "lf_tag_key_metadata": {
       "description": "Optional authoring metadata for LF-Tag assignment scope.",
       "oneOf": [
@@ -420,6 +619,19 @@
           "type": "array"
         }
       ]
+    },
+    "lint": {
+      "additionalProperties": {
+        "enum": [
+          "error",
+          "warning",
+          "ignore"
+        ]
+      },
+      "type": "object"
+    },
+    "ownership": {
+      "$ref": "#/$defs/ownershipConfig"
     },
     "resource_tags": {
       "items": {

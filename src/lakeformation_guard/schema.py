@@ -53,6 +53,19 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
                 },
             ],
         },
+        "lf_tag_expressions": {
+            "description": "Named LF-Tag expressions.",
+            "oneOf": [
+                {
+                    "type": "object",
+                    "additionalProperties": {"$ref": "#/$defs/lfTagExpressionValue"},
+                },
+                {
+                    "type": "array",
+                    "items": {"$ref": "#/$defs/lfTagExpression"},
+                },
+            ],
+        },
         "resource_tags": {
             "type": "array",
             "items": {"$ref": "#/$defs/resourceTagAssignment"},
@@ -61,6 +74,12 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
             "type": "array",
             "items": {"$ref": "#/$defs/grant"},
         },
+        "lint": {
+            "type": "object",
+            "additionalProperties": {"enum": ["error", "warning", "ignore"]},
+        },
+        "ownership": {"$ref": "#/$defs/ownershipConfig"},
+        "ignore": {"$ref": "#/$defs/ignoreConfig"},
     },
     "$defs": {
         "lfTagDefinition": {
@@ -88,6 +107,40 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
             "properties": {
                 "assignable_to": {"$ref": "#/$defs/tagAssignmentScopeList"},
             },
+        },
+        "lfTagExpression": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["name", "expression"],
+            "properties": {
+                "name": _STRING_VALUE,
+                "description": {"type": "string"},
+                "catalog_id": _STRING_VALUE,
+                "expression": {"$ref": "#/$defs/lfTagExpressionBody"},
+            },
+        },
+        "lfTagExpressionValue": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["expression"],
+            "properties": {
+                "description": {"type": "string"},
+                "catalog_id": _STRING_VALUE,
+                "expression": {"$ref": "#/$defs/lfTagExpressionBody"},
+            },
+        },
+        "lfTagExpressionBody": {
+            "oneOf": [
+                {
+                    "type": "object",
+                    "additionalProperties": _VALUE_LIST,
+                },
+                {
+                    "type": "array",
+                    "items": {"$ref": "#/$defs/lfTagDefinition"},
+                    "minItems": 1,
+                },
+            ],
         },
         "tagAssignmentScopeList": {
             "oneOf": [
@@ -131,6 +184,7 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
                 {"$ref": "#/$defs/tableWithColumnsResource"},
                 {"$ref": "#/$defs/dataLocationResource"},
                 {"$ref": "#/$defs/lfTagPolicyResource"},
+                {"$ref": "#/$defs/lfTagExpressionResource"},
             ],
         },
         "catalogResource": {
@@ -193,24 +247,86 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
         "lfTagPolicyResource": {
             "type": "object",
             "additionalProperties": False,
-            "required": ["kind", "resource_type", "expression"],
+            "required": ["kind", "resource_type"],
             "properties": {
                 "kind": {"const": "lf_tag_policy"},
+                "catalog_id": _STRING_VALUE,
                 "resource_type": {"enum": ["DATABASE", "TABLE"]},
-                "expression": {
-                    "oneOf": [
-                        {
-                            "type": "object",
-                            "additionalProperties": _VALUE_LIST,
-                        },
-                        {
-                            "type": "array",
-                            "items": {"$ref": "#/$defs/lfTagDefinition"},
-                            "minItems": 1,
-                        },
-                    ],
+                "expression": {"$ref": "#/$defs/lfTagExpressionBody"},
+                "expression_name": _STRING_VALUE,
+            },
+            "oneOf": [
+                {"required": ["expression"]},
+                {"required": ["expression_name"]},
+            ],
+        },
+        "lfTagExpressionResource": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["kind", "expression_name"],
+            "properties": {
+                "kind": {"const": "lf_tag_expression"},
+                "catalog_id": _STRING_VALUE,
+                "expression_name": _STRING_VALUE,
+            },
+        },
+        "ownershipConfig": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "managed_principals": {
+                    "type": "array",
+                    "items": _STRING_VALUE,
+                    "uniqueItems": True,
+                },
+                "managed_resources": {
+                    "type": "array",
+                    "items": {"$ref": "#/$defs/resourcePattern"},
+                },
+                "unmanaged_action": {"enum": ["warn", "warning", "error", "ignore"]},
+            },
+        },
+        "ignoreConfig": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "principals": {
+                    "type": "array",
+                    "items": _STRING_VALUE,
+                    "uniqueItems": True,
+                },
+                "resources": {
+                    "type": "array",
+                    "items": {"$ref": "#/$defs/resourcePattern"},
                 },
             },
+        },
+        "resourcePattern": {
+            "oneOf": [
+                _STRING_VALUE,
+                {
+                    "type": "object",
+                    "minProperties": 1,
+                    "additionalProperties": False,
+                    "properties": {
+                        "kind": {
+                            "enum": [
+                                "catalog",
+                                "database",
+                                "table",
+                                "table_with_columns",
+                                "data_location",
+                                "lf_tag_policy",
+                                "lf_tag_expression",
+                            ]
+                        },
+                        "database": _STRING_VALUE,
+                        "table": _STRING_VALUE,
+                        "location": _STRING_VALUE,
+                        "expression_name": _STRING_VALUE,
+                    },
+                },
+            ],
         },
     },
 }

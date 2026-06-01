@@ -97,6 +97,63 @@ class PlannerTests(unittest.TestCase):
 
         self.assertEqual(change_plan.changes, ())
 
+    def test_plan_lf_tag_expression_create_update_and_delete(self):
+        desired = DesiredState.from_dict(
+            {
+                "lf_tags": {"domain": ["sales", "finance"]},
+                "lf_tag_expressions": {
+                    "sales_tables": {
+                        "description": "Sales tables",
+                        "expression": {"domain": ["sales"]},
+                    }
+                },
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "lf_tags": {"domain": ["sales", "finance"]},
+                "lf_tag_expressions": {
+                    "sales_tables": {
+                        "description": "Old",
+                        "expression": {"domain": ["finance"]},
+                    },
+                    "legacy": {"expression": {"domain": ["finance"]}},
+                },
+            }
+        )
+
+        default_plan = plan(desired, current)
+        full_plan = plan(
+            desired,
+            current,
+            PlanOptions(allow_lf_tag_expression_updates=True, allow_lf_tag_expression_deletes=True),
+        )
+
+        self.assertEqual(default_plan.changes, ())
+        self.assertEqual(
+            [change.action for change in full_plan.changes],
+            ["lf_tag_expression.update", "lf_tag_expression.delete"],
+        )
+        self.assertEqual(
+            [change.requires_flag for change in full_plan.changes],
+            ["--allow-lf-tag-expression-updates", "--allow-lf-tag-expression-deletes"],
+        )
+        self.assertTrue(all(change.destructive for change in full_plan.changes))
+
+    def test_plan_creates_missing_lf_tag_expression(self):
+        desired = DesiredState.from_dict(
+            {
+                "lf_tags": {"domain": ["sales"]},
+                "lf_tag_expressions": {"sales_tables": {"expression": {"domain": ["sales"]}}},
+            }
+        )
+
+        change_plan = plan(desired, CurrentState.empty())
+
+        self.assertEqual([change.action for change in change_plan.changes], ["lf_tag.create", "lf_tag_expression.create"])
+        self.assertEqual(change_plan.changes[1].aws_api, "create_lf_tag_expression")
+        self.assertFalse(change_plan.changes[1].destructive)
+
     def test_plan_includes_destructive_changes_when_allowed(self):
         desired = DesiredState.from_dict(
             {

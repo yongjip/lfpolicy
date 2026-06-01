@@ -21,6 +21,12 @@ The first release focuses on the core guardrail loop:
 
 The most useful next improvements are:
 
+- Adoption controls for real accounts: configurable lint severities, ownership
+  boundaries, ignore rules, and import scaffolds that make existing Lake
+  Formation environments reviewable before they are governed.
+- First-class named LF-Tag expression support, including desired/current state,
+  grants by `expression_name`, drift reporting, and conservative
+  create/update/delete planning.
 - Harden the Python-native permission group authoring layer with more
   real-world examples, clearer validation messages, and migration guidance from
   hand-written desired state.

@@ -148,12 +148,14 @@ JSON check reports combine validation counts and lint findings:
   "desired": {
     "valid": true,
     "lf_tags": 2,
+    "lf_tag_expressions": 0,
     "resource_tags": 1,
     "grants": 1
   },
   "current_snapshot": {
     "valid": true,
     "lf_tags": 2,
+    "lf_tag_expressions": 0,
     "resource_tags": 1,
     "grants": 0
   },
@@ -192,6 +194,8 @@ one object for current snapshot:
     "lf_tags": 2,
     "lf_tag_keys": ["domain", "sensitivity"],
     "resource_tags": 1,
+    "lf_tag_expressions": 1,
+    "lf_tag_expression_names": ["sales_tables"],
     "resource_kinds": {"table": 1},
     "resource_tag_keys": ["domain", "sensitivity"],
     "grants": 1,
@@ -284,6 +288,7 @@ results:
 ```json
 {
   "plan": {
+    "schema_version": "lfguard.plan.v1",
     "summary": {
       "total": 1,
       "safe": 1,
@@ -291,10 +296,21 @@ results:
     },
     "changes": [
       {
+        "id": "change_001",
         "action": "lf_tag.create",
         "target": "lf_tag:sensitivity",
         "reason": "LF-Tag is missing",
         "destructive": false,
+        "risk": "safe",
+        "principal": null,
+        "resource": null,
+        "before": null,
+        "after": {
+          "tag_key": "sensitivity",
+          "tag_values": ["internal"]
+        },
+        "requires_flag": null,
+        "aws_api": "create_lf_tag",
         "payload": {
           "tag_key": "sensitivity",
           "tag_values": ["internal"]
