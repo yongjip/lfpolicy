@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.4
+
+- Rejects duplicate named LF-Tag expressions with the same exact
+  `(catalog_id, name)` identity instead of allowing shared indexes to collapse
+  them.
+- Adds a `LF_TAG_EXPRESSION_DUPLICATE_IDENTITY` lint finding for duplicate
+  desired-state LF-Tag expression identities.
+- Reuses the same unscoped named-expression resolution rule in `lint` and
+  `explain`, so unscoped grants consistently resolve to one unambiguous scoped
+  named expression.
+- Adds regression coverage for duplicate expression identity linting, planning
+  rejection, and explain resolution of unscoped grants.
+
 ## 0.4.3
 
 - Preserves same-name LF-Tag expressions across catalogs when serializing
