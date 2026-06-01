@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
 - Adds configurable lint severities through desired-state `lint` overrides.
 - Adds ownership boundaries and ignore rules for unmanaged current-state drift.
