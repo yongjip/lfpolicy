@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from .config import lint_severity
-from .models import DesiredState, Grant, LFTagExpressionDefinition, ResourceTagAssignment
+from .models import DesiredState, Grant, ResourceTagAssignment
+from .state_index import LFTagExpressionKey, lf_tag_expression_index, lf_tag_expression_key
 
 
 BROAD_PRINCIPALS = {"alliamprincipals", "iamallowedprincipals", "iam_allowed_principals"}
@@ -65,6 +66,7 @@ def lint_desired(desired: DesiredState) -> Tuple[LintFinding, ...]:
         metadata.key: set(metadata.assignable_to)
         for metadata in desired.lf_tag_key_metadata
     }
+    expression_index = lf_tag_expression_index(desired.lf_tag_expressions)
     findings.extend(_lint_lf_tag_definitions(tag_values))
     for expression in desired.lf_tag_expressions:
         findings.extend(_lint_lf_tag_expression_definition(expression, tag_values))
@@ -77,7 +79,7 @@ def lint_desired(desired: DesiredState) -> Tuple[LintFinding, ...]:
             )
         )
     for grant in desired.grants:
-        findings.extend(_lint_grant(grant, tag_values, tag_assignment_scopes, desired))
+        findings.extend(_lint_grant(grant, tag_values, tag_assignment_scopes, expression_index))
     findings.extend(_lint_combined_grant_conflicts(desired.grants, tag_assignment_scopes))
     return tuple(_apply_lint_config(findings, desired))
 
@@ -266,22 +268,18 @@ def _resource_tag_assignment_scope(resource_kind: str) -> Any:
 
 
 def _named_lf_tag_expression_defined(
-    expressions: Tuple[LFTagExpressionDefinition, ...],
+    expression_index: Mapping[LFTagExpressionKey, Any],
     catalog_id: Optional[str],
     expression_name: str,
 ) -> bool:
-    expression_keys = {
-        (expression.catalog_id, expression.name)
-        for expression in expressions
-    }
     if catalog_id:
-        return (catalog_id, expression_name) in expression_keys
-    if (None, expression_name) in expression_keys:
+        return lf_tag_expression_key(catalog_id, expression_name) in expression_index
+    if lf_tag_expression_key(None, expression_name) in expression_index:
         return True
     # Without a grant catalog_id, only a single scoped definition is unambiguous.
     scoped_matches = {
         expression_catalog_id
-        for expression_catalog_id, name in expression_keys
+        for expression_catalog_id, name in expression_index
         if expression_catalog_id and name == expression_name
     }
     return len(scoped_matches) == 1
@@ -291,14 +289,14 @@ def _lint_grant(
     grant: Grant,
     tag_values: Mapping[str, set],
     tag_assignment_scopes: Mapping[str, set],
-    desired: DesiredState,
+    expression_index: Mapping[LFTagExpressionKey, Any],
 ) -> List[LintFinding]:
     findings = _lint_grant_governance(grant, tag_assignment_scopes)
     if grant.resource.kind != "lf_tag_policy":
         return findings
     if grant.resource.expression_name:
         if not _named_lf_tag_expression_defined(
-            desired.lf_tag_expressions,
+            expression_index,
             grant.resource.catalog_id,
             grant.resource.expression_name,
         ):

@@ -7,7 +7,14 @@ from typing import Any, Dict, List, Mapping, Tuple
 
 from .config import unmanaged_severity
 from .models import CurrentState, DesiredState, Grant, ResourceRef
-from .planner import _grant_index, _grant_target, _lf_tag_expression_index, _lf_tag_index, _resource_tag_index
+from .state_index import (
+    grant_index,
+    grant_target,
+    lf_tag_expression_index,
+    lf_tag_expression_sort_key,
+    lf_tag_index,
+    resource_tag_index,
+)
 
 
 @dataclass(frozen=True)
@@ -43,8 +50,8 @@ def audit(desired: DesiredState, current: CurrentState) -> Tuple[AuditFinding, .
 
 def _audit_lf_tags(desired: DesiredState, current: CurrentState) -> List[AuditFinding]:
     findings: List[AuditFinding] = []
-    desired_tags = _lf_tag_index(desired.lf_tags)
-    current_tags = _lf_tag_index(current.lf_tags)
+    desired_tags = lf_tag_index(desired.lf_tags)
+    current_tags = lf_tag_index(current.lf_tags)
     for key, desired_tag in sorted(desired_tags.items()):
         current_tag = current_tags.get(key)
         if current_tag is None:
@@ -87,9 +94,9 @@ def _audit_lf_tags(desired: DesiredState, current: CurrentState) -> List[AuditFi
 
 def _audit_lf_tag_expressions(desired: DesiredState, current: CurrentState) -> List[AuditFinding]:
     findings: List[AuditFinding] = []
-    desired_expressions = _lf_tag_expression_index(desired.lf_tag_expressions)
-    current_expressions = _lf_tag_expression_index(current.lf_tag_expressions)
-    for key, desired_expression in sorted(desired_expressions.items(), key=lambda item: _expression_sort_key(item[0])):
+    desired_expressions = lf_tag_expression_index(desired.lf_tag_expressions)
+    current_expressions = lf_tag_expression_index(current.lf_tag_expressions)
+    for key, desired_expression in sorted(desired_expressions.items(), key=lambda item: lf_tag_expression_sort_key(item[0])):
         current_expression = current_expressions.get(key)
         if current_expression is None:
             findings.append(
@@ -120,7 +127,7 @@ def _audit_lf_tag_expressions(desired: DesiredState, current: CurrentState) -> L
                     },
                 )
             )
-    for key, current_expression in sorted(current_expressions.items(), key=lambda item: _expression_sort_key(item[0])):
+    for key, current_expression in sorted(current_expressions.items(), key=lambda item: lf_tag_expression_sort_key(item[0])):
         if key in desired_expressions:
             continue
         resource = ResourceRef(
@@ -142,10 +149,6 @@ def _audit_lf_tag_expressions(desired: DesiredState, current: CurrentState) -> L
     return findings
 
 
-def _expression_sort_key(key: Tuple[Any, str]) -> str:
-    return "{}:{}".format(key[0] or "", key[1])
-
-
 def _expression_details(expression: Any, field_name: str) -> Dict[str, Any]:
     return {
         "name": expression.name,
@@ -156,8 +159,8 @@ def _expression_details(expression: Any, field_name: str) -> Dict[str, Any]:
 
 def _audit_resource_tags(desired: DesiredState, current: CurrentState) -> List[AuditFinding]:
     findings: List[AuditFinding] = []
-    desired_by_resource = _resource_tag_index(desired.resource_tags)
-    current_by_resource = _resource_tag_index(current.resource_tags)
+    desired_by_resource = resource_tag_index(desired.resource_tags)
+    current_by_resource = resource_tag_index(current.resource_tags)
 
     for resource, desired_tags in sorted(desired_by_resource.items(), key=lambda item: item[0].identity):
         current_tags = current_by_resource.get(resource, {})
@@ -205,8 +208,8 @@ def _audit_resource_tags(desired: DesiredState, current: CurrentState) -> List[A
 
 def _audit_grants(desired: DesiredState, current: CurrentState) -> List[AuditFinding]:
     findings: List[AuditFinding] = []
-    desired_grants = _grant_index(desired.grants)
-    current_grants = _grant_index(current.grants)
+    desired_grants = grant_index(desired.grants)
+    current_grants = grant_index(current.grants)
 
     for identity, desired_grant in sorted(desired_grants.items(), key=lambda item: _grant_sort_key(item[0])):
         current_grant = current_grants.get(identity)
@@ -251,7 +254,7 @@ def _grant_finding(code: str, severity: str, grant: Grant, message: str, details
     return AuditFinding(
         code=code,
         severity=severity,
-        target=_grant_target(grant),
+        target=grant_target(grant),
         message=message,
         details=enriched,
     )

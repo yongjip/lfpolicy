@@ -1907,6 +1907,18 @@ class AuditCliTests(unittest.TestCase):
                 json.dumps(
                     {
                         "lf_tags": {"sensitivity": ["internal"], "domain": ["sales"]},
+                        "lf_tag_expressions": [
+                            {
+                                "name": "shared",
+                                "catalog_id": "111111111111",
+                                "expression": {"domain": ["sales"]},
+                            },
+                            {
+                                "name": "shared",
+                                "catalog_id": "222222222222",
+                                "expression": {"sensitivity": ["internal"]},
+                            },
+                        ],
                         "resource_tags": [
                             {
                                 "resource": {"kind": "table", "database": "analytics", "table": "orders"},
@@ -1943,6 +1955,14 @@ class AuditCliTests(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             self.assertEqual(exit_code, 0)
             self.assertEqual(payload["desired"]["lf_tag_keys"], ["domain", "sensitivity"])
+            self.assertEqual(payload["desired"]["lf_tag_expression_names"], ["shared", "shared"])
+            self.assertEqual(
+                payload["desired"]["lf_tag_expression_ids"],
+                [
+                    "lf_tag_expression:catalog=111111111111:name=shared",
+                    "lf_tag_expression:catalog=222222222222:name=shared",
+                ],
+            )
             self.assertEqual(payload["desired"]["resource_kinds"], {"table": 1})
             self.assertEqual(payload["desired"]["grant_principals"], ["role"])
             self.assertEqual(payload["desired"]["grant_resource_kinds"], {"database": 1})

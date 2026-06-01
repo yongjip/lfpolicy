@@ -1026,6 +1026,7 @@ def _state_profile(state: GuardrailState) -> dict:
         "lf_tag_values": {tag.key: list(tag.values) for tag in state.lf_tags},
         "lf_tag_expressions": len(state.lf_tag_expressions),
         "lf_tag_expression_names": [expression.name for expression in state.lf_tag_expressions],
+        "lf_tag_expression_ids": [expression.identity for expression in state.lf_tag_expressions],
         "resource_tags": len(state.resource_tags),
         "resource_kinds": dict(sorted(resource_kinds.items())),
         "resource_tag_keys": resource_tag_keys,
@@ -1757,7 +1758,13 @@ def _render_state_profile_lines(profile: dict) -> list:
 def _state_profile_metrics(profile: dict) -> tuple:
     return (
         ("LF-Tag definitions", _count_with_list(profile["lf_tags"], profile["lf_tag_keys"])),
-        ("LF-Tag expressions", _count_with_list(profile["lf_tag_expressions"], profile["lf_tag_expression_names"])),
+        (
+            "LF-Tag expressions",
+            _count_with_list(
+                profile["lf_tag_expressions"],
+                profile.get("lf_tag_expression_ids", profile["lf_tag_expression_names"]),
+            ),
+        ),
         ("Resource tag assignments", str(profile["resource_tags"])),
         ("Resource kinds", _format_counts(profile["resource_kinds"])),
         ("Resource tag keys", _format_list(profile["resource_tag_keys"])),

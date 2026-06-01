@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, FrozenSet, Iterable, List, Mapping, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from .models import (
     CurrentState,
     DesiredState,
-    Grant,
-    LFTagDefinition,
     LFTagExpressionDefinition,
     ResourceRef,
-    ResourceTagAssignment,
+)
+from .state_index import (
+    grant_index,
+    grant_target,
+    lf_tag_expression_index,
+    lf_tag_index,
+    resource_tag_index,
 )
 
 
@@ -180,7 +184,7 @@ def plan(desired: DesiredState, current: CurrentState, options: PlanOptions = Pl
 
 
 def _plan_lf_tags(desired: DesiredState, current: CurrentState, options: PlanOptions) -> Iterable[Change]:
-    current_tags = _lf_tag_index(current.lf_tags)
+    current_tags = lf_tag_index(current.lf_tags)
     for desired_tag in desired.lf_tags:
         current_tag = current_tags.get(desired_tag.key)
         if current_tag is None:
@@ -220,8 +224,8 @@ def _plan_lf_tags(desired: DesiredState, current: CurrentState, options: PlanOpt
 
 
 def _plan_lf_tag_expressions(desired: DesiredState, current: CurrentState, options: PlanOptions) -> Iterable[Change]:
-    current_expressions = _lf_tag_expression_index(current.lf_tag_expressions)
-    desired_expressions = _lf_tag_expression_index(desired.lf_tag_expressions)
+    current_expressions = lf_tag_expression_index(current.lf_tag_expressions)
+    desired_expressions = lf_tag_expression_index(desired.lf_tag_expressions)
     for name, desired_expression in desired_expressions.items():
         current_expression = current_expressions.get(name)
         if current_expression is None:
@@ -263,8 +267,8 @@ def _plan_lf_tag_expressions(desired: DesiredState, current: CurrentState, optio
 
 
 def _plan_resource_tags(desired: DesiredState, current: CurrentState, options: PlanOptions) -> Iterable[Change]:
-    current_by_resource = _resource_tag_index(current.resource_tags)
-    desired_by_resource = _resource_tag_index(desired.resource_tags)
+    current_by_resource = resource_tag_index(current.resource_tags)
+    desired_by_resource = resource_tag_index(desired.resource_tags)
     for resource, desired_tags in desired_by_resource.items():
         current_tags = current_by_resource.get(resource, {})
         tags_to_add: Dict[str, List[str]] = {}
@@ -300,8 +304,8 @@ def _plan_resource_tags(desired: DesiredState, current: CurrentState, options: P
 
 
 def _plan_grants(desired: DesiredState, current: CurrentState, options: PlanOptions) -> Iterable[Change]:
-    desired_grants = _grant_index(desired.grants)
-    current_grants = _grant_index(current.grants)
+    desired_grants = grant_index(desired.grants)
+    current_grants = grant_index(current.grants)
 
     for identity, desired_grant in desired_grants.items():
         current_grant = current_grants.get(identity)
@@ -316,7 +320,7 @@ def _plan_grants(desired: DesiredState, current: CurrentState, options: PlanOpti
             permissions_to_grant = sorted(set(missing_permissions) | set(missing_grantables))
             yield Change(
                 action="grant.add_permissions",
-                target=_grant_target(desired_grant),
+                target=grant_target(desired_grant),
                 reason="Principal is missing desired Lake Formation permissions",
                 payload={
                     "principal": desired_grant.principal,
@@ -340,7 +344,7 @@ def _plan_grants(desired: DesiredState, current: CurrentState, options: PlanOpti
         if (extra_permissions or extra_grantables) and options.allow_permission_revokes:
             yield Change(
                 action="grant.revoke_permissions",
-                target=_grant_target(desired_grant),
+                target=grant_target(desired_grant),
                 reason="Principal has Lake Formation permissions not present in desired state",
                 payload={
                     "principal": desired_grant.principal,
@@ -364,7 +368,7 @@ def _plan_grants(desired: DesiredState, current: CurrentState, options: PlanOpti
                 continue
             yield Change(
                 action="grant.revoke_permissions",
-                target=_grant_target(current_grant),
+                target=grant_target(current_grant),
                 reason="Principal grant is not present in desired state",
                 payload={
                     "principal": current_grant.principal,
@@ -376,56 +380,6 @@ def _plan_grants(desired: DesiredState, current: CurrentState, options: PlanOpti
                 before=current_grant.to_dict(),
                 after=None,
             )
-
-
-def _lf_tag_index(tags: Iterable[LFTagDefinition]) -> Dict[str, LFTagDefinition]:
-    merged: Dict[str, set] = {}
-    for tag in tags:
-        merged.setdefault(tag.key, set()).update(tag.values)
-    return {key: LFTagDefinition(key, tuple(values)) for key, values in merged.items()}
-
-
-def _lf_tag_expression_index(
-    expressions: Iterable[LFTagExpressionDefinition],
-) -> Dict[Tuple[Optional[str], str], LFTagExpressionDefinition]:
-    return {_lf_tag_expression_key(expression): expression for expression in expressions}
-
-
-def _lf_tag_expression_key(expression: LFTagExpressionDefinition) -> Tuple[Optional[str], str]:
-    return (expression.catalog_id, expression.name)
-
-
-def _resource_tag_index(assignments: Iterable[ResourceTagAssignment]) -> Dict[ResourceRef, Dict[str, FrozenSet[str]]]:
-    merged: Dict[ResourceRef, Dict[str, set]] = {}
-    for assignment in assignments:
-        resource_tags = merged.setdefault(assignment.resource, {})
-        for key, values in assignment.tags.items():
-            resource_tags.setdefault(key, set()).update(values)
-    return {
-        resource: {key: frozenset(values) for key, values in tags.items()}
-        for resource, tags in merged.items()
-    }
-
-
-def _grant_index(grants: Iterable[Grant]) -> Dict[Tuple[str, ResourceRef], Grant]:
-    merged: Dict[Tuple[str, ResourceRef], Dict[str, set]] = {}
-    for grant in grants:
-        entry = merged.setdefault(grant.identity, {"permissions": set(), "grantable_permissions": set()})
-        entry["permissions"].update(grant.permissions)
-        entry["grantable_permissions"].update(grant.grantable_permissions)
-    return {
-        identity: Grant(
-            principal=identity[0],
-            resource=identity[1],
-            permissions=tuple(values["permissions"]),
-            grantable_permissions=tuple(values["grantable_permissions"]),
-        )
-        for identity, values in merged.items()
-    }
-
-
-def _grant_target(grant: Grant) -> str:
-    return "{} -> {}".format(grant.principal, grant.resource.identity)
 
 
 def _lf_tag_expression_payload(expression: LFTagExpressionDefinition) -> Dict[str, Any]:

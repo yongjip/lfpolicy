@@ -15,6 +15,11 @@ from .models import (
     ResourceTagAssignment,
 )
 from .planner import Change, Plan
+from .state_index import (
+    lf_tag_expression_definition_key,
+    lf_tag_expression_key,
+    lf_tag_expression_sort_key,
+)
 
 
 @dataclass(frozen=True)
@@ -119,15 +124,15 @@ class AWSLakeFormationAdapter:
 
     def _load_lf_tag_expressions(self, desired: DesiredState) -> Iterable[LFTagExpressionDefinition]:
         expression_keys = {
-            (expression.catalog_id, expression.name)
+            lf_tag_expression_definition_key(expression)
             for expression in desired.lf_tag_expressions
         }
         expression_keys.update(
-            (grant.resource.catalog_id, grant.resource.expression_name)
+            lf_tag_expression_key(grant.resource.catalog_id, grant.resource.expression_name)
             for grant in desired.grants
             if grant.resource.kind in {"lf_tag_policy", "lf_tag_expression"} and grant.resource.expression_name
         )
-        for catalog_id, name in sorted(expression_keys, key=lambda item: (item[0] or "", item[1])):
+        for catalog_id, name in sorted(expression_keys, key=lf_tag_expression_sort_key):
             request = {"Name": name, "catalog_id": catalog_id}
             kwargs = self._with_catalog_id(request)
             try:

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
 from .models import CurrentState, DesiredState, Grant, LFTagValue, ResourceRef
+from .state_index import LFTagExpressionKey, lf_tag_expression_definition_key, lf_tag_expression_key
 
 
 EXPLAIN_SCHEMA_VERSION = "lfguard.explain.v1"
@@ -206,7 +207,7 @@ def _grant_relevance(
     grant_resource: ResourceRef,
     target: ResourceRef,
     effective_lf_tags: Mapping[str, Tuple[str, ...]],
-    expression_index: Mapping[str, Tuple[LFTagValue, ...]],
+    expression_index: Mapping[LFTagExpressionKey, Tuple[LFTagValue, ...]],
 ) -> Optional[_GrantRelevance]:
     if grant_resource.kind == "lf_tag_policy":
         return _lf_tag_policy_relevance(grant_resource, target, effective_lf_tags, expression_index)
@@ -255,7 +256,7 @@ def _lf_tag_policy_relevance(
     grant_resource: ResourceRef,
     target: ResourceRef,
     effective_lf_tags: Mapping[str, Tuple[str, ...]],
-    expression_index: Mapping[str, Tuple[LFTagValue, ...]],
+    expression_index: Mapping[LFTagExpressionKey, Tuple[LFTagValue, ...]],
 ) -> Optional[_GrantRelevance]:
     target_type = _target_lf_tag_policy_type(target)
     if target_type is None or grant_resource.resource_type != target_type:
@@ -407,19 +408,19 @@ def _catalog_compatible(left: Optional[str], right: Optional[str]) -> bool:
     return not left or not right or left == right
 
 
-def _expression_index(state: Union[DesiredState, CurrentState]) -> Dict[Tuple[Optional[str], str], Tuple[LFTagValue, ...]]:
+def _expression_index(state: Union[DesiredState, CurrentState]) -> Dict[LFTagExpressionKey, Tuple[LFTagValue, ...]]:
     return {
-        (expression.catalog_id, expression.name): expression.expression
+        lf_tag_expression_definition_key(expression): expression.expression
         for expression in state.lf_tag_expressions
     }
 
 
 def _find_lf_tag_expression(
-    expression_index: Mapping[Tuple[Optional[str], str], Tuple[LFTagValue, ...]],
+    expression_index: Mapping[LFTagExpressionKey, Tuple[LFTagValue, ...]],
     catalog_id: Optional[str],
     name: str,
 ) -> Tuple[LFTagValue, ...]:
-    return expression_index.get((catalog_id, name), ())
+    return expression_index.get(lf_tag_expression_key(catalog_id, name), ())
 
 
 def _normalize_permissions(permissions: Iterable[str]) -> Tuple[str, ...]:
