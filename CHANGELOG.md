@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1
+
+- Fixes live apply for named LF-Tag expression create, update, and delete
+  changes when no catalog ID is configured. Lower-case internal `catalog_id`
+  payload keys are now stripped before boto3 calls even when the value is empty.
+- Adds botocore `Stubber` coverage for named LF-Tag expression apply requests
+  with and without `CatalogId`.
+
 ## 0.4.0
 
 - Adds a `CurrentStateProvider` protocol plus snapshot-backed provider helpers

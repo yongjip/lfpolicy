@@ -334,6 +334,112 @@ class AwsAdapterStubberTests(unittest.TestCase):
         self.assertEqual(current.lf_tags, ())
         self.stubber.assert_no_pending_responses()
 
+    def test_apply_lf_tag_expression_changes_without_catalog_id(self):
+        adapter = AWSLakeFormationAdapter(self.client)
+        change_plan = _lf_tag_expression_change_plan()
+
+        self.stubber.add_response(
+            "create_lf_tag_expression",
+            {},
+            {
+                "Name": "sales_tables",
+                "Description": "Sales tables",
+                "Expression": [{"TagKey": "domain", "TagValues": ["sales"]}],
+            },
+        )
+        self.stubber.add_response(
+            "update_lf_tag_expression",
+            {},
+            {
+                "Name": "sales_tables",
+                "Description": "",
+                "Expression": [{"TagKey": "domain", "TagValues": ["finance"]}],
+            },
+        )
+        self.stubber.add_response(
+            "delete_lf_tag_expression",
+            {},
+            {"Name": "legacy"},
+        )
+
+        results = adapter.apply(change_plan, dry_run=False, allow_destructive=True)
+
+        self.assertEqual(len(results), 3)
+        self.assertTrue(all(result.applied for result in results))
+        self.stubber.assert_no_pending_responses()
+
+    def test_apply_lf_tag_expression_changes_with_catalog_id(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id=CATALOG_ID)
+        change_plan = _lf_tag_expression_change_plan()
+
+        self.stubber.add_response(
+            "create_lf_tag_expression",
+            {},
+            {
+                "CatalogId": CATALOG_ID,
+                "Name": "sales_tables",
+                "Description": "Sales tables",
+                "Expression": [{"TagKey": "domain", "TagValues": ["sales"]}],
+            },
+        )
+        self.stubber.add_response(
+            "update_lf_tag_expression",
+            {},
+            {
+                "CatalogId": CATALOG_ID,
+                "Name": "sales_tables",
+                "Description": "",
+                "Expression": [{"TagKey": "domain", "TagValues": ["finance"]}],
+            },
+        )
+        self.stubber.add_response(
+            "delete_lf_tag_expression",
+            {},
+            {"CatalogId": CATALOG_ID, "Name": "legacy"},
+        )
+
+        results = adapter.apply(change_plan, dry_run=False, allow_destructive=True)
+
+        self.assertEqual(len(results), 3)
+        self.assertTrue(all(result.applied for result in results))
+        self.stubber.assert_no_pending_responses()
+
+
+def _lf_tag_expression_change_plan() -> Plan:
+    return Plan.from_dict(
+        {
+            "changes": [
+                {
+                    "action": "lf_tag_expression.create",
+                    "target": "lf_tag_expression:name=sales_tables",
+                    "reason": "missing",
+                    "payload": {
+                        "name": "sales_tables",
+                        "description": "Sales tables",
+                        "expression": [{"key": "domain", "values": ["sales"]}],
+                    },
+                },
+                {
+                    "action": "lf_tag_expression.update",
+                    "target": "lf_tag_expression:name=sales_tables",
+                    "reason": "drift",
+                    "destructive": True,
+                    "payload": {
+                        "name": "sales_tables",
+                        "expression": [{"key": "domain", "values": ["finance"]}],
+                    },
+                },
+                {
+                    "action": "lf_tag_expression.delete",
+                    "target": "lf_tag_expression:name=legacy",
+                    "reason": "extra",
+                    "destructive": True,
+                    "payload": {"name": "legacy"},
+                },
+            ]
+        }
+    )
+
 
 if __name__ == "__main__":
     unittest.main()

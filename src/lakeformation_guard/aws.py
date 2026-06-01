@@ -289,10 +289,11 @@ class AWSLakeFormationAdapter:
 
     def _with_catalog_id(self, kwargs: Mapping[str, Any]) -> Dict[str, Any]:
         request = dict(kwargs)
+        payload_catalog_id = request.pop("catalog_id", None)
         if self.catalog_id:
             request.setdefault("CatalogId", self.catalog_id)
-        if request.get("catalog_id"):
-            request.setdefault("CatalogId", request.pop("catalog_id"))
+        if payload_catalog_id:
+            request.setdefault("CatalogId", payload_catalog_id)
         return request
 
     def _paginate_or_call(
