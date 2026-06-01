@@ -1196,11 +1196,16 @@ class AuditCliTests(unittest.TestCase):
             self.assertIn("README.md", stdout.getvalue())
             self.assertEqual(len(desired.lf_tags), 2)
             self.assertEqual(len(current.lf_tags), 2)
+            self.assertEqual(len(desired.data_cells_filters), 1)
+            self.assertEqual(len(current.data_cells_filters), 1)
             self.assertIn("lfguard Demo", sample_readme)
             self.assertIn("lfguard check --desired desired.json --current-snapshot current-snapshot.json", sample_readme)
             self.assertIn("lfguard summary --desired desired.json", sample_readme)
             self.assertIn("lfguard audit --desired desired.json", sample_readme)
             self.assertIn("lfguard plan --desired desired.json", sample_readme)
+            self.assertIn("--data-cells-filter orders_public", sample_readme)
+            self.assertIn("--current-cache .lfguard/prod-us-east-1-111122223333-current.json", sample_readme)
+            self.assertEqual(lint_desired(desired), ())
 
             plan_stdout = io.StringIO()
             with contextlib.redirect_stdout(plan_stdout):
@@ -1215,7 +1220,7 @@ class AuditCliTests(unittest.TestCase):
                 )
 
             self.assertEqual(plan_exit_code, 0)
-            self.assertIn("Plan: 3 change(s), 3 safe, 0 destructive.", plan_stdout.getvalue())
+            self.assertIn("Plan: 4 change(s), 4 safe, 0 destructive.", plan_stdout.getvalue())
 
     def test_cli_sample_can_include_github_actions_demo_workflow(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2086,7 +2091,28 @@ class AuditCliTests(unittest.TestCase):
 
         self.assertEqual(findings, ())
 
-    def test_lint_flags_data_cells_filter_mutating_and_named_resource_grants(self):
+    def test_lint_allows_safe_data_cells_filter_select_grants(self):
+        desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "arn:aws:iam::111122223333:role/FilteredReader",
+                        "resource": {
+                            "kind": "data_cells_filter",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                            "filter_name": "orders_public",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(lint_desired(desired), ())
+
+    def test_lint_flags_data_cells_filter_mutating_grants(self):
         desired = DesiredState.from_dict(
             {
                 "grants": [
@@ -2108,8 +2134,8 @@ class AuditCliTests(unittest.TestCase):
         findings = lint_desired(desired)
         codes = [finding.code for finding in findings]
 
-        self.assertIn("NAMED_RESOURCE_GRANT_REVIEW", codes)
         self.assertIn("COLUMN_FILTER_MUTATING_PERMISSION_CONFLICT", codes)
+        self.assertNotIn("NAMED_RESOURCE_GRANT_REVIEW", codes)
         self.assertEqual(
             next(
                 finding

@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Protocol
@@ -58,10 +58,10 @@ class LazyCurrentStateProvider:
 class CachedCurrentStateProvider:
     """Read-through current-state provider backed by a JSON cache file.
 
-    The cache is scoped to a fingerprint of the desired state passed to
-    ``load_current_state_for``. If the file is missing, expired, refreshed, or
-    scoped to a different desired state, the upstream provider is used and the
-    cache is rewritten.
+    The cache is scoped to both a fingerprint of the desired state passed to
+    ``load_current_state_for`` and a provider context. If the file is missing,
+    expired, refreshed, or scoped to a different desired state/provider context,
+    the upstream provider is used and the cache is rewritten.
     """
 
     upstream: CurrentStateProvider
@@ -69,6 +69,7 @@ class CachedCurrentStateProvider:
     refresh: bool = False
     max_age_seconds: Optional[int] = None
     clock: Callable[[], float] = time.time
+    provider_context: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.max_age_seconds is not None and self.max_age_seconds < 0:
@@ -77,15 +78,21 @@ class CachedCurrentStateProvider:
     def load_current_state_for(self, desired: DesiredState) -> CurrentState:
         cache_path = Path(self.path)
         desired_fingerprint = desired_state_fingerprint(desired)
+        provider_fingerprint = provider_context_fingerprint(self.provider_context)
         if not self.refresh:
-            cached = self._load_cached_state(cache_path, desired_fingerprint)
+            cached = self._load_cached_state(cache_path, desired_fingerprint, provider_fingerprint)
             if cached is not None:
                 return cached
         current = self.upstream.load_current_state_for(desired)
-        self._write_cached_state(cache_path, desired_fingerprint, current)
+        self._write_cached_state(cache_path, desired_fingerprint, provider_fingerprint, current)
         return current
 
-    def _load_cached_state(self, path: Path, desired_fingerprint: str) -> Optional[CurrentState]:
+    def _load_cached_state(
+        self,
+        path: Path,
+        desired_fingerprint: str,
+        provider_fingerprint: str,
+    ) -> Optional[CurrentState]:
         if not path.exists():
             return None
         envelope = _load_cache_envelope(path)
@@ -94,6 +101,8 @@ class CachedCurrentStateProvider:
                 "{} must contain a {} cache object".format(path, CURRENT_STATE_CACHE_SCHEMA_VERSION)
             )
         if envelope.get("desired_fingerprint") != desired_fingerprint:
+            return None
+        if envelope.get("provider_fingerprint") != provider_fingerprint:
             return None
         if self._is_expired(envelope):
             return None
@@ -110,13 +119,21 @@ class CachedCurrentStateProvider:
             return True
         return self.clock() - float(created_at_epoch) > self.max_age_seconds
 
-    def _write_cached_state(self, path: Path, desired_fingerprint: str, current: CurrentState) -> None:
+    def _write_cached_state(
+        self,
+        path: Path,
+        desired_fingerprint: str,
+        provider_fingerprint: str,
+        current: CurrentState,
+    ) -> None:
         now = float(self.clock())
         payload = {
             "schema_version": CURRENT_STATE_CACHE_SCHEMA_VERSION,
             "created_at": _format_epoch(now),
             "created_at_epoch": now,
             "desired_fingerprint": desired_fingerprint,
+            "provider_fingerprint": provider_fingerprint,
+            "provider_context": _normalize_json(self.provider_context),
             "current": current.to_dict(),
         }
         try:
@@ -131,8 +148,33 @@ class CachedCurrentStateProvider:
 def desired_state_fingerprint(desired: DesiredState) -> str:
     """Return a stable fingerprint for the desired-state provider scope."""
 
-    encoded = json.dumps(desired.to_dict(), sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return _json_fingerprint(desired.to_dict())
+
+
+def provider_context_fingerprint(context: Mapping[str, Any]) -> str:
+    """Return a stable fingerprint for the upstream current-state provider context."""
+
+    return _json_fingerprint(_normalize_json(context))
+
+
+def _json_fingerprint(payload: Any) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _normalize_json(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            str(key): _normalize_json(item)
+            for key, item in sorted(value.items(), key=lambda item: str(item[0]))
+        }
+    if isinstance(value, (list, tuple)):
+        return [_normalize_json(item) for item in value]
+    if isinstance(value, set):
+        return [_normalize_json(item) for item in sorted(value, key=str)]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
 
 
 def _load_cache_envelope(path: Path) -> Mapping[str, Any]:

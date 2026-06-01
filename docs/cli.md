@@ -50,7 +50,9 @@ State-aware commands use these options:
   `audit`, `plan`, `explain`, and `apply` load live AWS state through `boto3`.
 - `--current-cache PATH`: read or write a JSON current-state cache when live AWS
   state would otherwise be loaded. Cache hits avoid constructing the AWS
-  adapter; cache misses, stale entries, and scope mismatches refresh from AWS.
+  adapter; cache misses, stale entries, desired-state scope mismatches, and AWS
+  provider context mismatches refresh from AWS. The CLI cache context includes
+  provider type, AWS profile, AWS region, and catalog ID.
 - `--refresh-current-cache`: force `--current-cache` to refresh from AWS.
 - `--current-cache-max-age SECONDS`: refresh `--current-cache` when its entry is
   older than the given age.
@@ -86,7 +88,9 @@ python -m pip install "lfguard[aws]"
 
 Current-state cache files are JSON envelopes, not plain current snapshots. Use
 `--current-snapshot` for reviewed immutable evidence, and `--current-cache` when
-you want repeated live workflows to share a scoped current-state lookup.
+you want repeated live workflows to share a scoped current-state lookup. Pass
+`--profile`, `--region`, and `--catalog-id` explicitly for cached live workflows
+and keep separate cache paths per account, environment, region, and catalog.
 
 For isolated CLI installs, use `pipx install lfguard` or
 `uv tool install lfguard`. Add extras with pip when you need live AWS or YAML
@@ -235,6 +239,11 @@ lfguard plan \
   --desired lfguard-demo/desired.json \
   --current-snapshot lfguard-demo/current-snapshot.json
 ```
+
+The generated policy includes an LF-Tag policy grant, a Lake Formation data
+cells filter definition, a missing `SELECT` grant on that filter, an explain
+example for the filtered grant, and a live cache example that scopes the cache
+by profile, region, catalog, and desired state.
 
 Useful options:
 
@@ -460,7 +469,10 @@ behind the provider boundary:
 ```bash
 lfguard plan \
   --desired policy/desired.json \
-  --current-cache .lfguard/current-cache.json \
+  --profile prod \
+  --region us-east-1 \
+  --catalog-id 111122223333 \
+  --current-cache .lfguard/prod-us-east-1-111122223333-current.json \
   --current-cache-max-age 900
 ```
 

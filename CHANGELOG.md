@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.6.1
+
+- Scopes current-state cache hits by provider context as well as desired-state
+  scope, including the CLI AWS provider, profile, region, and catalog ID.
+- Keeps safe `SELECT` grants on Lake Formation data cells filters lint-clean by
+  default while retaining the mutating-permission guardrail.
+- Updates the generated sample and customer-facing docs to demonstrate data
+  cells filter explain workflows and scoped live cache usage.
+
 ## 0.6.0
 
 - Adds `CachedCurrentStateProvider`, a read-through JSON cache wrapper for any

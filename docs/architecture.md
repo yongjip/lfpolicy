@@ -123,7 +123,10 @@ Use `CurrentStateProvider` when a downstream system already has current state in
 files, APIs, caches, or databases and wants to reuse `audit()`, `plan()`, or
 `explain()` without the default AWS adapter. Use
 `CachedCurrentStateProvider` when the upstream source is expensive but still
-should be refreshed through the same provider interface.
+should be refreshed through the same provider interface. Cached entries are
+keyed by desired-state fingerprint and a provider-context fingerprint so live
+AWS cache reuse can distinguish profile, region, catalog, and provider
+identity.
 
 The public API includes a narrow authoring layer under
 `lakeformation_guard.policy` for teams that want rigid permission groups and

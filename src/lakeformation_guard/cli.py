@@ -844,8 +844,35 @@ def _current_state_provider(args: argparse.Namespace) -> CurrentStateProvider:
             current_cache,
             refresh=refresh_current_cache,
             max_age_seconds=current_cache_max_age,
+            provider_context=_current_cache_provider_context(args),
         )
     return _aws_adapter(args)
+
+
+def _current_cache_provider_context(args: argparse.Namespace) -> Mapping[str, Any]:
+    return {
+        "provider": "aws-lakeformation",
+        "profile": _cache_context_value(
+            args.profile,
+            os.environ.get("AWS_PROFILE"),
+            os.environ.get("AWS_DEFAULT_PROFILE"),
+            default="__default__",
+        ),
+        "region": _cache_context_value(
+            args.region,
+            os.environ.get("AWS_REGION"),
+            os.environ.get("AWS_DEFAULT_REGION"),
+            default="__default__",
+        ),
+        "catalog_id": _cache_context_value(args.catalog_id),
+    }
+
+
+def _cache_context_value(*values: Optional[str], default: Optional[str] = None) -> Optional[str]:
+    for value in values:
+        if value not in (None, ""):
+            return str(value)
+    return default
 
 
 def _explain_resource(args: argparse.Namespace) -> ResourceRef:
@@ -2638,6 +2665,15 @@ def _sample_desired_state() -> dict:
             "sensitivity": ["public", "internal", "restricted"],
             "domain": ["sales", "finance"],
         },
+        "data_cells_filters": [
+            {
+                "name": "orders_public",
+                "database": "analytics",
+                "table": "orders",
+                "row_filter": "country = 'US'",
+                "columns": ["order_id", "status"],
+            }
+        ],
         "resource_tags": [
             {
                 "resource": {
@@ -2663,6 +2699,16 @@ def _sample_desired_state() -> dict:
                     },
                 },
                 "permissions": ["SELECT", "DESCRIBE"],
+            },
+            {
+                "principal": "arn:aws:iam::111122223333:role/FilteredAnalyst",
+                "resource": {
+                    "kind": "data_cells_filter",
+                    "database": "analytics",
+                    "table": "orders",
+                    "filter_name": "orders_public",
+                },
+                "permissions": ["SELECT"],
             }
         ],
     }
@@ -2674,6 +2720,15 @@ def _sample_current_state() -> dict:
             "sensitivity": ["public"],
             "domain": ["sales", "finance"],
         },
+        "data_cells_filters": [
+            {
+                "name": "orders_public",
+                "database": "analytics",
+                "table": "orders",
+                "row_filter": "country = 'US'",
+                "columns": ["order_id", "status"],
+            }
+        ],
         "resource_tags": [
             {
                 "resource": {
@@ -2884,7 +2939,39 @@ lfguard plan --desired {desired_name} --current-snapshot {current_name}
 Expected summary:
 
 ```text
-Plan: 3 change(s), 3 safe, 0 destructive.
+Plan: 4 change(s), 4 safe, 0 destructive.
+```
+
+## Explain A Row/Column Filter Grant
+
+The sample desired state includes a Lake Formation data cells filter definition
+and a missing `SELECT` grant on that filter:
+
+```bash
+lfguard explain \\
+  --desired {desired_name} \\
+  --current-snapshot {current_name} \\
+  --principal arn:aws:iam::111122223333:role/FilteredAnalyst \\
+  --database analytics \\
+  --table orders \\
+  --data-cells-filter orders_public \\
+  --permissions SELECT
+```
+
+## Live Cache Example
+
+Use reviewed snapshots for immutable evidence. For repeated live reads against
+the same AWS context, scope the cache by profile, region, catalog, and desired
+state:
+
+```bash
+lfguard plan \\
+  --desired {desired_name} \\
+  --profile prod \\
+  --region us-east-1 \\
+  --catalog-id 111122223333 \\
+  --current-cache .lfguard/prod-us-east-1-111122223333-current.json \\
+  --current-cache-max-age 900
 ```
 
 ## Save Reports

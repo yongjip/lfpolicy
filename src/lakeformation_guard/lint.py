@@ -31,7 +31,7 @@ BROAD_PRINCIPALS = {"alliamprincipals", "iamallowedprincipals", "iam_allowed_pri
 BROAD_PERMISSIONS = BROAD_PERMISSION_COVERAGE
 MUTATING_PERMISSIONS = {"ALTER", "CREATE_TABLE", "DELETE", "DROP", "INSERT"}
 TABLE_MUTATING_PERMISSIONS = {"ALTER", "DELETE", "DROP", "INSERT"}
-NAMED_GRANT_RESOURCE_KINDS = {"database", "table", "table_with_columns", "data_cells_filter"}
+NAMED_GRANT_RESOURCE_KINDS = {"database", "table", "table_with_columns"}
 LINT_EXCEPTION_RULE_BY_CODE = {
     "BROAD_PRINCIPAL_GRANT": "allow_broad_principals",
     "BROAD_PERMISSION_GRANT": "allow_broad_permissions",
@@ -667,7 +667,7 @@ def _lint_grant_governance(
                 code="NAMED_RESOURCE_GRANT_REVIEW",
                 severity="error",
                 target=target,
-                message="Named database/table grants should be documented exceptions; prefer LF-Tag policy grants",
+                message="Named database/table/column grants should be documented exceptions; prefer LF-Tag policy grants",
                 details={
                     "principal": grant.principal,
                     "resource": grant.resource.to_dict(),

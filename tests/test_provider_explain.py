@@ -17,6 +17,7 @@ from lakeformation_guard import (
     desired_state_fingerprint,
     explain,
     lint_desired,
+    provider_context_fingerprint,
 )
 from lakeformation_guard.cli import main
 from lakeformation_guard.provider import CURRENT_STATE_CACHE_SCHEMA_VERSION
@@ -102,6 +103,8 @@ class ProviderExplainTests(unittest.TestCase):
             envelope = json.loads(cache_path.read_text(encoding="utf-8"))
             self.assertEqual(envelope["schema_version"], CURRENT_STATE_CACHE_SCHEMA_VERSION)
             self.assertEqual(envelope["desired_fingerprint"], desired_state_fingerprint(desired))
+            self.assertEqual(envelope["provider_fingerprint"], provider_context_fingerprint({}))
+            self.assertEqual(envelope["provider_context"], {})
             self.assertEqual(envelope["created_at"], "1970-01-01T00:16:40Z")
 
             second_upstream = FakeCurrentStateProvider(CurrentState.empty())
@@ -110,7 +113,7 @@ class ProviderExplainTests(unittest.TestCase):
             self.assertEqual(cached_provider.load_current_state_for(desired), current)
             self.assertEqual(second_upstream.calls, [])
 
-    def test_cached_provider_refreshes_on_scope_mismatch_or_expiry(self):
+    def test_cached_provider_refreshes_on_scope_or_provider_context_mismatch_or_expiry(self):
         desired = DesiredState.from_dict({"grants": []})
         different_desired = DesiredState.from_dict(
             {
@@ -149,12 +152,44 @@ class ProviderExplainTests(unittest.TestCase):
             self.assertEqual(mismatch_provider.load_current_state_for(desired), current)
             self.assertEqual(len(mismatch_upstream.calls), 1)
 
+            context_upstream = FakeCurrentStateProvider(CurrentState.empty())
+            context_provider = CachedCurrentStateProvider(
+                context_upstream,
+                str(cache_path),
+                provider_context={
+                    "provider": "aws-lakeformation",
+                    "profile": "prod",
+                    "region": "us-east-1",
+                    "catalog_id": "111122223333",
+                },
+                clock=lambda: 1002.0,
+            )
+
+            self.assertEqual(context_provider.load_current_state_for(desired), CurrentState.empty())
+            self.assertEqual(len(context_upstream.calls), 1)
+            context_envelope = json.loads(cache_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                context_envelope["provider_context"],
+                {
+                    "catalog_id": "111122223333",
+                    "profile": "prod",
+                    "provider": "aws-lakeformation",
+                    "region": "us-east-1",
+                },
+            )
+
             expired_upstream = FakeCurrentStateProvider(CurrentState.empty())
             expired_provider = CachedCurrentStateProvider(
                 expired_upstream,
                 str(cache_path),
                 max_age_seconds=1,
-                clock=lambda: 1003.0,
+                provider_context={
+                    "provider": "aws-lakeformation",
+                    "profile": "prod",
+                    "region": "us-east-1",
+                    "catalog_id": "111122223333",
+                },
+                clock=lambda: 1004.0,
             )
 
             self.assertEqual(expired_provider.load_current_state_for(desired), CurrentState.empty())
@@ -1213,7 +1248,16 @@ class ProviderExplainTests(unittest.TestCase):
             desired_path = tmp_path / "desired.json"
             cache_path = tmp_path / "current-cache.json"
             desired_path.write_text(json.dumps(desired.to_dict()), encoding="utf-8")
-            CachedCurrentStateProvider(FakeCurrentStateProvider(current), str(cache_path)).load_current_state_for(desired)
+            CachedCurrentStateProvider(
+                FakeCurrentStateProvider(current),
+                str(cache_path),
+                provider_context={
+                    "provider": "aws-lakeformation",
+                    "profile": "prod",
+                    "region": "us-east-1",
+                    "catalog_id": "111122223333",
+                },
+            ).load_current_state_for(desired)
 
             stdout = io.StringIO()
             with patch("lakeformation_guard.cli.AWSLakeFormationAdapter.from_boto3") as from_boto3:
@@ -1225,6 +1269,12 @@ class ProviderExplainTests(unittest.TestCase):
                             str(desired_path),
                             "--current-cache",
                             str(cache_path),
+                            "--profile",
+                            "prod",
+                            "--region",
+                            "us-east-1",
+                            "--catalog-id",
+                            "111122223333",
                             "--output",
                             "json",
                         ]
@@ -1234,6 +1284,80 @@ class ProviderExplainTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertEqual(payload["changes"], [])
             from_boto3.assert_not_called()
+
+    def test_cli_current_cache_is_scoped_to_aws_context(self):
+        desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+        cached_current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            desired_path = tmp_path / "desired.json"
+            cache_path = tmp_path / "current-cache.json"
+            desired_path.write_text(json.dumps(desired.to_dict()), encoding="utf-8")
+            CachedCurrentStateProvider(
+                FakeCurrentStateProvider(cached_current),
+                str(cache_path),
+                provider_context={
+                    "provider": "aws-lakeformation",
+                    "profile": "stage",
+                    "region": "us-east-1",
+                    "catalog_id": "111122223333",
+                },
+            ).load_current_state_for(desired)
+
+            adapter = FakeCurrentStateProvider(CurrentState.empty())
+            stdout = io.StringIO()
+            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter.from_boto3", return_value=adapter) as from_boto3:
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "plan",
+                            "--desired",
+                            str(desired_path),
+                            "--current-cache",
+                            str(cache_path),
+                            "--profile",
+                            "prod",
+                            "--region",
+                            "us-east-1",
+                            "--catalog-id",
+                            "111122223333",
+                            "--output",
+                            "json",
+                        ]
+                    )
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(exit_code, 0)
+            self.assertEqual([change["action"] for change in payload["changes"]], ["grant.add_permissions"])
+            self.assertEqual(len(adapter.calls), 1)
+            from_boto3.assert_called_once_with(
+                profile_name="prod",
+                region_name="us-east-1",
+                catalog_id="111122223333",
+            )
+            envelope = json.loads(cache_path.read_text(encoding="utf-8"))
+            self.assertEqual(envelope["provider_context"]["profile"], "prod")
 
     def test_cli_plan_refreshes_current_cache_from_live_provider(self):
         desired = DesiredState.from_dict(
@@ -1268,19 +1392,28 @@ class ProviderExplainTests(unittest.TestCase):
             adapter = FakeCurrentStateProvider(current)
             stdout = io.StringIO()
             with patch("lakeformation_guard.cli.AWSLakeFormationAdapter.from_boto3", return_value=adapter) as from_boto3:
-                with contextlib.redirect_stdout(stdout):
-                    exit_code = main(
-                        [
-                            "plan",
-                            "--desired",
-                            str(desired_path),
-                            "--current-cache",
-                            str(cache_path),
-                            "--refresh-current-cache",
-                            "--output",
-                            "json",
-                        ]
-                    )
+                with patch.dict(
+                    "os.environ",
+                    {
+                        "AWS_PROFILE": "",
+                        "AWS_DEFAULT_PROFILE": "",
+                        "AWS_REGION": "",
+                        "AWS_DEFAULT_REGION": "",
+                    },
+                ):
+                    with contextlib.redirect_stdout(stdout):
+                        exit_code = main(
+                            [
+                                "plan",
+                                "--desired",
+                                str(desired_path),
+                                "--current-cache",
+                                str(cache_path),
+                                "--refresh-current-cache",
+                                "--output",
+                                "json",
+                            ]
+                        )
 
             self.assertEqual(exit_code, 0)
             self.assertEqual(json.loads(stdout.getvalue())["changes"], [])
@@ -1289,6 +1422,115 @@ class ProviderExplainTests(unittest.TestCase):
             envelope = json.loads(cache_path.read_text(encoding="utf-8"))
             self.assertEqual(envelope["schema_version"], CURRENT_STATE_CACHE_SCHEMA_VERSION)
             self.assertEqual(envelope["current"], current.to_dict())
+            self.assertEqual(
+                envelope["provider_context"],
+                {
+                    "catalog_id": None,
+                    "profile": "__default__",
+                    "provider": "aws-lakeformation",
+                    "region": "__default__",
+                },
+            )
+
+    def test_cli_current_cache_uses_aws_environment_context(self):
+        desired = DesiredState.from_dict({"grants": []})
+        current = CurrentState.empty()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            desired_path = tmp_path / "desired.json"
+            cache_path = tmp_path / "current-cache.json"
+            desired_path.write_text(json.dumps(desired.to_dict()), encoding="utf-8")
+
+            adapter = FakeCurrentStateProvider(current)
+            stdout = io.StringIO()
+            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter.from_boto3", return_value=adapter):
+                with patch.dict(
+                    "os.environ",
+                    {
+                        "AWS_PROFILE": "stage",
+                        "AWS_REGION": "us-west-2",
+                        "AWS_DEFAULT_PROFILE": "default-profile",
+                        "AWS_DEFAULT_REGION": "us-east-1",
+                    },
+                ):
+                    with contextlib.redirect_stdout(stdout):
+                        exit_code = main(
+                            [
+                                "plan",
+                                "--desired",
+                                str(desired_path),
+                                "--current-cache",
+                                str(cache_path),
+                                "--refresh-current-cache",
+                                "--output",
+                                "json",
+                            ]
+                        )
+
+            self.assertEqual(exit_code, 0)
+            envelope = json.loads(cache_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                envelope["provider_context"],
+                {
+                    "catalog_id": None,
+                    "profile": "stage",
+                    "provider": "aws-lakeformation",
+                    "region": "us-west-2",
+                },
+            )
+
+    def test_cli_current_cache_explicit_context_overrides_environment(self):
+        desired = DesiredState.from_dict({"grants": []})
+        current = CurrentState.empty()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            desired_path = tmp_path / "desired.json"
+            cache_path = tmp_path / "current-cache.json"
+            desired_path.write_text(json.dumps(desired.to_dict()), encoding="utf-8")
+
+            adapter = FakeCurrentStateProvider(current)
+            stdout = io.StringIO()
+            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter.from_boto3", return_value=adapter):
+                with patch.dict(
+                    "os.environ",
+                    {
+                        "AWS_PROFILE": "stage",
+                        "AWS_REGION": "us-west-2",
+                    },
+                ):
+                    with contextlib.redirect_stdout(stdout):
+                        exit_code = main(
+                            [
+                                "plan",
+                                "--desired",
+                                str(desired_path),
+                                "--profile",
+                                "prod",
+                                "--region",
+                                "us-east-1",
+                                "--catalog-id",
+                                "111122223333",
+                                "--current-cache",
+                                str(cache_path),
+                                "--refresh-current-cache",
+                                "--output",
+                                "json",
+                            ]
+                        )
+
+            self.assertEqual(exit_code, 0)
+            envelope = json.loads(cache_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                envelope["provider_context"],
+                {
+                    "catalog_id": "111122223333",
+                    "profile": "prod",
+                    "provider": "aws-lakeformation",
+                    "region": "us-east-1",
+                },
+            )
 
     def test_cli_rejects_current_cache_with_current_snapshot(self):
         with tempfile.TemporaryDirectory() as tmp:

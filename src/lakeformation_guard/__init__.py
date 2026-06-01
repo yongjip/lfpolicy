@@ -48,6 +48,7 @@ from .provider import (
     SnapshotCurrentStateProvider,
     SnapshotFileCurrentStateProvider,
     desired_state_fingerprint,
+    provider_context_fingerprint,
 )
 from .schema import state_json_schema
 
@@ -99,6 +100,7 @@ __all__ = [
     "lint_desired",
     "plan",
     "producer",
+    "provider_context_fingerprint",
     "reader",
     "state_json_schema",
     "steward",

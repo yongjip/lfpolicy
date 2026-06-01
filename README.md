@@ -17,8 +17,10 @@ The import package is `lakeformation_guard`; the CLI command is `lfguard`.
 - LF-Tag definitions and allowed values.
 - Named LF-Tag expressions.
 - LF-Tag assignments on Lake Formation Data Catalog resources.
-- Lake Formation grants on catalog, database, table, column, data location, and
-  LF-Tag policy resources.
+- Lake Formation data cells filter definitions for row and column scoped
+  access.
+- Lake Formation grants on catalog, database, table, column, data location,
+  LF-Tag policy, and data cells filter resources.
 - Python-native permission groups that generate reviewable desired state.
 - Offline audit and plan workflows from JSON or YAML snapshots.
 - Offline effective-access explanations from JSON or YAML snapshots.
@@ -84,9 +86,9 @@ and should carry approval evidence.
 - Generate a safe change plan for new LF-Tag values, table tag assignments, and
   LF-Tag policy grants, including grants that reference named LF-Tag
   expressions.
-- Explain why a role can see a database, table, column set, or data location
-  from direct grants, LF-Tag policies, named LF-Tag expressions, and effective
-  LF-Tags.
+- Explain why a role can see a database, table, column set, row/column-filtered
+  table view, or data location from direct grants, LF-Tag policies, named LF-Tag
+  expressions, data cells filters, and effective LF-Tags.
 - Let platform teams review destructive operations separately from additive
   changes.
 - Keep data access policy as code without writing direct boto3 orchestration for
@@ -168,10 +170,37 @@ lfguard plan \
 Expected output:
 
 ```text
-Plan: 3 change(s), 3 safe, 0 destructive.
+Plan: 4 change(s), 4 safe, 0 destructive.
 - [safe] lf_tag.add_values lf_tag:sensitivity: LF-Tag is missing allowed values
 - [safe] resource_tag.add_values table:database=analytics:table=orders: Resource is missing desired LF-Tag assignments
 - [safe] grant.add_permissions arn:aws:iam::111122223333:role/Analyst -> lf_tag_policy:resource_type=TABLE:expression=domain=sales,sensitivity=internal|public: Principal is missing desired Lake Formation permissions
+- [safe] grant.add_permissions arn:aws:iam::111122223333:role/FilteredAnalyst -> data_cells_filter:database=analytics:table=orders:filter_name=orders_public: Principal is missing desired Lake Formation permissions
+```
+
+Explain the sample row/column-filtered grant:
+
+```bash
+lfguard explain \
+  --desired lfguard-demo/desired.json \
+  --current-snapshot lfguard-demo/current-snapshot.json \
+  --principal arn:aws:iam::111122223333:role/FilteredAnalyst \
+  --database analytics \
+  --table orders \
+  --data-cells-filter orders_public \
+  --permissions SELECT
+```
+
+For repeated live reads, use a cache path scoped to the AWS context and pass the
+context explicitly:
+
+```bash
+lfguard plan \
+  --desired lfguard-demo/desired.json \
+  --profile prod \
+  --region us-east-1 \
+  --catalog-id 111122223333 \
+  --current-cache .lfguard/prod-us-east-1-111122223333-current.json \
+  --current-cache-max-age 900
 ```
 
 ## Desired state format
@@ -293,6 +322,16 @@ shape:
         "expression_name": "sales_tables"
       },
       "permissions": ["SELECT", "DESCRIBE"]
+    },
+    {
+      "principal": "arn:aws:iam::111122223333:role/FilteredAnalyst",
+      "resource": {
+        "kind": "data_cells_filter",
+        "database": "analytics",
+        "table": "orders",
+        "filter_name": "orders_public"
+      },
+      "permissions": ["SELECT"]
     }
   ]
 }
@@ -429,9 +468,23 @@ adapter as a provider:
 ```python
 from lakeformation_guard import CachedCurrentStateProvider
 
-provider = CachedCurrentStateProvider(adapter, ".lfguard/current-cache.json", max_age_seconds=900)
+provider = CachedCurrentStateProvider(
+    adapter,
+    ".lfguard/prod-ap-northeast-2-111122223333-current.json",
+    max_age_seconds=900,
+    provider_context={
+        "provider": "aws-lakeformation",
+        "profile": "prod",
+        "region": "ap-northeast-2",
+        "catalog_id": "111122223333",
+    },
+)
 current = provider.load_current_state_for(desired)
 ```
+
+Cache entries are keyed by both desired-state scope and provider context. Use
+separate cache files, or explicit provider contexts, for stage/prod, regions,
+and catalogs.
 
 Use an IAM principal with the minimum Lake Formation permissions required for the
 actions you intend to run. The package does not bypass AWS authorization and does
@@ -442,7 +495,7 @@ not turn destructive changes on by default.
 The repository includes GitHub Actions for CI and PyPI Trusted Publishing. See
 [`docs/publishing.md`](docs/publishing.md) for the release path and the exact
 PyPI publisher settings. The latest release notes are in
-[`docs/release-notes/v0.6.0.md`](docs/release-notes/v0.6.0.md), with prior
+[`docs/release-notes/v0.6.1.md`](docs/release-notes/v0.6.1.md), with prior
 release notes under [`docs/release-notes/`](docs/release-notes/).
 
 ## More docs
