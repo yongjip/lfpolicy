@@ -42,9 +42,35 @@ def ignored_resource(config: GuardrailConfig, resource: ResourceRef) -> bool:
     return any(resource_pattern_matches(pattern, resource) for pattern in config.ignore.resources)
 
 
+def lint_exception_applies(
+    config: GuardrailConfig,
+    rule: str,
+    principal: str,
+    resource: ResourceRef,
+    permissions: Iterable[str] = (),
+) -> bool:
+    """Return whether a non-expired policy exception covers a lint rule."""
+
+    requested_permissions = {str(permission).strip().upper() for permission in permissions if str(permission).strip()}
+    for exception in config.exceptions:
+        if exception.is_expired():
+            continue
+        if rule not in exception.rules:
+            continue
+        if not fnmatchcase(principal, exception.principal):
+            continue
+        if exception.resource and not resource_pattern_matches(exception.resource, resource):
+            continue
+        if exception.permissions and not requested_permissions.issubset(set(exception.permissions)):
+            continue
+        return True
+    return False
+
+
 def resource_pattern_matches(pattern: ResourcePattern, resource: ResourceRef) -> bool:
     checks = (
         (pattern.kind, resource.kind),
+        (pattern.catalog_id, resource.catalog_id),
         (pattern.database_name, resource.database_name),
         (pattern.table_name, resource.table_name),
         (pattern.location, resource.location),

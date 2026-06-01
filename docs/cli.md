@@ -336,7 +336,8 @@ lfguard validate \
 ```
 
 `validate` does not call AWS. Use it in pre-commit hooks or CI before comparing
-against live state.
+against live state. It also enforces model invariants such as unique
+`(catalog_id, name)` identities for named LF-Tag expressions.
 
 ```bash
 lfguard validate \

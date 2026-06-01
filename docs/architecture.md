@@ -11,7 +11,7 @@ pure audit and planning functions, and an optional boto3 adapter.
   assignments, grants, and optional guardrail config. These classes normalize
   input and expose JSON-compatible dictionaries.
 - `lakeformation_guard.config` contains the matching helpers for lint severity
-  overrides, ownership boundaries, and ignore rules.
+  overrides, ownership boundaries, ignore rules, and scoped policy exceptions.
 - `lakeformation_guard.audit` compares desired and current state and returns
   findings. It does not create a change plan and does not call AWS.
 - `lakeformation_guard.lint` checks desired-state semantic consistency, such as
@@ -71,6 +71,8 @@ The safety model is enforced in several places:
 - `lfguard apply` is a dry run unless `--execute` is provided.
 - Saved-plan apply can be limited by change ID, action type, and safety budgets
   before any AWS call is made.
+- Risky desired grants can be allowed only through scoped exceptions with reason,
+  expiry, and owner or approval metadata.
 - The boto3 adapter applies only actions represented by planner `Change`
   objects.
 
@@ -119,8 +121,9 @@ files, APIs, caches, or databases and wants to reuse `audit()`, `plan()`, or
 `explain()` without the default AWS adapter.
 
 The public API includes a narrow authoring layer under
-`lakeformation_guard.policy` for teams that want rigid permission groups
-instead of raw grants. See
+`lakeformation_guard.policy` for teams that want rigid permission groups and
+generic bundles such as `reader()`, `producer()`, `steward()`,
+`data_location_access()`, and `admin()` instead of raw grants. See
 [`policy-authoring-direction.md`](policy-authoring-direction.md) for the
 direction and constraints.
 

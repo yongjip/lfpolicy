@@ -8,7 +8,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 from .models import CurrentState, DesiredState, Grant, LFTagValue, ResourceRef
 from .state_index import (
     LFTagExpressionKey,
-    lf_tag_expression_definition_key,
+    lf_tag_expression_index,
     resolve_lf_tag_expression_key,
 )
 
@@ -27,6 +27,7 @@ class ExplainFinding:
     grantable_permissions: Tuple[str, ...] = field(default_factory=tuple)
     resource: Optional[ResourceRef] = None
     details: Mapping[str, Any] = field(default_factory=dict)
+    id: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "source", self.source.strip())
@@ -54,6 +55,7 @@ class ExplainFinding:
 
     def to_dict(self) -> Dict[str, Any]:
         data: Dict[str, Any] = {
+            "id": self.id,
             "source": self.source,
             "status": self.status,
             "message": self.message,
@@ -64,6 +66,18 @@ class ExplainFinding:
         if self.resource is not None:
             data["resource"] = self.resource.to_dict()
         return data
+
+    def with_id(self, finding_id: str) -> "ExplainFinding":
+        return ExplainFinding(
+            source=self.source,
+            status=self.status,
+            message=self.message,
+            permissions=self.permissions,
+            grantable_permissions=self.grantable_permissions,
+            resource=self.resource,
+            details=self.details,
+            id=finding_id,
+        )
 
 
 @dataclass(frozen=True)
@@ -173,8 +187,15 @@ def explain(
         resource=resource,
         requested_permissions=requested_permissions,
         effective_lf_tags=effective_lf_tags,
-        findings=tuple(findings),
+        findings=_assign_finding_ids(findings),
         notes=tuple(notes),
+    )
+
+
+def _assign_finding_ids(findings: Iterable[ExplainFinding]) -> Tuple[ExplainFinding, ...]:
+    return tuple(
+        finding.with_id("finding_{:03d}".format(index))
+        for index, finding in enumerate(findings, start=1)
     )
 
 
@@ -414,8 +435,8 @@ def _catalog_compatible(left: Optional[str], right: Optional[str]) -> bool:
 
 def _expression_index(state: Union[DesiredState, CurrentState]) -> Dict[LFTagExpressionKey, Tuple[LFTagValue, ...]]:
     return {
-        lf_tag_expression_definition_key(expression): expression.expression
-        for expression in state.lf_tag_expressions
+        key: expression.expression
+        for key, expression in lf_tag_expression_index(state.lf_tag_expressions).items()
     }
 
 

@@ -75,6 +75,7 @@ class ProviderExplainTests(unittest.TestCase):
         self.assertEqual(report.effective_lf_tags["domain"], ("sales",))
         self.assertEqual(report.effective_lf_tags["sensitivity"], ("internal",))
         self.assertEqual(report.findings[0].source, "direct_grant")
+        self.assertEqual(report.findings[0].id, "finding_001")
 
     def test_explain_resolves_named_lf_tag_expression_grant(self):
         current = CurrentState.from_dict(
@@ -208,6 +209,32 @@ class ProviderExplainTests(unittest.TestCase):
         self.assertEqual(report.summary()["matched"], 1)
         self.assertEqual(report.findings[0].details["expression"], {"domain": ["sales"]})
 
+    def test_explain_rejects_duplicate_lf_tag_expression_identity(self):
+        current = CurrentState.from_dict(
+            {
+                "lf_tag_expressions": [
+                    {
+                        "name": "shared",
+                        "catalog_id": "111111111111",
+                        "expression": {"domain": ["sales"]},
+                    },
+                    {
+                        "name": "shared",
+                        "catalog_id": "111111111111",
+                        "expression": {"domain": ["finance"]},
+                    },
+                ]
+            }
+        )
+
+        with self.assertRaisesRegex(ValueError, "Duplicate LF-Tag expression identity"):
+            explain(
+                DesiredState.empty(),
+                current,
+                principal="role",
+                resource=ResourceRef(kind="table", database_name="analytics", table_name="orders"),
+            )
+
     def test_explain_reports_non_matching_lf_tag_policy_conditions(self):
         current = CurrentState.from_dict(
             {
@@ -316,6 +343,7 @@ class ProviderExplainTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertEqual(payload["schema_version"], "lfguard.explain.v1")
             self.assertEqual(payload["summary"]["matched"], 1)
+            self.assertEqual(payload["findings"][0]["id"], "finding_001")
             from_boto3.assert_not_called()
 
     def test_cli_explain_outputs_markdown(self):

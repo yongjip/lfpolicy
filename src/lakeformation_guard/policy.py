@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Optional, Tuple, Type, TypeVar, Union
@@ -49,8 +49,12 @@ class PermissionTemplate(str, Enum):
 
     READER = "reader"
     EDITOR = "editor"
+    PRODUCER = "producer"
     TABLE_CREATOR = "table_creator"
     DATABASE_CREATOR = "database_creator"
+    STEWARD = "steward"
+    ADMIN = "admin"
+    DATA_LOCATION_ACCESS = "data_location_access"
 
 
 TagAssignmentScopeLike = Union[TagAssignmentScope, str]
@@ -66,10 +70,14 @@ __all__ = [
     "RoleBinding",
     "TagAssignmentScope",
     "TagKey",
+    "admin",
+    "data_location_access",
     "database_creator",
     "editor",
     "load_policy",
+    "producer",
     "reader",
+    "steward",
     "table_creator",
 ]
 
@@ -108,6 +116,8 @@ class PermissionIntent:
 
     permission_template: PermissionTemplate
     filters: Mapping[str, Tuple[str, ...]]
+    resource: Optional[ResourceRef] = None
+    permissions: Tuple[str, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -125,6 +135,7 @@ class PermissionIntent:
                 _filter_values(values)
             )
         object.__setattr__(self, "filters", normalized)
+        object.__setattr__(self, "permissions", _permission_tuple(self.permissions))
 
     def where(
         self,
@@ -136,7 +147,12 @@ class PermissionIntent:
         merged = dict(self.filters)
         for key, values in _merge_tag_mapping(filters, tag_filters, field_name="tag filter").items():
             merged[_clean_lower_token(key, field_name="tag filter key")] = _filter_values(values)
-        return PermissionIntent(permission_template=self.permission_template, filters=merged)
+        return PermissionIntent(
+            permission_template=self.permission_template,
+            filters=merged,
+            resource=self.resource,
+            permissions=self.permissions,
+        )
 
     def where_tags(self, filters: Mapping[str, Any]) -> "PermissionIntent":
         """Return a copy with tag filters from a mapping."""
@@ -156,7 +172,8 @@ class PermissionGroup:
         if not isinstance(self.intent, PermissionIntent):
             raise ValueError(
                 "permission group intent must be created by reader(), editor(), "
-                "table_creator(), or database_creator()"
+                "producer(), table_creator(), database_creator(), steward(), "
+                "admin(), or data_location_access()"
             )
 
 
@@ -450,6 +467,33 @@ class LakePolicy:
                     )
                 )
             return
+        if group.intent.permission_template in {
+            PermissionTemplate.STEWARD,
+            PermissionTemplate.ADMIN,
+            PermissionTemplate.DATA_LOCATION_ACCESS,
+        }:
+            if group.intent.filters:
+                raise ValueError(
+                    "{} permission group {!r} cannot use LF-Tag filters".format(
+                        group.intent.permission_template.value,
+                        group.name,
+                    )
+                )
+            if group.intent.resource is None:
+                raise ValueError(
+                    "{} permission group {!r} requires a direct resource".format(
+                        group.intent.permission_template.value,
+                        group.name,
+                    )
+                )
+            if not group.intent.permissions:
+                raise ValueError(
+                    "{} permission group {!r} requires permissions".format(
+                        group.intent.permission_template.value,
+                        group.name,
+                    )
+                )
+            return
 
         if not group.intent.filters:
             raise ValueError(
@@ -469,6 +513,7 @@ class LakePolicy:
                 )
             if group.intent.permission_template in {
                 PermissionTemplate.EDITOR,
+                PermissionTemplate.PRODUCER,
                 PermissionTemplate.TABLE_CREATOR,
             }:
                 if definition.can_narrow_columns:
@@ -513,14 +558,27 @@ class LakePolicy:
                     permissions=("CREATE_DATABASE",),
                 ),
             )
+        if template in {
+            PermissionTemplate.STEWARD,
+            PermissionTemplate.ADMIN,
+            PermissionTemplate.DATA_LOCATION_ACCESS,
+        }:
+            return (
+                Grant(
+                    principal=principal,
+                    resource=group.intent.resource,
+                    permissions=group.intent.permissions,
+                ),
+            )
 
         database_permissions = ("DESCRIBE",)
-        if template == PermissionTemplate.TABLE_CREATOR:
+        if template in {PermissionTemplate.PRODUCER, PermissionTemplate.TABLE_CREATOR}:
             database_permissions = ("CREATE_TABLE", "DESCRIBE")
 
         table_permissions = {
             PermissionTemplate.READER: ("DESCRIBE", "SELECT"),
             PermissionTemplate.EDITOR: ("DELETE", "DESCRIBE", "INSERT", "SELECT"),
+            PermissionTemplate.PRODUCER: ("DELETE", "DESCRIBE", "INSERT", "SELECT"),
             PermissionTemplate.TABLE_CREATOR: ("DELETE", "DESCRIBE", "INSERT", "SELECT"),
         }[template]
 
@@ -567,6 +625,12 @@ def editor() -> PermissionIntent:
     return PermissionIntent(permission_template=PermissionTemplate.EDITOR, filters={})
 
 
+def producer() -> PermissionIntent:
+    """Create tables in approved databases, and read/mutate approved tables."""
+
+    return PermissionIntent(permission_template=PermissionTemplate.PRODUCER, filters={})
+
+
 def table_creator() -> PermissionIntent:
     """Create tables in approved databases, and read/mutate approved tables."""
 
@@ -577,6 +641,39 @@ def database_creator() -> PermissionIntent:
     """Create new databases in the catalog."""
 
     return PermissionIntent(permission_template=PermissionTemplate.DATABASE_CREATOR, filters={})
+
+
+def steward(expression_name: str, *, catalog_id: Optional[str] = None) -> PermissionIntent:
+    """Use a named LF-Tag expression when granting access."""
+
+    return PermissionIntent(
+        permission_template=PermissionTemplate.STEWARD,
+        filters={},
+        resource=ResourceRef(kind="lf_tag_expression", expression_name=expression_name, catalog_id=catalog_id),
+        permissions=("DESCRIBE", "GRANT_WITH_LF_TAG_EXPRESSION"),
+    )
+
+
+def admin(*, catalog_id: Optional[str] = None) -> PermissionIntent:
+    """Create databases, LF-Tags, and named LF-Tag expressions in a catalog."""
+
+    return PermissionIntent(
+        permission_template=PermissionTemplate.ADMIN,
+        filters={},
+        resource=ResourceRef(kind="catalog", catalog_id=catalog_id),
+        permissions=("CREATE_DATABASE", "CREATE_LF_TAG", "CREATE_LF_TAG_EXPRESSION", "DESCRIBE"),
+    )
+
+
+def data_location_access(location: str, *, catalog_id: Optional[str] = None) -> PermissionIntent:
+    """Use a registered data location for approved producer workflows."""
+
+    return PermissionIntent(
+        permission_template=PermissionTemplate.DATA_LOCATION_ACCESS,
+        filters={},
+        resource=ResourceRef(kind="data_location", location=location, catalog_id=catalog_id),
+        permissions=("DATA_LOCATION_ACCESS",),
+    )
 
 
 def load_policy(path: Union[str, Path], *, object_name: str = "policy") -> LakePolicy:
@@ -675,6 +772,11 @@ def _filter_values(values: Any) -> Tuple[str, ...]:
     if isinstance(values, Iterable):
         return _string_tuple(values, field_name="tag filter values", allow_wildcard=True)
     raise ValueError("tag filter values must be a string or iterable of strings")
+
+
+def _permission_tuple(values: Iterable[str]) -> Tuple[str, ...]:
+    normalized = tuple(sorted({str(value).strip().upper() for value in values if str(value).strip()}))
+    return normalized
 
 
 def _merge_tag_mapping(

@@ -1,6 +1,6 @@
 import unittest
 
-from lakeformation_guard.models import DesiredState, LFTagKeyMetadata, ResourceRef
+from lakeformation_guard.models import DesiredState, LFTagKeyMetadata, PolicyException, ResourceRef
 
 
 class ModelTests(unittest.TestCase):
@@ -163,6 +163,59 @@ class ModelTests(unittest.TestCase):
             state.to_dict()["lf_tag_key_metadata"],
             {"domain": {"assignable_to": ["database", "table", "column"]}},
         )
+
+    def test_state_parses_policy_exceptions(self):
+        state = DesiredState.from_dict(
+            {
+                "exceptions": [
+                    {
+                        "principal": "arn:aws:iam::*:role/data-admin",
+                        "resource": {"kind": "database", "catalog_id": "111111111111", "database": "analytics"},
+                        "permissions": ["ALL"],
+                        "rules": ["allow_broad_permissions"],
+                        "reason": "break-glass admin access",
+                        "expires_at": "2099-12-31",
+                        "approved_by": "data-governance",
+                    }
+                ]
+            }
+        )
+
+        exception = state.config.exceptions[0]
+
+        self.assertEqual(exception.principal, "arn:aws:iam::*:role/data-admin")
+        self.assertEqual(exception.rules, ("allow_broad_permissions",))
+        self.assertEqual(exception.resource.catalog_id, "111111111111")
+        self.assertEqual(
+            state.to_dict()["exceptions"][0],
+            {
+                "principal": "arn:aws:iam::*:role/data-admin",
+                "rules": ["allow_broad_permissions"],
+                "reason": "break-glass admin access",
+                "expires_at": "2099-12-31",
+                "approved_by": "data-governance",
+                "resource": {"kind": "database", "catalog_id": "111111111111", "database": "analytics"},
+                "permissions": ["ALL"],
+            },
+        )
+
+    def test_policy_exception_requires_approval_metadata_and_expiry(self):
+        with self.assertRaisesRegex(ValueError, "approved_by or owner"):
+            PolicyException(
+                principal="role",
+                rules=("allow_broad_permissions",),
+                reason="temporary",
+                expires_at="2099-12-31",
+            )
+
+        with self.assertRaisesRegex(ValueError, "YYYY-MM-DD"):
+            PolicyException(
+                principal="role",
+                rules=("allow_broad_permissions",),
+                reason="temporary",
+                expires_at="tomorrow",
+                approved_by="data-governance",
+            )
 
 
 if __name__ == "__main__":

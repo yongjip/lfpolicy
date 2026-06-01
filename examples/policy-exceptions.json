@@ -1,0 +1,32 @@
+{
+  "lf_tags": {
+    "domain": ["sales"]
+  },
+  "grants": [
+    {
+      "principal": "arn:aws:iam::111122223333:role/DataAdmin",
+      "resource": {
+        "kind": "database",
+        "database": "analytics"
+      },
+      "permissions": ["ALL"]
+    }
+  ],
+  "exceptions": [
+    {
+      "principal": "arn:aws:iam::111122223333:role/DataAdmin",
+      "resource": {
+        "kind": "database",
+        "database": "analytics"
+      },
+      "permissions": ["ALL"],
+      "rules": [
+        "allow_broad_permissions",
+        "allow_named_resource_grants"
+      ],
+      "reason": "break-glass database administration",
+      "expires_at": "2099-12-31",
+      "approved_by": "data-governance"
+    }
+  ]
+}

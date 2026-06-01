@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
 
 from ._version import __version__
-from .audit import AuditFinding, audit
+from .audit import AUDIT_SCHEMA_VERSION, AuditFinding, audit
 from .aws import AWSLakeFormationAdapter
 from .explain import ExplainReport, explain as explain_access
 from .io import StateFormatError, dumps_json, dumps_yaml, load_current, load_desired
@@ -29,6 +29,7 @@ from .models import (
 from .planner import Plan, PlanOptions, plan
 from .provider import CurrentStateProvider, SnapshotFileCurrentStateProvider
 from .schema import state_json_schema
+from .state_index import lf_tag_expression_index
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -647,6 +648,9 @@ def _cmd_check(args: argparse.Namespace) -> int:
 def _cmd_validate(args: argparse.Namespace) -> int:
     desired = load_desired(args.desired)
     current = load_current(args.current_snapshot) if args.current_snapshot else None
+    _validate_state_model(desired, "desired state")
+    if current:
+        _validate_state_model(current, "current snapshot")
     desired_summary = _state_summary(desired)
     current_summary = _state_summary(current) if current else None
     _emit_output(
@@ -655,6 +659,13 @@ def _cmd_validate(args: argparse.Namespace) -> int:
         label="validation report",
     )
     return 0
+
+
+def _validate_state_model(state: GuardrailState, label: str) -> None:
+    try:
+        lf_tag_expression_index(state.lf_tag_expressions)
+    except ValueError as exc:
+        raise ValueError("{}: {}".format(label, exc)) from exc
 
 
 def _cmd_snapshot(args: argparse.Namespace) -> int:
@@ -2971,6 +2982,7 @@ def _render_findings(findings: Iterable[AuditFinding], output: str, *, sarif_uri
     if output == "json":
         return dumps_json(
             {
+                "schema_version": AUDIT_SCHEMA_VERSION,
                 "summary": summary,
                 "findings": [finding.to_dict() for finding in findings],
             }

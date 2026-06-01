@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
 from .config import unmanaged_severity
 from .models import CurrentState, DesiredState, Grant, ResourceRef
@@ -17,6 +17,9 @@ from .state_index import (
 )
 
 
+AUDIT_SCHEMA_VERSION = "lfguard.audit.v1"
+
+
 @dataclass(frozen=True)
 class AuditFinding:
     """A drift or policy finding detected during guardrail audit."""
@@ -26,15 +29,29 @@ class AuditFinding:
     target: str
     message: str
     details: Mapping[str, Any]
+    id: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "id": self.id,
             "code": self.code,
             "severity": self.severity,
             "target": self.target,
+            "principal": self.details.get("principal"),
+            "resource": self.details.get("resource"),
             "message": self.message,
             "details": dict(self.details),
         }
+
+    def with_id(self, finding_id: str) -> "AuditFinding":
+        return AuditFinding(
+            code=self.code,
+            severity=self.severity,
+            target=self.target,
+            message=self.message,
+            details=self.details,
+            id=finding_id,
+        )
 
 
 def audit(desired: DesiredState, current: CurrentState) -> Tuple[AuditFinding, ...]:
@@ -45,7 +62,14 @@ def audit(desired: DesiredState, current: CurrentState) -> Tuple[AuditFinding, .
     findings.extend(_audit_lf_tag_expressions(desired, current))
     findings.extend(_audit_resource_tags(desired, current))
     findings.extend(_audit_grants(desired, current))
-    return tuple(findings)
+    return _assign_finding_ids(findings)
+
+
+def _assign_finding_ids(findings: Iterable[AuditFinding]) -> Tuple[AuditFinding, ...]:
+    return tuple(
+        finding.with_id("finding_{:03d}".format(index))
+        for index, finding in enumerate(findings, start=1)
+    )
 
 
 def _audit_lf_tags(desired: DesiredState, current: CurrentState) -> List[AuditFinding]:

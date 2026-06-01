@@ -84,14 +84,14 @@ Use separate roles and workflows:
 
 For authoring, keep column-filtered reader intent separate from edit and create
 intent. Reader permission groups may use column-narrowing filters such as
-`contains_pii=false` when they grant only `SELECT` and `DESCRIBE`. Editor and
-table-creator groups must use tag filters that cannot be assigned to columns,
-so their effective access remains whole-table. `table_creator()` adds database-level
-`CREATE_TABLE`; `database_creator()` is separate because catalog-level
-`CREATE_DATABASE` is broader than table creation inside an approved database.
-AWS database creators also receive follow-on metadata authority on databases
-they create, so this template belongs in a narrow onboarding or catalog
-administration role.
+`contains_pii=false` when they grant only `SELECT` and `DESCRIBE`. Editor,
+producer, and table-creator groups must use tag filters that cannot be assigned
+to columns, so their effective access remains whole-table. `producer()` and
+`table_creator()` add database-level `CREATE_TABLE`; `database_creator()` and
+`admin()` are separate because catalog-level create authority is broader than
+table creation inside an approved database. AWS database creators also receive
+follow-on metadata authority on databases they create, so these templates belong
+in narrow onboarding or catalog administration roles.
 
 Store desired state in source control. Store generated snapshots and reports
 according to your organization's data classification rules because they may

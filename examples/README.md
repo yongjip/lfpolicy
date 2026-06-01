@@ -4,8 +4,13 @@ These files let you try `lfguard` without AWS credentials:
 
 - `desired.json`: a desired Lake Formation LF-Tag and grant policy.
 - `desired.yaml`: the same desired policy in YAML.
+- `policy-exceptions.json`: a narrow example of exception-controlled risky
+  access with reason, expiry, and approval metadata.
 - `policy.py`: a Python-native permission group policy that can generate
   desired state.
+- `policy-bundles.py`: a Python-native policy using generic permission bundles
+  such as `reader()`, `producer()`, `steward()`, `data_location_access()`, and
+  `admin()`.
 - `current-snapshot.json`: a deliberately incomplete current-state snapshot.
 - `github-actions/lakeformation-drift.yml`: a copyable GitHub Actions workflow
   for scheduled or manually dispatched drift checks against live AWS state. It
@@ -55,7 +60,28 @@ lfguard check --desired /tmp/lfguard-desired.json --fail-on-findings
 The example assigns LF-Tags to neutral databases, tables, and a sensitive
 column. It uses user-defined groups such as `dataconsumer`, `dataengineer`,
 `operations`, and `catalog_admin`, while the package supplies the safer
-`reader()`, `editor()`, `table_creator()`, and `database_creator()` templates.
+`reader()`, `editor()`, `producer()`, `table_creator()`,
+`database_creator()`, `steward()`, `data_location_access()`, and `admin()`
+templates.
+
+To see the newer generic bundle names:
+
+```bash
+lfguard generate examples/policy-bundles.py --output-file /tmp/lfguard-bundles.json --force
+lfguard check --desired /tmp/lfguard-bundles.json --fail-on-findings
+```
+
+## Review Exceptions
+
+Use `policy-exceptions.json` to see how intentional risky grants are scoped
+without globally weakening lint rules:
+
+```bash
+lfguard lint --desired examples/policy-exceptions.json
+```
+
+The example suppresses `ALL` and named database grant lint findings only for the
+matching principal, resource, permissions, and non-expired exception rules.
 
 ## Summarize the Policy
 

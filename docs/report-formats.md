@@ -21,6 +21,7 @@ JSON audit reports contain a severity summary and an ordered list of findings:
 
 ```json
 {
+  "schema_version": "lfguard.audit.v1",
   "summary": {
     "total": 3,
     "errors": 3,
@@ -28,9 +29,12 @@ JSON audit reports contain a severity summary and an ordered list of findings:
   },
   "findings": [
     {
+      "id": "finding_001",
       "code": "LF_TAG_VALUES_MISSING",
       "severity": "error",
       "target": "lf_tag:sensitivity",
+      "principal": null,
+      "resource": null,
       "message": "Desired LF-Tag values are missing",
       "details": {
         "tag_key": "sensitivity",
@@ -251,6 +255,7 @@ explanation status, and ordered findings:
   },
   "findings": [
     {
+      "id": "finding_001",
       "source": "named_lf_tag_policy",
       "status": "matched",
       "message": "Named LF-Tag expression 'sales_tables' matches the target's effective LF-Tags.",

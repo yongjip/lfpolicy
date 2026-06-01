@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
-from .config import lint_severity
-from .models import DesiredState, Grant, ResourceTagAssignment
+from .config import lint_exception_applies, lint_severity
+from .models import DesiredState, Grant, GuardrailConfig, PolicyException, ResourceTagAssignment
 from .state_index import (
     LFTagExpressionKey,
     duplicate_lf_tag_expression_keys,
@@ -21,6 +21,16 @@ BROAD_PERMISSIONS = {"ALL", "SUPER"}
 MUTATING_PERMISSIONS = {"ALTER", "CREATE_TABLE", "DELETE", "DROP", "INSERT"}
 TABLE_MUTATING_PERMISSIONS = {"ALTER", "DELETE", "DROP", "INSERT"}
 NAMED_GRANT_RESOURCE_KINDS = {"database", "table", "table_with_columns"}
+LINT_EXCEPTION_RULE_BY_CODE = {
+    "BROAD_PRINCIPAL_GRANT": "allow_broad_principals",
+    "BROAD_PERMISSION_GRANT": "allow_broad_permissions",
+    "MUTATING_PERMISSION_REVIEW": "allow_mutating_permissions",
+    "GRANTABLE_PERMISSION_REVIEW": "allow_grantable_permissions",
+    "NAMED_RESOURCE_GRANT_REVIEW": "allow_named_resource_grants",
+    "LF_TAG_POLICY_TABLE_SELECT_MUTATION_CONFLICT": "allow_lf_tag_policy_select_mutation",
+    "LF_TAG_POLICY_COMBINED_TABLE_SELECT_MUTATION_CONFLICT": "allow_lf_tag_policy_select_mutation",
+    "COLUMN_FILTER_MUTATING_PERMISSION_CONFLICT": "allow_column_filter_mutation",
+}
 
 
 @dataclass(frozen=True)
@@ -77,6 +87,7 @@ def lint_desired(desired: DesiredState) -> Tuple[LintFinding, ...]:
         desired.lf_tag_expressions,
         allow_duplicates=bool(duplicate_expression_keys),
     )
+    findings.extend(_lint_policy_exceptions(desired.config.exceptions))
     findings.extend(_lint_lf_tag_definitions(tag_values))
     findings.extend(_lint_duplicate_lf_tag_expression_keys(duplicate_expression_keys))
     for expression in desired.lf_tag_expressions:
@@ -90,8 +101,8 @@ def lint_desired(desired: DesiredState) -> Tuple[LintFinding, ...]:
             )
         )
     for grant in desired.grants:
-        findings.extend(_lint_grant(grant, tag_values, tag_assignment_scopes, expression_index))
-    findings.extend(_lint_combined_grant_conflicts(desired.grants, tag_assignment_scopes))
+        findings.extend(_lint_grant(grant, tag_values, tag_assignment_scopes, expression_index, desired.config))
+    findings.extend(_lint_combined_grant_conflicts(desired.grants, tag_assignment_scopes, desired.config))
     return tuple(_apply_lint_config(findings, desired))
 
 
@@ -119,6 +130,23 @@ def _lint_lf_tag_definitions(tag_values: Mapping[str, set]) -> List[LintFinding]
                     details={"values": case_sensitive_values},
                 )
             )
+    return findings
+
+
+def _lint_policy_exceptions(exceptions: Tuple[PolicyException, ...]) -> List[LintFinding]:
+    findings: List[LintFinding] = []
+    for exception in exceptions:
+        if not exception.is_expired():
+            continue
+        findings.append(
+            LintFinding(
+                code="POLICY_EXCEPTION_EXPIRED",
+                severity="error",
+                target=exception.identity,
+                message="Policy exception is expired and no longer suppresses lint findings",
+                details=exception.to_dict(),
+            )
+        )
     return findings
 
 
@@ -308,8 +336,9 @@ def _lint_grant(
     tag_values: Mapping[str, set],
     tag_assignment_scopes: Mapping[str, set],
     expression_index: Mapping[LFTagExpressionKey, Any],
+    config: GuardrailConfig,
 ) -> List[LintFinding]:
-    findings = _lint_grant_governance(grant, tag_assignment_scopes)
+    findings = _lint_grant_governance(grant, tag_assignment_scopes, config)
     if grant.resource.kind != "lf_tag_policy":
         return findings
     if grant.resource.expression_name:
@@ -443,12 +472,16 @@ def _lint_expression_item(
 def _lint_grant_governance(
     grant: Grant,
     tag_assignment_scopes: Mapping[str, set],
+    config: GuardrailConfig,
 ) -> List[LintFinding]:
     findings: List[LintFinding] = []
     target = _grant_target(grant)
     principal = _normalize_principal(grant.principal)
     if principal in BROAD_PRINCIPALS:
-        findings.append(
+        _append_governance_finding(
+            findings,
+            config,
+            grant,
             LintFinding(
                 code="BROAD_PRINCIPAL_GRANT",
                 severity="error",
@@ -458,12 +491,16 @@ def _lint_grant_governance(
                     "principal": grant.principal,
                     "resource": grant.resource.to_dict(),
                 },
-            )
+            ),
+            grant.permissions,
         )
 
     broad_permissions = sorted(set(grant.permissions) & BROAD_PERMISSIONS)
     if broad_permissions:
-        findings.append(
+        _append_governance_finding(
+            findings,
+            config,
+            grant,
             LintFinding(
                 code="BROAD_PERMISSION_GRANT",
                 severity="error",
@@ -474,15 +511,19 @@ def _lint_grant_governance(
                     "resource": grant.resource.to_dict(),
                     "permissions": broad_permissions,
                 },
-            )
+            ),
+            broad_permissions,
         )
 
     mutating_permissions = _mutating_permissions_requiring_review(grant, tag_assignment_scopes)
     if mutating_permissions:
-        findings.append(
+        _append_governance_finding(
+            findings,
+            config,
+            grant,
             LintFinding(
                 code="MUTATING_PERMISSION_REVIEW",
-                severity="warning",
+                severity="error",
                 target=target,
                 message="Mutating Lake Formation permissions should be isolated from routine read workflows",
                 details={
@@ -490,14 +531,18 @@ def _lint_grant_governance(
                     "resource": grant.resource.to_dict(),
                     "permissions": mutating_permissions,
                 },
-            )
+            ),
+            mutating_permissions,
         )
 
     if grant.grantable_permissions:
-        findings.append(
+        _append_governance_finding(
+            findings,
+            config,
+            grant,
             LintFinding(
                 code="GRANTABLE_PERMISSION_REVIEW",
-                severity="warning",
+                severity="error",
                 target=target,
                 message="Grant option delegates Lake Formation authority and should be separately reviewed",
                 details={
@@ -505,14 +550,18 @@ def _lint_grant_governance(
                     "resource": grant.resource.to_dict(),
                     "grantable_permissions": list(grant.grantable_permissions),
                 },
-            )
+            ),
+            grant.grantable_permissions,
         )
 
     if grant.resource.kind in NAMED_GRANT_RESOURCE_KINDS:
-        findings.append(
+        _append_governance_finding(
+            findings,
+            config,
+            grant,
             LintFinding(
                 code="NAMED_RESOURCE_GRANT_REVIEW",
-                severity="warning",
+                severity="error",
                 target=target,
                 message="Named database/table grants should be documented exceptions; prefer LF-Tag policy grants",
                 details={
@@ -520,7 +569,8 @@ def _lint_grant_governance(
                     "resource": grant.resource.to_dict(),
                     "permissions": list(grant.permissions),
                 },
-            )
+            ),
+            grant.permissions,
         )
 
     if (
@@ -530,7 +580,10 @@ def _lint_grant_governance(
     ):
         conflicting_permissions = sorted(set(grant.permissions) & TABLE_MUTATING_PERMISSIONS)
         if conflicting_permissions:
-            findings.append(
+            _append_governance_finding(
+                findings,
+                config,
+                grant,
                 LintFinding(
                     code="LF_TAG_POLICY_TABLE_SELECT_MUTATION_CONFLICT",
                     severity="error",
@@ -543,13 +596,17 @@ def _lint_grant_governance(
                         "resource": grant.resource.to_dict(),
                         "conflicting_permissions": conflicting_permissions,
                     },
-                )
+                ),
+                ("SELECT", *conflicting_permissions),
             )
 
     if grant.resource.kind == "table_with_columns":
         conflicting_permissions = sorted(set(grant.permissions) & TABLE_MUTATING_PERMISSIONS)
         if conflicting_permissions:
-            findings.append(
+            _append_governance_finding(
+                findings,
+                config,
+                grant,
                 LintFinding(
                     code="COLUMN_FILTER_MUTATING_PERMISSION_CONFLICT",
                     severity="error",
@@ -562,15 +619,30 @@ def _lint_grant_governance(
                         "resource": grant.resource.to_dict(),
                         "conflicting_permissions": conflicting_permissions,
                     },
-                )
+                ),
+                conflicting_permissions,
             )
 
     return findings
 
 
+def _append_governance_finding(
+    findings: List[LintFinding],
+    config: GuardrailConfig,
+    grant: Grant,
+    finding: LintFinding,
+    permissions: Iterable[str],
+) -> None:
+    rule = LINT_EXCEPTION_RULE_BY_CODE.get(finding.code)
+    if rule and lint_exception_applies(config, rule, grant.principal, grant.resource, permissions):
+        return
+    findings.append(finding)
+
+
 def _lint_combined_grant_conflicts(
     grants: Tuple[Grant, ...],
     tag_assignment_scopes: Mapping[str, set],
+    config: GuardrailConfig,
 ) -> List[LintFinding]:
     findings: List[LintFinding] = []
     combined: Dict[Tuple[str, str], Dict[str, Any]] = {}
@@ -607,7 +679,10 @@ def _lint_combined_grant_conflicts(
             permissions=tuple(sorted(permissions)),
         )
         target = _grant_target(grant)
-        findings.append(
+        _append_governance_finding(
+            findings,
+            config,
+            grant,
             LintFinding(
                 code="LF_TAG_POLICY_COMBINED_TABLE_SELECT_MUTATION_CONFLICT",
                 severity="error",
@@ -620,7 +695,8 @@ def _lint_combined_grant_conflicts(
                     "resource": grant.resource.to_dict(),
                     "conflicting_permissions": conflicting_permissions,
                 },
-            )
+            ),
+            ("SELECT", *conflicting_permissions),
         )
     return findings
 

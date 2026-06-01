@@ -110,8 +110,8 @@ matches any value for `domain`, but it still requires the resource to have the
 | Grant shape | Tag evaluation | Typical use | `lfguard` stance |
 | --- | --- | --- | --- |
 | Named catalog grant | None. The grant names the catalog. | Catalog-level administration such as `CREATE_DATABASE`. | Supported, but broad grants are linted when risky. |
-| Named database grant | None. The grant names the database. | Small exceptions or migration support. | Supported; routine named database grants are warnings. |
-| Named table grant | None. The grant names the table. | Small exceptions or emergency repair. | Supported; routine named table grants are warnings. |
+| Named database grant | None. The grant names the database. | Small exceptions or migration support. | Supported as an exception; routine named database grants are lint errors unless excepted. |
+| Named table grant | None. The grant names the table. | Small exceptions or emergency repair. | Supported as an exception; routine named table grants are lint errors unless excepted. |
 | Named table-with-columns grant | None. The grant names included columns. | Column-filtered `SELECT`. | Supported with included columns. |
 | Named data-location grant | None. The grant names an S3 location resource. | Registering and writing table data in controlled workflows. | Supported. |
 | LF-Tag policy for `DATABASE` | Matches effective database LF-Tags. | Attribute-based database `DESCRIBE`, `CREATE_TABLE`, or controlled database administration. | Preferred for scalable database access. |
@@ -235,11 +235,12 @@ become partial-column `SELECT`. Combining that with table-level mutation
 permissions for the same LF-Tag policy creates the partial-column `SELECT`
 illegal permission combinations this project blocks before apply.
 
-It reports warnings for policy that can be valid but should be reviewed as an
-exception: wildcard LF-Tag policy values, mutating permissions, grant option,
-and named database/table grants. In CI, `lfguard check --fail-on-findings`
-blocks both errors and warnings by default, which keeps the lake closer to a
-controlled database permission model.
+It reports errors for policy that can be valid but must be explicit: mutating
+permissions, grant option, and named database/table grants. Use scoped
+`exceptions` with reason, expiry, and owner or approver metadata when these are
+intentional. Wildcard LF-Tag policy values remain warnings. In CI,
+`lfguard check --fail-on-findings` blocks both errors and warnings by default,
+which keeps the lake closer to a controlled database permission model.
 
 ## Review Checklist
 

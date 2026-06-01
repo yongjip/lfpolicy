@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any, Dict, FrozenSet, Iterable, Mapping, Optional, Tuple, Type, TypeVar
 
@@ -21,6 +22,19 @@ TAG_ASSIGNMENT_SCOPES = {"database", "table", "column"}
 TAG_ASSIGNMENT_SCOPE_ORDER = {"database": 0, "table": 1, "column": 2}
 LINT_SEVERITIES = {"error", "warning", "ignore"}
 UNMANAGED_ACTIONS = {"warn", "warning", "error", "ignore"}
+EXCEPTION_RULES = {
+    "allow_broad_principals",
+    "allow_broad_permissions",
+    "allow_mutating_permissions",
+    "allow_grantable_permissions",
+    "allow_named_resource_grants",
+    "allow_lf_tag_policy_select_mutation",
+    "allow_column_filter_mutation",
+}
+EXCEPTION_RULE_ALIASES = {
+    "allow_broad_principal": "allow_broad_principals",
+    "allow_named_resource_grant": "allow_named_resource_grants",
+}
 
 
 def _normalize_kind(value: str) -> str:
@@ -438,6 +452,7 @@ class ResourcePattern:
     """Pattern used by ownership and ignore rules."""
 
     kind: Optional[str] = None
+    catalog_id: Optional[str] = None
     database_name: Optional[str] = None
     table_name: Optional[str] = None
     location: Optional[str] = None
@@ -448,11 +463,12 @@ class ResourcePattern:
         if kind is not None:
             kind = _normalize_kind(kind)
         object.__setattr__(self, "kind", kind)
+        object.__setattr__(self, "catalog_id", _optional_str(self.catalog_id))
         object.__setattr__(self, "database_name", _optional_str(self.database_name))
         object.__setattr__(self, "table_name", _optional_str(self.table_name))
         object.__setattr__(self, "location", _optional_str(self.location))
         object.__setattr__(self, "expression_name", _optional_str(self.expression_name))
-        if not any((self.kind, self.database_name, self.table_name, self.location, self.expression_name)):
+        if not any((self.kind, self.catalog_id, self.database_name, self.table_name, self.location, self.expression_name)):
             raise ValueError("Resource ignore/ownership pattern must not be empty")
 
     @classmethod
@@ -463,6 +479,8 @@ class ResourcePattern:
         if len(raw_mapping) == 1:
             key, value = next(iter(raw_mapping.items()))
             key_text = str(key)
+            if key_text in {"catalog", "catalog_id"}:
+                return cls(catalog_id=str(value))
             if key_text in {"database", "database_name"}:
                 return cls(database_name=str(value))
             if key_text in {"table", "table_name"}:
@@ -473,6 +491,7 @@ class ResourcePattern:
                 return cls(expression_name=str(value))
         return cls(
             kind=_resource_name(raw_mapping, "kind"),
+            catalog_id=_resource_name(raw_mapping, "catalog_id", "catalog"),
             database_name=_resource_name(raw_mapping, "database", "database_name"),
             table_name=_resource_name(raw_mapping, "table", "table_name"),
             location=_resource_name(raw_mapping, "location", "resource_arn", "arn"),
@@ -483,6 +502,8 @@ class ResourcePattern:
         data: Dict[str, Any] = {}
         if self.kind:
             data["kind"] = self.kind
+        if self.catalog_id:
+            data["catalog_id"] = self.catalog_id
         if self.database_name:
             data["database"] = self.database_name
         if self.table_name:
@@ -575,12 +596,110 @@ class IgnoreConfig:
 
 
 @dataclass(frozen=True)
+class PolicyException:
+    """Scoped exception that can suppress specific governance lint rules."""
+
+    principal: str
+    rules: Tuple[str, ...]
+    reason: str
+    expires_at: str
+    approved_by: Optional[str] = None
+    owner: Optional[str] = None
+    resource: Optional[ResourcePattern] = None
+    permissions: Tuple[str, ...] = field(default_factory=tuple)
+
+    def __post_init__(self) -> None:
+        principal = self.principal.strip()
+        if not principal:
+            raise ValueError("exceptions[].principal must not be empty")
+        object.__setattr__(self, "principal", principal)
+
+        reason = self.reason.strip()
+        if not reason:
+            raise ValueError("exceptions[].reason must not be empty")
+        object.__setattr__(self, "reason", reason)
+
+        approved_by = _optional_str(self.approved_by)
+        owner = _optional_str(self.owner)
+        if not approved_by and not owner:
+            raise ValueError("exceptions[] requires approved_by or owner")
+        object.__setattr__(self, "approved_by", approved_by)
+        object.__setattr__(self, "owner", owner)
+
+        expires_at = _optional_str(self.expires_at)
+        if not expires_at:
+            raise ValueError("exceptions[].expires_at must not be empty")
+        try:
+            date.fromisoformat(expires_at)
+        except ValueError as exc:
+            raise ValueError("exceptions[].expires_at must use YYYY-MM-DD") from exc
+        object.__setattr__(self, "expires_at", expires_at)
+
+        normalized_rules = tuple(sorted({_normalize_exception_rule(rule) for rule in self.rules}))
+        if not normalized_rules:
+            raise ValueError("exceptions[].rules must contain at least one rule")
+        object.__setattr__(self, "rules", normalized_rules)
+        object.__setattr__(
+            self,
+            "permissions",
+            tuple(sorted({str(permission).strip().upper() for permission in self.permissions if str(permission).strip()})),
+        )
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "PolicyException":
+        resource = (
+            ResourcePattern.from_raw(raw["resource"])
+            if raw.get("resource") is not None
+            else None
+        )
+        return cls(
+            principal=str(raw.get("principal", "")),
+            rules=_values_from_raw(raw.get("rules", ()), field_name="exceptions[].rules"),
+            reason=str(raw.get("reason", "")),
+            expires_at=str(raw.get("expires_at", "")),
+            approved_by=_resource_name(raw, "approved_by"),
+            owner=_resource_name(raw, "owner"),
+            resource=resource,
+            permissions=_optional_string_tuple(raw.get("permissions", ()), "exceptions[].permissions"),
+        )
+
+    @property
+    def identity(self) -> str:
+        return "exception:{}:{}".format(self.principal, ",".join(self.rules))
+
+    @property
+    def expires_on(self) -> date:
+        return date.fromisoformat(self.expires_at)
+
+    def is_expired(self, today: Optional[date] = None) -> bool:
+        return self.expires_on < (today or date.today())
+
+    def to_dict(self) -> Dict[str, Any]:
+        data: Dict[str, Any] = {
+            "principal": self.principal,
+            "rules": list(self.rules),
+            "reason": self.reason,
+            "expires_at": self.expires_at,
+        }
+        if self.approved_by:
+            data["approved_by"] = self.approved_by
+        if self.owner:
+            data["owner"] = self.owner
+        if self.resource:
+            data["resource"] = self.resource.to_dict()
+        if self.permissions:
+            data["permissions"] = list(self.permissions)
+        return data
+
+
+@dataclass(frozen=True)
 class GuardrailConfig:
     """Optional guardrail behavior configuration embedded in desired state."""
 
     lint: Mapping[str, str] = field(default_factory=dict)
     ownership: OwnershipConfig = field(default_factory=OwnershipConfig)
     ignore: IgnoreConfig = field(default_factory=IgnoreConfig)
+    exceptions: Tuple[PolicyException, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         normalized: Dict[str, str] = {}
@@ -592,6 +711,7 @@ class GuardrailConfig:
             if code:
                 normalized[code] = value
         object.__setattr__(self, "lint", normalized)
+        object.__setattr__(self, "exceptions", tuple(sorted(self.exceptions, key=lambda item: item.identity)))
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, Any]) -> "GuardrailConfig":
@@ -606,10 +726,20 @@ class GuardrailConfig:
             if raw.get("ignore") is not None
             else IgnoreConfig()
         )
-        return cls(lint={str(key): str(value) for key, value in lint.items()}, ownership=ownership, ignore=ignore)
+        exceptions_raw = raw.get("exceptions", ()) if raw.get("exceptions") is not None else ()
+        exceptions = tuple(
+            PolicyException.from_dict(_require_mapping(item, "exceptions[]"))
+            for item in exceptions_raw
+        )
+        return cls(
+            lint={str(key): str(value) for key, value in lint.items()},
+            ownership=ownership,
+            ignore=ignore,
+            exceptions=exceptions,
+        )
 
     def is_default(self) -> bool:
-        return not self.lint and self.ownership.is_default() and self.ignore.is_default()
+        return not self.lint and self.ownership.is_default() and self.ignore.is_default() and not self.exceptions
 
     def to_dict(self) -> Dict[str, Any]:
         data: Dict[str, Any] = {}
@@ -619,6 +749,8 @@ class GuardrailConfig:
             data["ownership"] = self.ownership.to_dict()
         if not self.ignore.is_default():
             data["ignore"] = self.ignore.to_dict()
+        if self.exceptions:
+            data["exceptions"] = [exception.to_dict() for exception in self.exceptions]
         return data
 
 
@@ -748,6 +880,19 @@ class DesiredState(GuardrailState):
 
 class CurrentState(GuardrailState):
     """Observed Lake Formation policy state."""
+
+
+def _normalize_exception_rule(value: str) -> str:
+    rule = str(value).strip().lower().replace("-", "_")
+    rule = EXCEPTION_RULE_ALIASES.get(rule, rule)
+    if rule not in EXCEPTION_RULES:
+        raise ValueError(
+            "exceptions[].rules contains unsupported rule {!r}. Expected one of: {}".format(
+                value,
+                ", ".join(sorted(EXCEPTION_RULES)),
+            )
+        )
+    return rule
 
 
 def _require_mapping(value: Any, field_name: str) -> Mapping[str, Any]:

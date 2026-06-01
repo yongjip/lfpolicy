@@ -80,6 +80,10 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
         },
         "ownership": {"$ref": "#/$defs/ownershipConfig"},
         "ignore": {"$ref": "#/$defs/ignoreConfig"},
+        "exceptions": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/policyException"},
+        },
     },
     "$defs": {
         "lfTagDefinition": {
@@ -301,6 +305,48 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
                 },
             },
         },
+        "policyException": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["principal", "rules", "reason", "expires_at"],
+            "properties": {
+                "principal": _STRING_VALUE,
+                "resource": {"$ref": "#/$defs/resourcePattern"},
+                "permissions": _VALUE_LIST,
+                "rules": {
+                    "oneOf": [
+                        {"$ref": "#/$defs/exceptionRule"},
+                        {
+                            "type": "array",
+                            "items": {"$ref": "#/$defs/exceptionRule"},
+                            "minItems": 1,
+                            "uniqueItems": True,
+                        },
+                    ],
+                },
+                "reason": _STRING_VALUE,
+                "expires_at": {"type": "string", "format": "date"},
+                "approved_by": _STRING_VALUE,
+                "owner": _STRING_VALUE,
+            },
+            "anyOf": [
+                {"required": ["approved_by"]},
+                {"required": ["owner"]},
+            ],
+        },
+        "exceptionRule": {
+            "enum": [
+                "allow_broad_principals",
+                "allow_broad_principal",
+                "allow_broad_permissions",
+                "allow_mutating_permissions",
+                "allow_grantable_permissions",
+                "allow_named_resource_grants",
+                "allow_named_resource_grant",
+                "allow_lf_tag_policy_select_mutation",
+                "allow_column_filter_mutation",
+            ]
+        },
         "resourcePattern": {
             "oneOf": [
                 _STRING_VALUE,
@@ -308,7 +354,7 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
                     "type": "object",
                     "minProperties": 1,
                     "additionalProperties": False,
-                    "properties": {
+                        "properties": {
                         "kind": {
                             "enum": [
                                 "catalog",
@@ -320,6 +366,7 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
                                 "lf_tag_expression",
                             ]
                         },
+                        "catalog_id": _STRING_VALUE,
                         "database": _STRING_VALUE,
                         "table": _STRING_VALUE,
                         "location": _STRING_VALUE,

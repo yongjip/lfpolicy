@@ -50,6 +50,10 @@ class AuditCliTests(unittest.TestCase):
                 "GRANT_PERMISSIONS_UNMANAGED",
             },
         )
+        self.assertEqual(
+            [finding.id for finding in findings],
+            ["finding_001", "finding_002", "finding_003", "finding_004"],
+        )
 
     def test_cli_plan_outputs_json(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -332,11 +336,15 @@ class AuditCliTests(unittest.TestCase):
 
             payload = json.loads(stdout.getvalue())
             self.assertEqual(exit_code, 0)
+            self.assertEqual(payload["schema_version"], "lfguard.audit.v1")
             self.assertEqual(payload["summary"], {"total": 2, "errors": 1, "warnings": 1})
             self.assertEqual(
                 [finding["code"] for finding in payload["findings"]],
                 ["LF_TAG_VALUES_MISSING", "LF_TAG_VALUES_UNMANAGED"],
             )
+            self.assertEqual([finding["id"] for finding in payload["findings"]], ["finding_001", "finding_002"])
+            self.assertIsNone(payload["findings"][0]["principal"])
+            self.assertIsNone(payload["findings"][0]["resource"])
 
     def test_cli_audit_outputs_sarif(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1585,6 +1593,53 @@ class AuditCliTests(unittest.TestCase):
             self.assertIn("Desired state is valid", report)
             self.assertIn("Current snapshot is valid", report)
 
+    def test_cli_validate_rejects_duplicate_lf_tag_expression_identity_in_snapshot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            desired_path = tmp_path / "desired.json"
+            current_path = tmp_path / "current.json"
+            desired_path.write_text(json.dumps({"lf_tags": {}, "resource_tags": [], "grants": []}), encoding="utf-8")
+            current_path.write_text(
+                json.dumps(
+                    {
+                        "lf_tag_expressions": [
+                            {
+                                "name": "shared",
+                                "catalog_id": "111111111111",
+                                "expression": {"domain": ["sales"]},
+                            },
+                            {
+                                "name": "shared",
+                                "catalog_id": "111111111111",
+                                "expression": {"domain": ["finance"]},
+                            },
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                exit_code = main(
+                    [
+                        "validate",
+                        "--desired",
+                        str(desired_path),
+                        "--current-snapshot",
+                        str(current_path),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 2)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertIn(
+                "current snapshot: Duplicate LF-Tag expression identity: "
+                "lf_tag_expression:catalog=111111111111:name=shared",
+                stderr.getvalue(),
+            )
+
     def test_lint_desired_api_reports_undefined_tag_references(self):
         desired = DesiredState.from_dict(
             {
@@ -1712,7 +1767,85 @@ class AuditCliTests(unittest.TestCase):
         self.assertIn("BROAD_PERMISSION_GRANT", codes)
         self.assertEqual(
             {finding.code for finding in findings if finding.severity == "error"},
-            {"BROAD_PRINCIPAL_GRANT", "BROAD_PERMISSION_GRANT"},
+            {
+                "BROAD_PRINCIPAL_GRANT",
+                "BROAD_PERMISSION_GRANT",
+                "GRANTABLE_PERMISSION_REVIEW",
+                "MUTATING_PERMISSION_REVIEW",
+                "NAMED_RESOURCE_GRANT_REVIEW",
+            },
+        )
+
+    def test_lint_policy_exceptions_suppress_only_matching_governance_rules(self):
+        desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "arn:aws:iam::111122223333:role/DataAdmin",
+                        "resource": {"kind": "database", "database": "analytics"},
+                        "permissions": ["ALL"],
+                    },
+                    {
+                        "principal": "arn:aws:iam::111122223333:role/OtherAdmin",
+                        "resource": {"kind": "database", "database": "analytics"},
+                        "permissions": ["ALL"],
+                    },
+                ],
+                "exceptions": [
+                    {
+                        "principal": "arn:aws:iam::111122223333:role/DataAdmin",
+                        "resource": {"kind": "database", "database": "analytics"},
+                        "permissions": ["ALL"],
+                        "rules": ["allow_broad_permissions", "allow_named_resource_grants"],
+                        "reason": "break-glass database administration",
+                        "expires_at": "2099-12-31",
+                        "approved_by": "data-governance",
+                    }
+                ],
+            }
+        )
+
+        findings = lint_desired(desired)
+
+        self.assertEqual(
+            [(finding.code, finding.details["principal"]) for finding in findings],
+            [
+                ("BROAD_PERMISSION_GRANT", "arn:aws:iam::111122223333:role/OtherAdmin"),
+                ("NAMED_RESOURCE_GRANT_REVIEW", "arn:aws:iam::111122223333:role/OtherAdmin"),
+            ],
+        )
+
+    def test_lint_reports_expired_policy_exception_and_does_not_suppress(self):
+        desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "arn:aws:iam::111122223333:role/DataAdmin",
+                        "resource": {"kind": "database", "database": "analytics"},
+                        "permissions": ["ALL"],
+                    }
+                ],
+                "exceptions": [
+                    {
+                        "principal": "arn:aws:iam::111122223333:role/DataAdmin",
+                        "rules": ["allow_broad_permissions", "allow_named_resource_grants"],
+                        "reason": "old temporary access",
+                        "expires_at": "2000-01-01",
+                        "owner": "data-platform",
+                    }
+                ],
+            }
+        )
+
+        findings = lint_desired(desired)
+
+        self.assertEqual(
+            [finding.code for finding in findings],
+            [
+                "POLICY_EXCEPTION_EXPIRED",
+                "BROAD_PERMISSION_GRANT",
+                "NAMED_RESOURCE_GRANT_REVIEW",
+            ],
         )
 
     def test_lint_desired_api_blocks_partial_column_permission_conflicts(self):

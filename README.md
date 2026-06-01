@@ -4,10 +4,11 @@
 [![PyPI](https://img.shields.io/pypi/v/lfguard.svg)](https://pypi.org/project/lfguard/)
 [![Python](https://img.shields.io/pypi/pyversions/lfguard.svg)](https://pypi.org/project/lfguard/)
 
-`lfguard` is an opinionated Python package for AWS Lake Formation
-and Glue Data Catalog guardrails. It compares a desired LF-Tag and permission
-policy against current state, reports drift, produces a conservative change plan,
-and can apply only the changes that you explicitly allow.
+`lfguard` is a strict framework for defining, validating, explaining, planning,
+and safely applying AWS Lake Formation data permissions. It compares a desired
+LF-Tag and permission policy against current state, reports drift, produces a
+conservative change plan, and can apply only the changes that you explicitly
+allow.
 
 The import package is `lakeformation_guard`; the CLI command is `lfguard`.
 
@@ -43,6 +44,8 @@ desired-state file so drift checks stay focused and reviewable.
 - Works offline from snapshots, which makes CI drift checks possible.
 - Lints desired policy for undefined LF-Tag keys and values before AWS access.
 - Explains why access exists or is missing before changing policy.
+- Captures risky access exceptions with reason, owner or approver, expiry, and
+  scoped rules instead of forcing broad lint ignores.
 - Keeps the Python API dependency-light while isolating boto3 in the AWS adapter.
 - Produces text, JSON, Markdown, and SARIF output suitable for pull request
   comments, release checks, code scanning, and platform automation.
@@ -69,7 +72,8 @@ principals, `ALL`/`SUPER`, LF-Tag table policies that mix `SELECT` with
 `ALTER`/`DELETE`/`DROP`/`INSERT`, and other patterns that make a lake harder to
 govern like a controlled database.
 Existing environments can tune lint severities in desired state with a top-level
-`lint` section while strict defaults remain in place when no override is set.
+`lint` section, or use scoped `exceptions` when one risky grant is intentional
+and should carry approval evidence.
 
 ## Common use cases
 
@@ -96,6 +100,10 @@ It explains how IAM, Glue Data Catalog resources, Lake Formation grants,
 LF-Tags, `IAMAllowedPrincipals`, hybrid access mode, and data filters fit
 together, then calls out the small set of best practices and antipatterns that
 shape `lfguard`'s conservative defaults.
+
+For the framework lifecycle, provider boundary, exception model, and stable
+evidence outputs, see
+[`docs/permission-framework.md`](docs/permission-framework.md).
 
 ## Install
 
@@ -230,8 +238,12 @@ The built-in templates are intentionally small:
 | --- | --- |
 | `reader()` | `DESCRIBE` databases and `DESCRIBE`/`SELECT` matching tables. Column-narrowing LF-Tags are allowed. |
 | `editor()` | `DESCRIBE` databases and `DESCRIBE`/`SELECT`/`INSERT`/`DELETE` matching whole tables. Column-narrowing LF-Tags are rejected. |
+| `producer()` | `DESCRIBE`/`CREATE_TABLE` matching databases and editor-style table access for producer workflows. Column-narrowing LF-Tags are rejected. |
 | `table_creator()` | `DESCRIBE`/`CREATE_TABLE` matching databases and editor-style table access. Column-narrowing LF-Tags are rejected. |
 | `database_creator()` | Catalog-level `CREATE_DATABASE`. No LF-Tag filter is used because AWS grants this on the catalog. Use sparingly; AWS gives database creators follow-on metadata authority on databases they create. |
+| `steward("expr")` | `DESCRIBE` and `GRANT_WITH_LF_TAG_EXPRESSION` on one named LF-Tag expression. No LF-Tag filter is used. |
+| `data_location_access("arn")` | `DATA_LOCATION_ACCESS` on one registered data location. No LF-Tag filter is used. |
+| `admin()` | Catalog-level `CREATE_DATABASE`, `CREATE_LF_TAG`, `CREATE_LF_TAG_EXPRESSION`, and `DESCRIBE`. It does not grant `ALL`, `SUPER`, or grant option. |
 
 Raw JSON and YAML remain supported for lower-level workflows and use the same
 shape:
@@ -411,7 +423,7 @@ not turn destructive changes on by default.
 The repository includes GitHub Actions for CI and PyPI Trusted Publishing. See
 [`docs/publishing.md`](docs/publishing.md) for the release path and the exact
 PyPI publisher settings. The latest release notes are in
-[`docs/release-notes/v0.4.4.md`](docs/release-notes/v0.4.4.md), with prior
+[`docs/release-notes/v0.5.0.md`](docs/release-notes/v0.5.0.md), with prior
 release notes under [`docs/release-notes/`](docs/release-notes/).
 
 ## More docs

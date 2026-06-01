@@ -10,10 +10,14 @@ from lakeformation_guard.policy import (
     LakePolicy,
     PermissionTemplate,
     TagAssignmentScope,
+    admin,
+    data_location_access,
     database_creator,
     editor,
     load_policy,
+    producer,
     reader,
+    steward,
     table_creator,
 )
 
@@ -289,6 +293,28 @@ class PolicyAuthoringTests(unittest.TestCase):
         self.assertNotIn("LF_TAG_POLICY_TABLE_SELECT_MUTATION_CONFLICT", finding_codes)
         self.assertNotIn("LF_TAG_POLICY_COMBINED_TABLE_SELECT_MUTATION_CONFLICT", finding_codes)
 
+    def test_to_desired_state_generates_producer_grants_that_lint_without_errors(self):
+        policy = LakePolicy()
+        policy.tag_key(
+            "domain",
+            values=["sales", "finance"],
+            assignable_to=[TagAssignmentScope.DATABASE, TagAssignmentScope.TABLE],
+        )
+        policy.group("producer", producer().where(domain="sales"))
+        policy.bind_role("arn:aws:iam::111122223333:role/Producer", "producer")
+
+        desired = policy.to_desired_state()
+        findings = lint_desired(desired)
+
+        self.assertEqual(
+            [grant.permissions for grant in desired.grants],
+            [
+                ("CREATE_TABLE", "DESCRIBE"),
+                ("DELETE", "DESCRIBE", "INSERT", "SELECT"),
+            ],
+        )
+        self.assertFalse(findings)
+
     def test_to_desired_state_generates_database_creator_catalog_grant(self):
         policy = LakePolicy()
         policy.group("catalog_admin", database_creator())
@@ -302,6 +328,45 @@ class PolicyAuthoringTests(unittest.TestCase):
         self.assertEqual(len(desired.grants), 1)
         self.assertEqual(desired.grants[0].resource.kind, "catalog")
         self.assertEqual(desired.grants[0].permissions, ("CREATE_DATABASE",))
+
+    def test_to_desired_state_generates_direct_bundle_grants(self):
+        policy = LakePolicy()
+        policy.group("steward", steward("sales_tables", catalog_id="111111111111"))
+        policy.group("location", data_location_access("arn:aws:s3:::analytics-lake/raw/"))
+        policy.group("admin", admin(catalog_id="111111111111"))
+        policy.bind_role(
+            "arn:aws:iam::111122223333:role/DataSteward",
+            ["steward", "location", "admin"],
+        )
+
+        desired = policy.to_desired_state()
+        grants = {grant.resource.kind: grant for grant in desired.grants}
+
+        self.assertEqual(
+            grants["lf_tag_expression"].resource.to_dict(),
+            {
+                "kind": "lf_tag_expression",
+                "catalog_id": "111111111111",
+                "expression_name": "sales_tables",
+            },
+        )
+        self.assertEqual(
+            grants["lf_tag_expression"].permissions,
+            ("DESCRIBE", "GRANT_WITH_LF_TAG_EXPRESSION"),
+        )
+        self.assertEqual(grants["data_location"].permissions, ("DATA_LOCATION_ACCESS",))
+        self.assertEqual(
+            grants["catalog"].permissions,
+            ("CREATE_DATABASE", "CREATE_LF_TAG", "CREATE_LF_TAG_EXPRESSION", "DESCRIBE"),
+        )
+        self.assertFalse(lint_desired(desired))
+
+    def test_direct_bundle_rejects_tag_filters(self):
+        policy = LakePolicy()
+        policy.group("location", data_location_access("arn:aws:s3:::analytics-lake/raw/").where(domain="sales"))
+
+        with self.assertRaisesRegex(ValueError, "cannot use LF-Tag filters"):
+            policy.validate()
 
     def test_write_desired_writes_json(self):
         policy = LakePolicy()
@@ -338,6 +403,7 @@ policy.bind_role("arn:aws:iam::111122223333:role/DataConsumer", "dataconsumer")
     def test_templates_are_named_for_user_defined_groups(self):
         self.assertEqual(reader().permission_template, PermissionTemplate.READER)
         self.assertEqual(editor().permission_template, PermissionTemplate.EDITOR)
+        self.assertEqual(producer().permission_template, PermissionTemplate.PRODUCER)
         self.assertEqual(
             table_creator().permission_template,
             PermissionTemplate.TABLE_CREATOR,
@@ -345,6 +411,15 @@ policy.bind_role("arn:aws:iam::111122223333:role/DataConsumer", "dataconsumer")
         self.assertEqual(
             database_creator().permission_template,
             PermissionTemplate.DATABASE_CREATOR,
+        )
+        self.assertEqual(
+            steward("sales_tables").permission_template,
+            PermissionTemplate.STEWARD,
+        )
+        self.assertEqual(admin().permission_template, PermissionTemplate.ADMIN)
+        self.assertEqual(
+            data_location_access("arn:aws:s3:::analytics-lake/raw/").permission_template,
+            PermissionTemplate.DATA_LOCATION_ACCESS,
         )
 
     def test_ambiguous_creator_template_is_not_public_api(self):

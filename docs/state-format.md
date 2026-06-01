@@ -13,7 +13,8 @@ now.
   "grants": [],
   "lint": {},
   "ownership": {},
-  "ignore": {}
+  "ignore": {},
+  "exceptions": []
 }
 ```
 
@@ -357,6 +358,50 @@ fields it names, so `{"database": "legacy_*"}` matches database-scoped resources
 with that database name even when the resource kind is `table` or
 `table_with_columns`. Use `{"kind": "database", "database": "legacy_*"}` when
 the kind itself should also be constrained.
+
+## Policy Exceptions
+
+Use `exceptions` for intentional governance exceptions that should be reviewable
+without globally weakening a lint rule. Exceptions are scoped to one principal
+pattern, may also constrain a resource pattern and permissions, and must include
+a reason, expiry date, and either `approved_by` or `owner`.
+
+```json
+{
+  "exceptions": [
+    {
+      "principal": "arn:aws:iam::111122223333:role/DataAdmin",
+      "resource": {
+        "kind": "database",
+        "database": "analytics"
+      },
+      "permissions": ["ALL"],
+      "rules": [
+        "allow_broad_permissions",
+        "allow_named_resource_grants"
+      ],
+      "reason": "break-glass database administration",
+      "expires_at": "2099-12-31",
+      "approved_by": "data-governance"
+    }
+  ]
+}
+```
+
+Supported rules are:
+
+- `allow_broad_principals`
+- `allow_broad_permissions`
+- `allow_mutating_permissions`
+- `allow_grantable_permissions`
+- `allow_named_resource_grants`
+- `allow_lf_tag_policy_select_mutation`
+- `allow_column_filter_mutation`
+
+Expired exceptions do not suppress lint findings and are reported as
+`POLICY_EXCEPTION_EXPIRED`. Undefined LF-Tags, undefined named LF-Tag
+expressions, duplicate identities, and malformed state remain hard errors rather
+than exception-controlled policy choices.
 
 ## Normalization
 

@@ -58,6 +58,19 @@
       ],
       "type": "object"
     },
+    "exceptionRule": {
+      "enum": [
+        "allow_broad_principals",
+        "allow_broad_principal",
+        "allow_broad_permissions",
+        "allow_mutating_permissions",
+        "allow_grantable_permissions",
+        "allow_named_resource_grants",
+        "allow_named_resource_grant",
+        "allow_lf_tag_policy_select_mutation",
+        "allow_column_filter_mutation"
+      ]
+    },
     "grant": {
       "additionalProperties": false,
       "properties": {
@@ -355,6 +368,85 @@
       },
       "type": "object"
     },
+    "policyException": {
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "approved_by"
+          ]
+        },
+        {
+          "required": [
+            "owner"
+          ]
+        }
+      ],
+      "properties": {
+        "approved_by": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date",
+          "type": "string"
+        },
+        "owner": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "permissions": {
+          "oneOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
+          ]
+        },
+        "principal": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "resource": {
+          "$ref": "#/$defs/resourcePattern"
+        },
+        "rules": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/exceptionRule"
+            },
+            {
+              "items": {
+                "$ref": "#/$defs/exceptionRule"
+              },
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
+          ]
+        }
+      },
+      "required": [
+        "principal",
+        "rules",
+        "reason",
+        "expires_at"
+      ],
+      "type": "object"
+    },
     "resource": {
       "oneOf": [
         {
@@ -390,6 +482,10 @@
           "additionalProperties": false,
           "minProperties": 1,
           "properties": {
+            "catalog_id": {
+              "minLength": 1,
+              "type": "string"
+            },
             "database": {
               "minLength": 1,
               "type": "string"
@@ -546,6 +642,12 @@
   "additionalProperties": false,
   "description": "Desired or current AWS Lake Formation LF-Tag guardrail state.",
   "properties": {
+    "exceptions": {
+      "items": {
+        "$ref": "#/$defs/policyException"
+      },
+      "type": "array"
+    },
     "grants": {
       "items": {
         "$ref": "#/$defs/grant"

@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+## 0.5.0
+
+- Adds `lfguard.audit.v1` JSON schema metadata and deterministic audit
+  `finding_001` identifiers.
+- Adds deterministic `finding_001` identifiers to explain JSON and the
+  importable `ExplainReport` findings.
+- Adds scoped policy exceptions with required reason, expiry, and owner or
+  approver metadata.
+- Makes mutating, grantable, and named-resource governance lint findings errors
+  by default unless covered by a matching non-expired exception or lint override.
+- Extends `validate` to reject duplicate named LF-Tag expression identities in
+  desired state and current snapshots.
+- Adds generic policy bundle primitives: `producer()`, `steward()`, `admin()`,
+  and `data_location_access()`, alongside the existing `reader()`, `editor()`,
+  `table_creator()`, and `database_creator()`.
+- Adds framework documentation and a policy-exception example.
+
 ## 0.4.4
 
 - Rejects duplicate named LF-Tag expressions with the same exact
