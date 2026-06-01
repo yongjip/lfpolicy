@@ -22,7 +22,13 @@ class AwsAdapterMotoTests(unittest.TestCase):
             adapter = AWSLakeFormationAdapter(client)
             desired = DesiredState.from_dict(
                 {
-                    "lf_tags": {"domain": ["sales"]},
+                    "lf_tags": [
+                        {
+                            "key": "domain",
+                            "catalog_id": "123456789012",
+                            "values": ["sales"],
+                        }
+                    ],
                     "resource_tags": [
                         {
                             "resource": {
@@ -52,7 +58,7 @@ class AwsAdapterMotoTests(unittest.TestCase):
 
         self.assertEqual(
             [tag.to_dict() for tag in current.lf_tags],
-            [{"key": "domain", "values": ["sales"]}],
+            [{"key": "domain", "catalog_id": "123456789012", "values": ["sales"]}],
         )
         self.assertEqual(len(current.grants), 1)
         self.assertEqual(current.grants[0].permissions, ("DESCRIBE", "SELECT"))
