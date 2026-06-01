@@ -115,12 +115,17 @@ class PackageMetadataTests(unittest.TestCase):
         self.assertIn('"v*"', workflow)
         self.assertIn("package_version=", workflow)
         self.assertIn("release_version=", workflow)
+        self.assertIn("Check PyPI version", workflow)
+        self.assertIn("pypi-version-exists", workflow)
+        self.assertIn("https://pypi.org/pypi/lfguard/{}/json", workflow)
         self.assertIn("Verify distribution versions", workflow)
         self.assertIn("dist/lfguard-${version}.tar.gz", workflow)
         self.assertIn("lfguard-{}.dist-info/METADATA", workflow)
         self.assertIn("lfguard-{}/PKG-INFO", workflow)
         self.assertIn("verify-pypi:", workflow)
-        self.assertIn("needs: publish", workflow)
+        self.assertIn("if: needs.build.outputs.pypi-version-exists != 'true'", workflow)
+        self.assertIn("needs: [build, publish]", workflow)
+        self.assertIn("needs.publish.result == 'skipped'", workflow)
         self.assertIn(
             "RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}",
             workflow,

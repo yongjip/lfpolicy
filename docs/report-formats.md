@@ -222,6 +222,7 @@ changes:
 
 ```json
 {
+  "schema_version": "lfguard.plan.v1",
   "summary": {
     "total": 3,
     "safe": 3,
@@ -229,10 +230,24 @@ changes:
   },
   "changes": [
     {
+      "id": "change_001",
       "action": "lf_tag.add_values",
       "target": "lf_tag:sensitivity",
       "reason": "LF-Tag is missing allowed values",
       "destructive": false,
+      "risk": "safe",
+      "principal": null,
+      "resource": null,
+      "before": {
+        "tag_key": "sensitivity",
+        "tag_values": ["public"]
+      },
+      "after": {
+        "tag_key": "sensitivity",
+        "tag_values": ["internal", "public", "restricted"]
+      },
+      "requires_flag": null,
+      "aws_api": "update_lf_tag",
       "payload": {
         "tag_key": "sensitivity",
         "tag_values": ["internal", "restricted"]
@@ -248,6 +263,14 @@ Plan safety has these meanings:
   values, adding resource tag assignments, or adding permissions.
 - `destructive`: removals or revokes. These are omitted by default and appear
   only when a matching `--allow-*` planning flag is supplied.
+
+Change IDs are stable within a saved plan file and are intended for selective
+apply:
+
+```bash
+lfguard apply --plan plan.json --only change_001 --execute
+lfguard apply --plan plan.json --only-action grant.add_permissions --max-changes 10 --execute
+```
 
 Markdown plan reports include the same safety summary and change list for pull
 request review.

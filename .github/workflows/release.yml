@@ -14,6 +14,8 @@ jobs:
   build:
     name: Build distributions
     runs-on: ubuntu-latest
+    outputs:
+      pypi-version-exists: ${{ steps.pypi-version.outputs.exists }}
     env:
       RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
     steps:
@@ -33,6 +35,27 @@ jobs:
             echo "Release tag ${RELEASE_TAG} does not match package version ${package_version}."
             exit 1
           fi
+      - name: Check PyPI version
+        id: pypi-version
+        run: |
+          version="${RELEASE_TAG#v}"
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import os
+          import urllib.error
+          import urllib.request
+
+          version = os.environ["RELEASE_TAG"].removeprefix("v")
+          url = "https://pypi.org/pypi/lfguard/{}/json".format(version)
+          try:
+              with urllib.request.urlopen(url, timeout=10) as response:
+                  exists = response.status == 200
+          except urllib.error.HTTPError as exc:
+              if exc.code == 404:
+                  exists = False
+              else:
+                  raise
+          print("exists={}".format(str(exists).lower()))
+          PY
       - name: Run tests
         run: python -m unittest discover -s tests
       - name: Build distributions
@@ -102,6 +125,7 @@ jobs:
     name: Publish distributions to PyPI
     runs-on: ubuntu-latest
     needs: build
+    if: needs.build.outputs.pypi-version-exists != 'true'
     environment: pypi
     permissions:
       id-token: write
@@ -116,7 +140,8 @@ jobs:
   verify-pypi:
     name: Verify PyPI install
     runs-on: ubuntu-latest
-    needs: publish
+    needs: [build, publish]
+    if: always() && needs.build.result == 'success' && (needs.publish.result == 'success' || needs.publish.result == 'skipped')
     env:
       RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
     steps:

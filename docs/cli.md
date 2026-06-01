@@ -452,6 +452,12 @@ lfguard plan \
   --fail-on-changes
 ```
 
+Save a reviewed JSON plan for later selective apply:
+
+```bash
+lfguard plan --desired desired.json --output json --output-file plan.json
+```
+
 Destructive planning flags:
 
 - `--allow-lf-tag-value-removals`
@@ -518,5 +524,20 @@ lfguard apply \
   --output-file artifacts/lfguard-apply.json
 ```
 
+Apply a reviewed saved plan without recomputing current state:
+
+```bash
+lfguard apply --plan plan.json --only change_001 --execute
+lfguard apply --plan plan.json --only-action grant.add_permissions --max-changes 10 --execute
+```
+
+Saved plans must be JSON reports from `lfguard plan --output json`. Use
+`--only` for comma-separated change IDs or `--only-action` for comma-separated
+action names; the two selectors cannot be combined. `--max-changes` and
+`--max-destructive` fail before AWS calls if the selected plan exceeds the
+budget.
+
 Even during execution, destructive changes require the same explicit allow flags
-used by `plan`.
+used by `plan`. For saved plans, each destructive change requires its exact
+matching flag, such as `--allow-permission-revokes` for
+`grant.revoke_permissions`.

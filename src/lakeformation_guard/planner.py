@@ -3,9 +3,29 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, FrozenSet, Iterable, List, Mapping, Tuple
+from typing import Any, Dict, FrozenSet, Iterable, List, Mapping, Optional, Tuple
 
 from .models import CurrentState, DesiredState, Grant, LFTagDefinition, ResourceRef, ResourceTagAssignment
+
+
+PLAN_SCHEMA_VERSION = "lfguard.plan.v1"
+_UNSET = object()
+
+_ACTION_AWS_API = {
+    "lf_tag.create": "create_lf_tag",
+    "lf_tag.add_values": "update_lf_tag",
+    "lf_tag.remove_values": "update_lf_tag",
+    "resource_tag.add_values": "add_lf_tags_to_resource",
+    "resource_tag.remove_values": "remove_lf_tags_from_resource",
+    "grant.add_permissions": "grant_permissions",
+    "grant.revoke_permissions": "revoke_permissions",
+}
+
+_ACTION_REQUIRED_FLAG = {
+    "lf_tag.remove_values": "--allow-lf-tag-value-removals",
+    "resource_tag.remove_values": "--allow-resource-tag-removals",
+    "grant.revoke_permissions": "--allow-permission-revokes",
+}
 
 
 @dataclass(frozen=True)
@@ -26,13 +46,61 @@ class Change:
     reason: str
     payload: Mapping[str, Any]
     destructive: bool = False
+    id: Optional[str] = None
+    before: Any = _UNSET
+    after: Any = _UNSET
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "Change":
+        payload = raw.get("payload", {})
+        if not isinstance(payload, Mapping):
+            raise ValueError("plan changes[].payload must be a mapping")
+        return cls(
+            action=str(raw.get("action", "")).strip(),
+            target=str(raw.get("target", "")).strip(),
+            reason=str(raw.get("reason", "")).strip(),
+            payload=dict(payload),
+            destructive=bool(raw.get("destructive", False)),
+            id=str(raw["id"]).strip() if raw.get("id") else None,
+            before=raw["before"] if "before" in raw else _UNSET,
+            after=raw["after"] if "after" in raw else _UNSET,
+        )
+
+    @property
+    def risk(self) -> str:
+        return "destructive" if self.destructive else "safe"
+
+    @property
+    def principal(self) -> Optional[str]:
+        principal = self.payload.get("principal")
+        return str(principal) if principal not in (None, "") else None
+
+    @property
+    def resource(self) -> Any:
+        return self.payload.get("resource")
+
+    @property
+    def requires_flag(self) -> Optional[str]:
+        return _ACTION_REQUIRED_FLAG.get(self.action)
+
+    @property
+    def aws_api(self) -> Optional[str]:
+        return _ACTION_AWS_API.get(self.action)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "id": self.id,
             "action": self.action,
             "target": self.target,
             "reason": self.reason,
             "destructive": self.destructive,
+            "risk": self.risk,
+            "principal": self.principal,
+            "resource": _json_ready(self.resource),
+            "before": _json_ready(None if self.before is _UNSET else self.before),
+            "after": _json_ready(None if self.after is _UNSET else self.after),
+            "requires_flag": self.requires_flag,
+            "aws_api": self.aws_api,
             "payload": _json_ready(self.payload),
         }
 
@@ -42,6 +110,20 @@ class Plan:
     """Ordered collection of changes required to converge current to desired state."""
 
     changes: Tuple[Change, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "changes",
+            tuple(_change_with_id(change, index) for index, change in enumerate(self.changes, start=1)),
+        )
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "Plan":
+        changes = raw.get("changes")
+        if not isinstance(changes, Iterable) or isinstance(changes, (str, bytes, Mapping)):
+            raise ValueError("plan JSON must contain top-level changes list")
+        return cls(tuple(Change.from_dict(_require_mapping(item, "changes[]")) for item in changes))
 
     @property
     def destructive_changes(self) -> Tuple[Change, ...]:
@@ -65,6 +147,7 @@ class Plan:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
+            "schema_version": PLAN_SCHEMA_VERSION,
             "summary": self.summary(),
             "changes": [change.to_dict() for change in self.changes],
         }
@@ -90,6 +173,8 @@ def _plan_lf_tags(desired: DesiredState, current: CurrentState, options: PlanOpt
                 target="lf_tag:{}".format(desired_tag.key),
                 reason="LF-Tag is missing",
                 payload={"tag_key": desired_tag.key, "tag_values": list(desired_tag.values)},
+                before=None,
+                after={"tag_key": desired_tag.key, "tag_values": list(desired_tag.values)},
             )
             continue
 
@@ -102,6 +187,8 @@ def _plan_lf_tags(desired: DesiredState, current: CurrentState, options: PlanOpt
                 target="lf_tag:{}".format(desired_tag.key),
                 reason="LF-Tag is missing allowed values",
                 payload={"tag_key": desired_tag.key, "tag_values": missing_values},
+                before={"tag_key": desired_tag.key, "tag_values": sorted(current_values)},
+                after={"tag_key": desired_tag.key, "tag_values": sorted(current_values | set(missing_values))},
             )
         extra_values = sorted(current_values - desired_values)
         if extra_values and options.allow_lf_tag_value_removals:
@@ -111,6 +198,8 @@ def _plan_lf_tags(desired: DesiredState, current: CurrentState, options: PlanOpt
                 reason="LF-Tag has values not present in desired state",
                 payload={"tag_key": desired_tag.key, "tag_values": extra_values},
                 destructive=True,
+                before={"tag_key": desired_tag.key, "tag_values": sorted(current_values)},
+                after={"tag_key": desired_tag.key, "tag_values": sorted(current_values - set(extra_values))},
             )
 
 
@@ -136,6 +225,8 @@ def _plan_resource_tags(desired: DesiredState, current: CurrentState, options: P
                 target=resource.identity,
                 reason="Resource is missing desired LF-Tag assignments",
                 payload={"resource": resource.to_dict(), "tags": tags_to_add},
+                before={"resource": resource.to_dict(), "tags": _tag_values_dict(current_tags)},
+                after={"resource": resource.to_dict(), "tags": _add_tag_values(current_tags, tags_to_add)},
             )
         if tags_to_remove:
             yield Change(
@@ -144,6 +235,8 @@ def _plan_resource_tags(desired: DesiredState, current: CurrentState, options: P
                 reason="Resource has LF-Tag assignments not present in desired state",
                 payload={"resource": resource.to_dict(), "tags": tags_to_remove},
                 destructive=True,
+                before={"resource": resource.to_dict(), "tags": _tag_values_dict(current_tags)},
+                after={"resource": resource.to_dict(), "tags": _remove_tag_values(current_tags, tags_to_remove)},
             )
 
 
@@ -172,6 +265,15 @@ def _plan_grants(desired: DesiredState, current: CurrentState, options: PlanOpti
                     "permissions": permissions_to_grant,
                     "grantable_permissions": missing_grantables,
                 },
+                before=_grant_snapshot(desired_grant.principal, desired_grant.resource, current_permissions, current_grantables)
+                if current_grant
+                else None,
+                after=_grant_snapshot(
+                    desired_grant.principal,
+                    desired_grant.resource,
+                    current_permissions | set(permissions_to_grant),
+                    current_grantables | set(missing_grantables),
+                ),
             )
 
         extra_permissions = sorted(current_permissions - desired_permissions)
@@ -188,6 +290,13 @@ def _plan_grants(desired: DesiredState, current: CurrentState, options: PlanOpti
                     "grantable_permissions": extra_grantables,
                 },
                 destructive=True,
+                before=_grant_snapshot(desired_grant.principal, desired_grant.resource, current_permissions, current_grantables),
+                after=_grant_snapshot(
+                    desired_grant.principal,
+                    desired_grant.resource,
+                    current_permissions - set(extra_permissions),
+                    current_grantables - set(extra_grantables),
+                ),
             )
 
     if options.allow_permission_revokes:
@@ -205,6 +314,8 @@ def _plan_grants(desired: DesiredState, current: CurrentState, options: PlanOpti
                     "grantable_permissions": list(current_grant.grantable_permissions),
                 },
                 destructive=True,
+                before=current_grant.to_dict(),
+                after=None,
             )
 
 
@@ -246,6 +357,68 @@ def _grant_index(grants: Iterable[Grant]) -> Dict[Tuple[str, ResourceRef], Grant
 
 def _grant_target(grant: Grant) -> str:
     return "{} -> {}".format(grant.principal, grant.resource.identity)
+
+
+def _change_id(index: int) -> str:
+    return "change_{:03d}".format(index)
+
+
+def _change_with_id(change: Change, index: int) -> Change:
+    if change.id:
+        return change
+    return Change(
+        action=change.action,
+        target=change.target,
+        reason=change.reason,
+        payload=change.payload,
+        destructive=change.destructive,
+        id=_change_id(index),
+        before=change.before,
+        after=change.after,
+    )
+
+
+def _require_mapping(value: Any, field_name: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValueError("{} must be a mapping".format(field_name))
+    return value
+
+
+def _tag_values_dict(tags: Mapping[str, Iterable[str]]) -> Dict[str, List[str]]:
+    return {key: sorted(values) for key, values in sorted(tags.items()) if values}
+
+
+def _add_tag_values(current: Mapping[str, Iterable[str]], additions: Mapping[str, Iterable[str]]) -> Dict[str, List[str]]:
+    merged = {key: set(values) for key, values in current.items()}
+    for key, values in additions.items():
+        merged.setdefault(key, set()).update(values)
+    return _tag_values_dict(merged)
+
+
+def _remove_tag_values(current: Mapping[str, Iterable[str]], removals: Mapping[str, Iterable[str]]) -> Dict[str, List[str]]:
+    merged = {key: set(values) for key, values in current.items()}
+    for key, values in removals.items():
+        if key not in merged:
+            continue
+        merged[key].difference_update(values)
+    return _tag_values_dict(merged)
+
+
+def _grant_snapshot(
+    principal: str,
+    resource: ResourceRef,
+    permissions: Iterable[str],
+    grantable_permissions: Iterable[str],
+) -> Dict[str, Any]:
+    data: Dict[str, Any] = {
+        "principal": principal,
+        "resource": resource.to_dict(),
+        "permissions": sorted(permissions),
+    }
+    grantables = sorted(grantable_permissions)
+    if grantables:
+        data["grantable_permissions"] = grantables
+    return data
 
 
 def _json_ready(value: Any) -> Any:

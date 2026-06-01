@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import platform
 import sys
 from collections import Counter
 from importlib import metadata, util
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Optional, Sequence
+from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
 
 from ._version import __version__
 from .audit import AuditFinding, audit
@@ -282,12 +283,25 @@ def build_parser() -> argparse.ArgumentParser:
     snapshot_parser.add_argument("--output-file", help="Write snapshot JSON to this file instead of stdout.")
 
     apply_parser = subparsers.add_parser("apply", help="Dry-run or execute a Lake Formation change plan.")
-    _add_state_args(apply_parser)
+    apply_parser.add_argument("--desired", help="Desired state JSON/YAML file.")
+    apply_parser.add_argument(
+        "--current-snapshot",
+        help="Current state JSON/YAML snapshot. When omitted, live AWS state is loaded with boto3.",
+    )
+    apply_parser.add_argument("--plan", help="Saved JSON plan from lfguard plan --output json.")
     _add_aws_args(apply_parser)
     _add_output_arg(apply_parser, markdown=True)
     _add_report_output_file_arg(apply_parser)
     _add_github_summary_arg(apply_parser)
     _add_plan_option_args(apply_parser)
+    apply_parser.add_argument("--only", help="Apply only comma-separated change IDs from the plan.")
+    apply_parser.add_argument("--only-action", help="Apply only comma-separated action types from the plan.")
+    apply_parser.add_argument("--max-changes", type=int, help="Fail before AWS calls when selected changes exceed this count.")
+    apply_parser.add_argument(
+        "--max-destructive",
+        type=int,
+        help="Fail before AWS calls when selected destructive changes exceed this count.",
+    )
     apply_parser.add_argument("--execute", action="store_true", help="Apply the computed plan. Defaults to dry-run.")
 
     return parser
@@ -581,9 +595,12 @@ def _cmd_snapshot(args: argparse.Namespace) -> int:
 
 
 def _cmd_apply(args: argparse.Namespace) -> int:
-    desired = load_desired(args.desired)
-    current = _load_current(args, desired)
-    change_plan = plan(desired, current, _plan_options(args))
+    change_plan = _load_apply_plan(args)
+    change_plan = _filter_apply_plan(change_plan, args)
+    budget_error = _apply_budget_error(change_plan, args)
+    if budget_error:
+        print("error: {}".format(budget_error), file=sys.stderr)
+        return 1
     if not args.execute:
         if args.github_summary:
             _append_github_summary(_render_plan_markdown(change_plan, prefix="Dry run: no changes applied."))
@@ -594,11 +611,12 @@ def _cmd_apply(args: argparse.Namespace) -> int:
         )
         return 0
 
+    _validate_destructive_allowances(change_plan, args)
     adapter = _aws_adapter(args)
     results = adapter.apply(
         change_plan,
         dry_run=False,
-        allow_destructive=_has_destructive_allowance(args),
+        allow_destructive=any(change.destructive for change in change_plan.changes),
     )
     applied_count = sum(1 for result in results if result.applied)
     if args.github_summary:
@@ -680,6 +698,93 @@ def _has_destructive_allowance(args: argparse.Namespace) -> bool:
         or args.allow_resource_tag_removals
         or args.allow_permission_revokes
     )
+
+
+def _load_apply_plan(args: argparse.Namespace) -> Plan:
+    if args.plan:
+        if args.desired or args.current_snapshot:
+            raise RuntimeError("--plan cannot be combined with --desired or --current-snapshot")
+        return _load_plan_file(args.plan)
+    if not args.desired:
+        raise RuntimeError("apply requires --desired or --plan")
+    desired = load_desired(args.desired)
+    current = _load_current(args, desired)
+    return plan(desired, current, _plan_options(args))
+
+
+def _load_plan_file(path: str) -> Plan:
+    plan_path = Path(path)
+    if plan_path.suffix.lower() not in {"", ".json"}:
+        raise StateFormatError("{} must be a JSON plan file".format(plan_path))
+    try:
+        data = json.loads(plan_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise StateFormatError("Could not read {}: {}".format(plan_path, exc)) from exc
+    except ValueError as exc:
+        raise StateFormatError("Could not parse {}: {}".format(plan_path, exc)) from exc
+    if not isinstance(data, Mapping):
+        raise StateFormatError("{} must contain a JSON object".format(plan_path))
+    return Plan.from_dict(data)
+
+
+def _filter_apply_plan(change_plan: Plan, args: argparse.Namespace) -> Plan:
+    if args.only and args.only_action:
+        raise RuntimeError("--only cannot be combined with --only-action")
+    if args.only:
+        selected_ids = _parse_csv_option(args.only, "--only")
+        available_ids = {change.id for change in change_plan.changes}
+        missing_ids = sorted(change_id for change_id in selected_ids if change_id not in available_ids)
+        if missing_ids:
+            raise RuntimeError("Unknown change id(s): {}".format(", ".join(missing_ids)))
+        return Plan(tuple(change for change in change_plan.changes if change.id in selected_ids))
+    if args.only_action:
+        selected_actions = _parse_csv_option(args.only_action, "--only-action")
+        filtered = tuple(change for change in change_plan.changes if change.action in selected_actions)
+        if not filtered:
+            raise RuntimeError("No changes matched --only-action")
+        return Plan(filtered)
+    return change_plan
+
+
+def _parse_csv_option(value: str, option_name: str) -> Tuple[str, ...]:
+    values = tuple(item.strip() for item in value.split(",") if item.strip())
+    if not values:
+        raise RuntimeError("{} requires at least one value".format(option_name))
+    return values
+
+
+def _apply_budget_error(change_plan: Plan, args: argparse.Namespace) -> Optional[str]:
+    if args.max_changes is not None:
+        if args.max_changes < 0:
+            raise RuntimeError("--max-changes must be greater than or equal to 0")
+        if len(change_plan.changes) > args.max_changes:
+            return "selected plan has {} change(s), exceeding --max-changes {}".format(
+                len(change_plan.changes),
+                args.max_changes,
+            )
+    if args.max_destructive is not None:
+        if args.max_destructive < 0:
+            raise RuntimeError("--max-destructive must be greater than or equal to 0")
+        destructive_count = len(change_plan.destructive_changes)
+        if destructive_count > args.max_destructive:
+            return "selected plan has {} destructive change(s), exceeding --max-destructive {}".format(
+                destructive_count,
+                args.max_destructive,
+            )
+    return None
+
+
+def _validate_destructive_allowances(change_plan: Plan, args: argparse.Namespace) -> None:
+    for change in change_plan.destructive_changes:
+        required_flag = change.requires_flag
+        if required_flag and not getattr(args, _flag_dest(required_flag), False):
+            raise RuntimeError(
+                "{} requires {} before execute".format(change.id or change.target, required_flag)
+            )
+
+
+def _flag_dest(flag: str) -> str:
+    return flag[2:].replace("-", "_")
 
 
 def _state_summary(state: GuardrailState) -> dict:
@@ -1112,6 +1217,7 @@ _COMPLETION_OPTIONS = {
     "apply": (
         "--desired",
         "--current-snapshot",
+        "--plan",
         "--profile",
         "--region",
         "--catalog-id",
@@ -1121,6 +1227,10 @@ _COMPLETION_OPTIONS = {
         "--allow-lf-tag-value-removals",
         "--allow-resource-tag-removals",
         "--allow-permission-revokes",
+        "--only",
+        "--only-action",
+        "--max-changes",
+        "--max-destructive",
         "--execute",
         "--help",
     ),
@@ -2445,8 +2555,9 @@ def _render_plan(change_plan: Plan, output: str, *, prefix: Optional[str] = None
     for change in change_plan.changes:
         marker = "destructive" if change.destructive else "safe"
         lines.append(
-            "- [{marker}] {action} {target}: {reason}".format(
+            "- [{marker}] {id} {action} {target}: {reason}".format(
                 marker=marker,
+                id=change.id,
                 action=change.action,
                 target=change.target,
                 reason=change.reason,
@@ -2476,11 +2587,12 @@ def _render_plan_markdown(change_plan: Plan, *, prefix: Optional[str] = None) ->
     if not change_plan.changes:
         lines.extend(["", "No changes."])
         return "\n".join(lines) + "\n"
-    lines.extend(["", "| Safety | Action | Target | Reason |", "| --- | --- | --- | --- |"])
+    lines.extend(["", "| ID | Safety | Action | Target | Reason |", "| --- | --- | --- | --- | --- |"])
     for change in change_plan.changes:
         marker = "destructive" if change.destructive else "safe"
         lines.append(
-            "| {safety} | {action} | {target} | {reason} |".format(
+            "| {id} | {safety} | {action} | {target} | {reason} |".format(
+                id=_markdown_cell(change.id or ""),
                 safety=_markdown_cell(marker),
                 action=_markdown_cell(change.action),
                 target=_markdown_cell(change.target),

@@ -90,10 +90,12 @@ class AuditCliTests(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             self.assertEqual(exit_code, 0)
             self.assertEqual(payload["summary"], {"total": 2, "safe": 2, "destructive": 0})
+            self.assertEqual(payload["schema_version"], "lfguard.plan.v1")
             self.assertEqual(
                 [change["action"] for change in payload["changes"]],
                 ["lf_tag.create", "grant.add_permissions"],
             )
+            self.assertEqual([change["id"] for change in payload["changes"]], ["change_001", "change_002"])
 
     def test_cli_plan_outputs_markdown(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -133,8 +135,8 @@ class AuditCliTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             self.assertIn("### lfguard plan", stdout.getvalue())
-            self.assertIn("| Safety | Action | Target | Reason |", stdout.getvalue())
-            self.assertIn("| safe | lf_tag.create | lf_tag:sensitivity | LF-Tag is missing |", stdout.getvalue())
+            self.assertIn("| ID | Safety | Action | Target | Reason |", stdout.getvalue())
+            self.assertIn("| change_001 | safe | lf_tag.create | lf_tag:sensitivity | LF-Tag is missing |", stdout.getvalue())
 
     def test_cli_plan_can_fail_when_changes_are_present(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -195,7 +197,7 @@ class AuditCliTests(unittest.TestCase):
             self.assertEqual(stdout.getvalue(), "")
             report = output_path.read_text(encoding="utf-8")
             self.assertIn("### lfguard plan", report)
-            self.assertIn("| safe | lf_tag.create | lf_tag:sensitivity | LF-Tag is missing |", report)
+            self.assertIn("| change_001 | safe | lf_tag.create | lf_tag:sensitivity | LF-Tag is missing |", report)
 
     def test_cli_plan_writes_json_report_before_failing_on_changes(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2068,7 +2070,7 @@ class AuditCliTests(unittest.TestCase):
             report = output_path.read_text(encoding="utf-8")
             self.assertIn("Dry run: no changes applied.", report)
             self.assertIn("### lfguard plan", report)
-            self.assertIn("| safe | lf_tag.create | lf_tag:sensitivity | LF-Tag is missing |", report)
+            self.assertIn("| change_001 | safe | lf_tag.create | lf_tag:sensitivity | LF-Tag is missing |", report)
 
     def test_cli_apply_execute_writes_json_output_file(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2119,6 +2121,214 @@ class AuditCliTests(unittest.TestCase):
             payload = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(payload["plan"]["summary"], {"total": 1, "safe": 1, "destructive": 0})
             self.assertEqual(payload["results"], [apply_result.to_dict()])
+
+    def test_cli_apply_saved_plan_dry_run_does_not_load_aws(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            plan_path = tmp_path / "plan.json"
+            plan_path.write_text(json.dumps(_saved_plan_payload()), encoding="utf-8")
+
+            stdout = io.StringIO()
+            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter") as adapter_class:
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = main(["apply", "--plan", str(plan_path), "--only", "change_002"])
+
+            self.assertEqual(exit_code, 0)
+            adapter_class.from_boto3.assert_not_called()
+            self.assertIn("Dry run: no changes applied.", stdout.getvalue())
+            self.assertIn("change_002 grant.add_permissions", stdout.getvalue())
+            self.assertNotIn("change_001 lf_tag.create", stdout.getvalue())
+
+    def test_cli_apply_saved_plan_rejects_only_and_only_action_together(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan_path = Path(tmp) / "plan.json"
+            plan_path.write_text(json.dumps(_saved_plan_payload()), encoding="utf-8")
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                exit_code = main(
+                    [
+                        "apply",
+                        "--plan",
+                        str(plan_path),
+                        "--only",
+                        "change_001",
+                        "--only-action",
+                        "lf_tag.create",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 2)
+            self.assertIn("--only cannot be combined with --only-action", stderr.getvalue())
+
+    def test_cli_apply_saved_plan_rejects_unknown_change_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan_path = Path(tmp) / "plan.json"
+            plan_path.write_text(json.dumps(_saved_plan_payload()), encoding="utf-8")
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                exit_code = main(["apply", "--plan", str(plan_path), "--only", "change_999"])
+
+            self.assertEqual(exit_code, 2)
+            self.assertIn("Unknown change id(s): change_999", stderr.getvalue())
+
+    def test_cli_apply_saved_plan_only_action_and_budget_execute_selected_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan_path = Path(tmp) / "plan.json"
+            plan_path.write_text(json.dumps(_saved_plan_payload()), encoding="utf-8")
+            apply_result = ApplyResult(
+                action="grant.add_permissions",
+                target="role -> database:database=analytics",
+                applied=True,
+                response={"ok": True},
+            )
+
+            stdout = io.StringIO()
+            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter") as adapter_class:
+                adapter_class.from_boto3.return_value.apply.return_value = [apply_result]
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "apply",
+                            "--plan",
+                            str(plan_path),
+                            "--only-action",
+                            "grant.add_permissions",
+                            "--max-changes",
+                            "1",
+                            "--execute",
+                            "--profile",
+                            "prod",
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            adapter_class.from_boto3.assert_called_once_with(
+                profile_name="prod",
+                region_name=None,
+                catalog_id=None,
+            )
+            applied_plan = adapter_class.from_boto3.return_value.apply.call_args.args[0]
+            self.assertEqual([change.id for change in applied_plan.changes], ["change_002"])
+            self.assertEqual([change.action for change in applied_plan.changes], ["grant.add_permissions"])
+
+    def test_cli_apply_budget_failure_returns_one_without_aws_calls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan_path = Path(tmp) / "plan.json"
+            plan_path.write_text(json.dumps(_saved_plan_payload()), encoding="utf-8")
+
+            stderr = io.StringIO()
+            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter") as adapter_class:
+                with contextlib.redirect_stderr(stderr):
+                    exit_code = main(["apply", "--plan", str(plan_path), "--max-changes", "1", "--execute"])
+
+            self.assertEqual(exit_code, 1)
+            adapter_class.from_boto3.assert_not_called()
+            self.assertIn("exceeding --max-changes 1", stderr.getvalue())
+
+    def test_cli_apply_saved_destructive_plan_requires_exact_allow_flag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan_path = Path(tmp) / "plan.json"
+            plan_path.write_text(json.dumps(_saved_plan_payload(destructive=True)), encoding="utf-8")
+
+            for extra_args in ([], ["--allow-resource-tag-removals"]):
+                stderr = io.StringIO()
+                with patch("lakeformation_guard.cli.AWSLakeFormationAdapter") as adapter_class:
+                    with contextlib.redirect_stderr(stderr):
+                        exit_code = main(["apply", "--plan", str(plan_path), "--execute", *extra_args])
+                self.assertEqual(exit_code, 2)
+                adapter_class.from_boto3.assert_not_called()
+                self.assertIn("requires --allow-permission-revokes", stderr.getvalue())
+
+    def test_cli_apply_saved_destructive_plan_runs_with_matching_allow_flag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan_path = Path(tmp) / "plan.json"
+            plan_path.write_text(json.dumps(_saved_plan_payload(destructive=True)), encoding="utf-8")
+
+            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter") as adapter_class:
+                adapter_class.from_boto3.return_value.apply.return_value = []
+                with contextlib.redirect_stdout(io.StringIO()):
+                    exit_code = main(
+                        [
+                            "apply",
+                            "--plan",
+                            str(plan_path),
+                            "--execute",
+                            "--allow-permission-revokes",
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue(adapter_class.from_boto3.return_value.apply.call_args.kwargs["allow_destructive"])
+
+
+def _saved_plan_payload(destructive=False):
+    if destructive:
+        return {
+            "schema_version": "lfguard.plan.v1",
+            "summary": {"total": 1, "safe": 0, "destructive": 1},
+            "changes": [
+                {
+                    "id": "change_001",
+                    "action": "grant.revoke_permissions",
+                    "target": "role -> database:database=analytics",
+                    "reason": "Principal has Lake Formation permissions not present in desired state",
+                    "destructive": True,
+                    "payload": {
+                        "principal": "role",
+                        "resource": {"kind": "database", "database": "analytics"},
+                        "permissions": ["DROP"],
+                        "grantable_permissions": [],
+                    },
+                    "before": {
+                        "principal": "role",
+                        "resource": {"kind": "database", "database": "analytics"},
+                        "permissions": ["DESCRIBE", "DROP"],
+                    },
+                    "after": {
+                        "principal": "role",
+                        "resource": {"kind": "database", "database": "analytics"},
+                        "permissions": ["DESCRIBE"],
+                    },
+                }
+            ],
+        }
+    return {
+        "schema_version": "lfguard.plan.v1",
+        "summary": {"total": 2, "safe": 2, "destructive": 0},
+        "changes": [
+            {
+                "id": "change_001",
+                "action": "lf_tag.create",
+                "target": "lf_tag:sensitivity",
+                "reason": "LF-Tag is missing",
+                "destructive": False,
+                "payload": {"tag_key": "sensitivity", "tag_values": ["internal"]},
+                "before": None,
+                "after": {"tag_key": "sensitivity", "tag_values": ["internal"]},
+            },
+            {
+                "id": "change_002",
+                "action": "grant.add_permissions",
+                "target": "role -> database:database=analytics",
+                "reason": "Principal is missing desired Lake Formation permissions",
+                "destructive": False,
+                "payload": {
+                    "principal": "role",
+                    "resource": {"kind": "database", "database": "analytics"},
+                    "permissions": ["DESCRIBE"],
+                    "grantable_permissions": [],
+                },
+                "before": None,
+                "after": {
+                    "principal": "role",
+                    "resource": {"kind": "database", "database": "analytics"},
+                    "permissions": ["DESCRIBE"],
+                },
+            },
+        ],
+    }
 
 
 def _policy_actions(policy):

@@ -35,7 +35,8 @@ and falls back to manual `NextToken` paging otherwise.
 ## Apply
 
 `lfguard apply` is a dry run unless `--execute` is provided. With `--execute`,
-the adapter calls AWS for the changes present in the computed plan.
+the adapter calls AWS for the changes present in the computed plan, or for the
+selected changes in a saved JSON plan passed with `--plan`.
 
 | Plan action | boto3 Lake Formation method | IAM action |
 | --- | --- | --- |

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.2
+
+- Adds stable plan JSON metadata with `schema_version`, deterministic change IDs,
+  risk, before/after snapshots, required destructive flags, and boto3 API names.
+- Adds saved-plan apply support with `lfguard apply --plan plan.json`.
+- Adds selective apply by change ID or action type.
+- Adds apply safety budgets with `--max-changes` and `--max-destructive`.
+- Enforces exact destructive allow flags for saved plans before execution.
+- Makes the release workflow skip PyPI upload when the tagged version already
+  exists while still verifying the published package.
+
 ## 0.2.1
 
 - Adds botocore `Stubber` contract tests for the Lake Formation adapter so AWS

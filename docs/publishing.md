@@ -16,16 +16,17 @@ Configure a pending publisher in PyPI with:
 - Workflow: `release.yml`
 - Environment: `pypi`
 
-Then publish by pushing a version tag such as `v0.2.1`, or by publishing a
+Then publish by pushing a version tag such as `v0.2.2`, or by publishing a
 GitHub Release for that tag. The release workflow first verifies that the tag
 matches the package version, builds the artifacts, verifies distribution
 filenames and embedded metadata, checks them, smoke-tests the built wheel
-through an installed `lfguard` CLI, uploads to PyPI through OIDC, then installs
-`lfguard` back from PyPI and smoke-tests the published package.
+through an installed `lfguard` CLI, uploads to PyPI through OIDC when the
+version is not already published, then installs `lfguard` back from PyPI and
+smoke-tests the published package.
 
 ```bash
-git tag v0.2.1
-git push origin v0.2.1
+git tag v0.2.2
+git push origin v0.2.2
 ```
 
 Use the matching file under [`release-notes/`](release-notes/) as the GitHub
@@ -56,13 +57,14 @@ After the GitHub release workflow finishes, verify PyPI and the tag:
 
 ```bash
 python -m pip index versions lfguard
-git ls-remote --tags origin v0.2.1
+git ls-remote --tags origin v0.2.2
 ```
 
 The release workflow also runs this published-package smoke test automatically
-after upload. It installs the exact package version derived from the GitHub
-release tag, asserts the CLI version, and retries briefly because a new project
-or version can take a short time to become available through the package index.
+after upload, or after skipping upload for a version already present on PyPI. It
+installs the exact package version derived from the GitHub release tag, asserts
+the CLI version, and retries briefly because a new project or version can take a
+short time to become available through the package index.
 
 ## Manual Fallback
 

@@ -1,6 +1,6 @@
 import unittest
 
-from lakeformation_guard import CurrentState, DesiredState, PlanOptions, plan
+from lakeformation_guard import CurrentState, DesiredState, Plan, PlanOptions, plan
 
 
 class PlannerTests(unittest.TestCase):
@@ -30,7 +30,42 @@ class PlannerTests(unittest.TestCase):
             [change.action for change in change_plan.changes],
             ["lf_tag.create", "resource_tag.add_values", "grant.add_permissions"],
         )
+        self.assertEqual(
+            [change.id for change in change_plan.changes],
+            ["change_001", "change_002", "change_003"],
+        )
         self.assertEqual(change_plan.summary(), {"total": 3, "safe": 3, "destructive": 0})
+
+    def test_plan_json_has_stable_fields(self):
+        desired = DesiredState.from_dict(
+            {
+                "lf_tags": {"sensitivity": ["internal"]},
+                "grants": [
+                    {
+                        "principal": "arn:aws:iam::111122223333:role/Analyst",
+                        "resource": {"kind": "database", "database": "analytics"},
+                        "permissions": ["DESCRIBE"],
+                    }
+                ],
+            }
+        )
+
+        payload = plan(desired, CurrentState.empty()).to_dict()
+        lf_tag_change, grant_change = payload["changes"]
+
+        self.assertEqual(payload["schema_version"], "lfguard.plan.v1")
+        self.assertEqual(lf_tag_change["id"], "change_001")
+        self.assertEqual(lf_tag_change["risk"], "safe")
+        self.assertIsNone(lf_tag_change["principal"])
+        self.assertIsNone(lf_tag_change["resource"])
+        self.assertIsNone(lf_tag_change["before"])
+        self.assertEqual(lf_tag_change["after"], {"tag_key": "sensitivity", "tag_values": ["internal"]})
+        self.assertIsNone(lf_tag_change["requires_flag"])
+        self.assertEqual(lf_tag_change["aws_api"], "create_lf_tag")
+        self.assertEqual(grant_change["id"], "change_002")
+        self.assertEqual(grant_change["principal"], "arn:aws:iam::111122223333:role/Analyst")
+        self.assertEqual(grant_change["resource"], {"kind": "database", "database": "analytics"})
+        self.assertEqual(grant_change["aws_api"], "grant_permissions")
 
     def test_plan_omits_destructive_changes_by_default(self):
         desired = DesiredState.from_dict(
@@ -104,6 +139,70 @@ class PlannerTests(unittest.TestCase):
             ["lf_tag.remove_values", "grant.revoke_permissions", "grant.revoke_permissions"],
         )
         self.assertTrue(all(change.destructive for change in change_plan.changes))
+        self.assertEqual(
+            [change.requires_flag for change in change_plan.changes],
+            [
+                "--allow-lf-tag-value-removals",
+                "--allow-permission-revokes",
+                "--allow-permission-revokes",
+            ],
+        )
+        self.assertEqual(
+            [change.aws_api for change in change_plan.changes],
+            ["update_lf_tag", "revoke_permissions", "revoke_permissions"],
+        )
+
+    def test_plan_from_dict_accepts_current_schema_and_preserves_ids(self):
+        payload = {
+            "schema_version": "lfguard.plan.v1",
+            "summary": {"total": 1, "safe": 1, "destructive": 0},
+            "changes": [
+                {
+                    "id": "change_004",
+                    "action": "grant.add_permissions",
+                    "target": "role -> database:database=analytics",
+                    "reason": "Principal is missing desired Lake Formation permissions",
+                    "destructive": False,
+                    "payload": {
+                        "principal": "role",
+                        "resource": {"kind": "database", "database": "analytics"},
+                        "permissions": ["DESCRIBE"],
+                        "grantable_permissions": [],
+                    },
+                    "before": None,
+                    "after": {
+                        "principal": "role",
+                        "resource": {"kind": "database", "database": "analytics"},
+                        "permissions": ["DESCRIBE"],
+                    },
+                }
+            ],
+        }
+
+        change_plan = Plan.from_dict(payload)
+
+        self.assertEqual(change_plan.changes[0].id, "change_004")
+        self.assertEqual(change_plan.to_dict()["changes"][0]["aws_api"], "grant_permissions")
+        self.assertEqual(change_plan.to_dict()["changes"][0]["after"]["permissions"], ["DESCRIBE"])
+
+    def test_plan_from_dict_accepts_legacy_plan_without_ids(self):
+        change_plan = Plan.from_dict(
+            {
+                "summary": {"total": 1, "safe": 1, "destructive": 0},
+                "changes": [
+                    {
+                        "action": "lf_tag.create",
+                        "target": "lf_tag:sensitivity",
+                        "reason": "LF-Tag is missing",
+                        "destructive": False,
+                        "payload": {"tag_key": "sensitivity", "tag_values": ["internal"]},
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(change_plan.changes[0].id, "change_001")
+        self.assertEqual(change_plan.to_dict()["schema_version"], "lfguard.plan.v1")
 
 
 if __name__ == "__main__":

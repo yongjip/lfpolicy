@@ -47,6 +47,11 @@ report but should not block a merge.
 the AWS adapter applies the computed plan in order. Destructive changes still
 require the same explicit `--allow-*` flags used by `plan`.
 
+For reviewed JSON plans, use `lfguard apply --plan plan.json` to avoid
+recomputing current state during execution. Limit production rollouts with
+`--only`, `--only-action`, `--max-changes`, and `--max-destructive`; budget
+failures stop before any AWS call is made.
+
 Apply does not bypass AWS authorization. The IAM principal must already have the
 Lake Formation permissions needed for each operation. See
 [`aws-permissions.md`](aws-permissions.md) for starter IAM policy shapes and
