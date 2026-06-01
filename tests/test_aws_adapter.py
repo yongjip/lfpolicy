@@ -1,7 +1,7 @@
 import unittest
 
 from lakeformation_guard import Change, CurrentState, DesiredState, Plan, plan
-from lakeformation_guard.aws import AWSLakeFormationAdapter, to_lf_resource
+from lakeformation_guard.aws import AWSLakeFormationAdapter, from_lf_resource, to_lf_resource
 from lakeformation_guard.models import ResourceRef
 
 
@@ -150,6 +150,15 @@ class AwsAdapterTests(unittest.TestCase):
         self.assertEqual(
             to_lf_resource(resource),
             {"LFTagPolicy": {"ResourceType": "TABLE", "ExpressionName": "sales_tables"}},
+        )
+
+    def test_catalog_resource_conversion_preserves_catalog_id(self):
+        resource = ResourceRef.from_dict({"kind": "catalog", "catalog_id": "222222222222"})
+
+        self.assertEqual(to_lf_resource(resource), {"Catalog": {"Id": "222222222222"}})
+        self.assertEqual(
+            from_lf_resource({"Catalog": {"Id": "222222222222"}}),
+            resource,
         )
 
     def test_apply_executes_lf_tag_expression_changes(self):

@@ -440,6 +440,47 @@ class AwsAdapterStubberTests(unittest.TestCase):
         self.assertTrue(results[0].applied)
         self.stubber.assert_no_pending_responses()
 
+    def test_apply_catalog_grant_uses_resource_catalog_id_over_adapter_default(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id="111111111111")
+        change_plan = Plan.from_dict(
+            {
+                "changes": [
+                    {
+                        "action": "grant.add_permissions",
+                        "target": "principal -> catalog:catalog=222222222222",
+                        "reason": "missing catalog permissions",
+                        "payload": {
+                            "principal": PRINCIPAL,
+                            "resource": {
+                                "kind": "catalog",
+                                "catalog_id": "222222222222",
+                            },
+                            "permissions": ["CREATE_DATABASE"],
+                            "grantable_permissions": [],
+                        },
+                    }
+                ]
+            }
+        )
+
+        self.stubber.add_response(
+            "grant_permissions",
+            {},
+            {
+                "CatalogId": "222222222222",
+                "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                "Resource": {"Catalog": {"Id": "222222222222"}},
+                "Permissions": ["CREATE_DATABASE"],
+                "PermissionsWithGrantOption": [],
+            },
+        )
+
+        results = adapter.apply(change_plan, dry_run=False)
+
+        self.assertEqual(len(results), 1)
+        self.assertTrue(results[0].applied)
+        self.stubber.assert_no_pending_responses()
+
     def test_load_current_state_fetches_lf_tag_expressions_by_catalog_id(self):
         adapter = AWSLakeFormationAdapter(self.client, catalog_id=CATALOG_ID)
         desired = DesiredState.from_dict(
@@ -488,7 +529,7 @@ class AwsAdapterStubberTests(unittest.TestCase):
             "list_permissions",
             {"PrincipalResourcePermissions": []},
             {
-                "CatalogId": CATALOG_ID,
+                "CatalogId": "333333333333",
                 "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
                 "Resource": {
                     "LFTagPolicy": {
@@ -507,6 +548,57 @@ class AwsAdapterStubberTests(unittest.TestCase):
             {(expression.catalog_id, expression.name) for expression in current.lf_tag_expressions},
             {("222222222222", "shared"), ("333333333333", "grant_expression")},
         )
+        self.stubber.assert_no_pending_responses()
+
+    def test_load_current_state_preserves_catalog_id_for_catalog_grants(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id="111111111111")
+        desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": PRINCIPAL,
+                        "resource": {
+                            "kind": "catalog",
+                            "catalog_id": "222222222222",
+                        },
+                        "permissions": ["CREATE_DATABASE"],
+                    }
+                ]
+            }
+        )
+
+        self.stubber.add_response(
+            "get_resource_lf_tags",
+            {},
+            {
+                "CatalogId": "222222222222",
+                "Resource": {"Catalog": {"Id": "222222222222"}},
+            },
+        )
+        self.stubber.add_response(
+            "list_permissions",
+            {
+                "PrincipalResourcePermissions": [
+                    {
+                        "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                        "Resource": {"Catalog": {"Id": "222222222222"}},
+                        "Permissions": ["CREATE_DATABASE"],
+                        "PermissionsWithGrantOption": [],
+                    }
+                ]
+            },
+            {
+                "CatalogId": "222222222222",
+                "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                "Resource": {"Catalog": {"Id": "222222222222"}},
+                "MaxResults": 100,
+            },
+        )
+
+        current = adapter.load_current_state_for(desired)
+
+        self.assertEqual(current.grants[0].resource.kind, "catalog")
+        self.assertEqual(current.grants[0].resource.catalog_id, "222222222222")
         self.stubber.assert_no_pending_responses()
 
 

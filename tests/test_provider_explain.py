@@ -77,6 +77,52 @@ class ProviderExplainTests(unittest.TestCase):
         self.assertEqual(report.findings[0].source, "direct_grant")
         self.assertEqual(report.findings[0].id, "finding_001")
 
+    def test_explain_ignores_catalog_grant_for_different_target_catalog(self):
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {"kind": "catalog", "catalog_id": "111111111111"},
+                        "permissions": ["CREATE_DATABASE"],
+                    }
+                ]
+            }
+        )
+
+        report = explain(
+            DesiredState.empty(),
+            current,
+            principal="role",
+            resource=ResourceRef(kind="database", database_name="analytics", catalog_id="222222222222"),
+        )
+
+        self.assertEqual(report.summary()["context"], 0)
+        self.assertEqual(report.findings, ())
+
+    def test_explain_reports_catalog_grant_context_for_same_target_catalog(self):
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {"kind": "catalog", "catalog_id": "111111111111"},
+                        "permissions": ["CREATE_DATABASE"],
+                    }
+                ]
+            }
+        )
+
+        report = explain(
+            DesiredState.empty(),
+            current,
+            principal="role",
+            resource=ResourceRef(kind="database", database_name="analytics", catalog_id="111111111111"),
+        )
+
+        self.assertEqual(report.summary()["context"], 1)
+        self.assertEqual(report.findings[0].resource.catalog_id, "111111111111")
+
     def test_explain_resolves_named_lf_tag_expression_grant(self):
         current = CurrentState.from_dict(
             {

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.5.1
+
+- Preserves catalog IDs for catalog resources in AWS grant apply and inventory
+  conversion, including `Catalog.Id` and payload catalog precedence over the
+  adapter default.
+- Makes `explain` ignore catalog-scoped grants when the target resource is in a
+  different catalog.
+
 ## 0.5.0
 
 - Adds `lfguard.audit.v1` JSON schema metadata and deterministic audit

@@ -154,7 +154,7 @@ class AWSLakeFormationAdapter:
         for resource in sorted(resources):
             if resource.kind == "lf_tag_expression":
                 continue
-            kwargs = self._with_catalog_id({"Resource": to_lf_resource(resource)})
+            kwargs = self._with_catalog_id(_resource_request_kwargs(resource))
             try:
                 response = self.lakeformation.get_resource_lf_tags(**kwargs)
             except Exception as exc:
@@ -195,6 +195,7 @@ class AWSLakeFormationAdapter:
                 continue
             seen.add(key)
             kwargs = {
+                "catalog_id": desired_grant.resource.catalog_id,
                 "Principal": {"DataLakePrincipalIdentifier": desired_grant.principal},
                 "Resource": to_lf_resource(desired_grant.resource),
                 "MaxResults": 100,
@@ -269,26 +270,34 @@ class AWSLakeFormationAdapter:
                 "catalog_id": payload.get("catalog_id"),
             }))
         elif action == "resource_tag.add_values":
+            resource = ResourceRef.from_dict(payload["resource"])
             response = self.lakeformation.add_lf_tags_to_resource(**self._with_catalog_id({
-                "Resource": to_lf_resource(ResourceRef.from_dict(payload["resource"])),
+                "catalog_id": resource.catalog_id,
+                "Resource": to_lf_resource(resource),
                 "LFTags": _lf_tag_pairs(payload["tags"]),
             }))
         elif action == "resource_tag.remove_values":
+            resource = ResourceRef.from_dict(payload["resource"])
             response = self.lakeformation.remove_lf_tags_from_resource(**self._with_catalog_id({
-                "Resource": to_lf_resource(ResourceRef.from_dict(payload["resource"])),
+                "catalog_id": resource.catalog_id,
+                "Resource": to_lf_resource(resource),
                 "LFTags": _lf_tag_pairs(payload["tags"]),
             }))
         elif action == "grant.add_permissions":
+            resource = ResourceRef.from_dict(payload["resource"])
             response = self.lakeformation.grant_permissions(**self._with_catalog_id({
+                "catalog_id": resource.catalog_id,
                 "Principal": {"DataLakePrincipalIdentifier": payload["principal"]},
-                "Resource": to_lf_resource(ResourceRef.from_dict(payload["resource"])),
+                "Resource": to_lf_resource(resource),
                 "Permissions": payload.get("permissions", ()),
                 "PermissionsWithGrantOption": payload.get("grantable_permissions", ()),
             }))
         elif action == "grant.revoke_permissions":
+            resource = ResourceRef.from_dict(payload["resource"])
             response = self.lakeformation.revoke_permissions(**self._with_catalog_id({
+                "catalog_id": resource.catalog_id,
                 "Principal": {"DataLakePrincipalIdentifier": payload["principal"]},
-                "Resource": to_lf_resource(ResourceRef.from_dict(payload["resource"])),
+                "Resource": to_lf_resource(resource),
                 "Permissions": payload.get("permissions", ()),
                 "PermissionsWithGrantOption": payload.get("grantable_permissions", ()),
             }))
@@ -337,7 +346,10 @@ class AWSLakeFormationAdapter:
 
 def to_lf_resource(resource: ResourceRef) -> Dict[str, Any]:
     if resource.kind == "catalog":
-        return {"Catalog": {}}
+        catalog: Dict[str, Any] = {}
+        if resource.catalog_id:
+            catalog["Id"] = resource.catalog_id
+        return {"Catalog": catalog}
     if resource.kind == "database":
         return {"Database": _catalog_scoped({"Name": resource.database_name}, resource)}
     if resource.kind == "table":
@@ -374,7 +386,8 @@ def to_lf_resource(resource: ResourceRef) -> Dict[str, Any]:
 
 def from_lf_resource(raw: Mapping[str, Any]) -> Optional[ResourceRef]:
     if "Catalog" in raw:
-        return ResourceRef(kind="catalog")
+        item = raw["Catalog"]
+        return ResourceRef(kind="catalog", catalog_id=item.get("Id") or item.get("CatalogId"))
     if "Database" in raw:
         item = raw["Database"]
         return ResourceRef(kind="database", database_name=item.get("Name"), catalog_id=item.get("CatalogId"))
@@ -419,6 +432,12 @@ def _catalog_scoped(data: Mapping[str, Any], resource: ResourceRef) -> Dict[str,
     if resource.catalog_id:
         result["CatalogId"] = resource.catalog_id
     return result
+
+
+def _resource_request_kwargs(resource: ResourceRef, **kwargs: Any) -> Dict[str, Any]:
+    request = {"catalog_id": resource.catalog_id, "Resource": to_lf_resource(resource)}
+    request.update(kwargs)
+    return request
 
 
 def _lf_tag_pairs(tags: Mapping[str, Iterable[str]]) -> List[Dict[str, Any]]:

@@ -234,6 +234,8 @@ def _grant_relevance(
     effective_lf_tags: Mapping[str, Tuple[str, ...]],
     expression_index: Mapping[LFTagExpressionKey, Tuple[LFTagValue, ...]],
 ) -> Optional[_GrantRelevance]:
+    if not _catalog_compatible(grant_resource.catalog_id, target.catalog_id):
+        return None
     if grant_resource.kind == "lf_tag_policy":
         return _lf_tag_policy_relevance(grant_resource, target, effective_lf_tags, expression_index)
     return _direct_resource_relevance(grant_resource, target)
