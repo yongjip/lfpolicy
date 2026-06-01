@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0
+
+- Adds a `CurrentStateProvider` protocol plus snapshot-backed provider helpers
+  so integrations can supply current Lake Formation state without boto3.
+- Adds `lfguard explain` and the importable `explain()` API for offline-first
+  access explanations across direct grants, LF-Tag policy grants, named
+  LF-Tag expressions, effective LF-Tags, data-location context, and missing
+  desired grants.
+
 ## 0.3.0
 
 - Adds configurable lint severities through desired-state `lint` overrides.

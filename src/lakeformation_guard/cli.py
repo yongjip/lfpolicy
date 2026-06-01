@@ -15,10 +15,19 @@ from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
 from ._version import __version__
 from .audit import AuditFinding, audit
 from .aws import AWSLakeFormationAdapter
+from .explain import ExplainReport, explain as explain_access
 from .io import StateFormatError, dumps_json, dumps_yaml, load_current, load_desired
 from .lint import LintFinding, lint_desired
-from .models import CurrentState, DesiredState, GuardrailState
+from .models import (
+    CurrentState,
+    DesiredState,
+    Grant,
+    GuardrailState,
+    ResourceRef,
+    ResourceTagAssignment,
+)
 from .planner import Plan, PlanOptions, plan
+from .provider import CurrentStateProvider, SnapshotFileCurrentStateProvider
 from .schema import state_json_schema
 
 
@@ -49,6 +58,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return _cmd_check(args)
         if args.command == "plan":
             return _cmd_plan(args)
+        if args.command == "explain":
+            return _cmd_explain(args)
         if args.command == "audit":
             return _cmd_audit(args)
         if args.command == "lint":
@@ -279,6 +290,35 @@ def build_parser() -> argparse.ArgumentParser:
     _add_plan_option_args(plan_parser)
     plan_parser.add_argument("--fail-on-changes", action="store_true", help="Exit with status 1 when the plan contains any change.")
 
+    explain_parser = subparsers.add_parser(
+        "explain",
+        help="Explain why a principal has or lacks access to a resource.",
+    )
+    explain_parser.add_argument("--desired", required=True, help="Desired state JSON/YAML file.")
+    explain_parser.add_argument(
+        "--current-snapshot",
+        help="Current state JSON/YAML snapshot. When omitted, live AWS state is loaded with boto3.",
+    )
+    _add_aws_args(explain_parser)
+    explain_parser.add_argument("--principal", required=True, help="Lake Formation principal ARN or identifier.")
+    explain_parser.add_argument("--database", help="Database name to explain.")
+    explain_parser.add_argument("--table", help="Table name to explain. Requires --database.")
+    explain_parser.add_argument(
+        "--columns",
+        help="Comma-separated columns to explain. Requires --database and --table.",
+    )
+    explain_parser.add_argument(
+        "--location",
+        help="S3 data location ARN/path to explain instead of a catalog resource.",
+    )
+    explain_parser.add_argument(
+        "--permissions",
+        help="Comma-separated permissions to require, such as SELECT,DESCRIBE.",
+    )
+    _add_output_arg(explain_parser, markdown=True)
+    _add_report_output_file_arg(explain_parser)
+    _add_github_summary_arg(explain_parser)
+
     snapshot_parser = subparsers.add_parser("snapshot", help="Export live AWS state for a desired policy scope.")
     snapshot_parser.add_argument("--desired", required=True, help="Desired state JSON/YAML file that defines the snapshot scope.")
     _add_aws_args(snapshot_parser)
@@ -348,6 +388,24 @@ def _cmd_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_explain(args: argparse.Namespace) -> int:
+    desired = load_desired(args.desired)
+    resource = _explain_resource(args)
+    provider_scope = _desired_with_explain_scope(desired, args.principal, resource)
+    current = _current_state_provider(args).load_current_state_for(provider_scope)
+    report = explain_access(
+        desired,
+        current,
+        principal=args.principal,
+        resource=resource,
+        permissions=_parse_optional_csv(args.permissions),
+    )
+    if args.github_summary:
+        _append_github_summary(_render_explain_markdown(report))
+    _emit_output(_render_explain(report, args.output), args.output_file, label="explain report")
+    return 0
+
+
 def _cmd_lint(args: argparse.Namespace) -> int:
     desired = load_desired(args.desired)
     findings = lint_desired(desired)
@@ -361,7 +419,11 @@ def _cmd_lint(args: argparse.Namespace) -> int:
 
 def _cmd_summary(args: argparse.Namespace) -> int:
     desired = load_desired(args.desired)
-    current = load_current(args.current_snapshot) if args.current_snapshot else None
+    current = (
+        SnapshotFileCurrentStateProvider(args.current_snapshot).load_current_state_for(desired)
+        if args.current_snapshot
+        else None
+    )
     payload = {"desired": _state_profile(desired)}
     if current:
         payload["current_snapshot"] = _state_profile(current)
@@ -666,8 +728,8 @@ def _add_state_args(parser: argparse.ArgumentParser) -> None:
 
 
 def _add_aws_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--profile", help="AWS profile for live state/apply.")
-    parser.add_argument("--region", help="AWS region for live state/apply.")
+    parser.add_argument("--profile", help="AWS profile for live operations.")
+    parser.add_argument("--region", help="AWS region for live operations.")
     parser.add_argument("--catalog-id", help="AWS Glue Data Catalog ID.")
 
 
@@ -701,9 +763,118 @@ def _add_plan_option_args(parser: argparse.ArgumentParser) -> None:
 
 
 def _load_current(args: argparse.Namespace, desired: DesiredState) -> CurrentState:
+    return _current_state_provider(args).load_current_state_for(desired)
+
+
+def _current_state_provider(args: argparse.Namespace) -> CurrentStateProvider:
     if args.current_snapshot:
-        return load_current(args.current_snapshot)
-    return _aws_adapter(args).load_current_state_for(desired)
+        return SnapshotFileCurrentStateProvider(args.current_snapshot)
+    return _aws_adapter(args)
+
+
+def _explain_resource(args: argparse.Namespace) -> ResourceRef:
+    if args.location:
+        if args.database or args.table or args.columns:
+            raise RuntimeError("--location cannot be combined with --database, --table, or --columns")
+        return ResourceRef(kind="data_location", location=args.location, catalog_id=args.catalog_id)
+    if not args.database:
+        raise RuntimeError("explain requires --database or --location")
+    if args.columns and not args.table:
+        raise RuntimeError("--columns requires --table")
+    if args.table and args.columns:
+        return ResourceRef(
+            kind="table_with_columns",
+            database_name=args.database,
+            table_name=args.table,
+            columns=_parse_csv_option(args.columns, "--columns"),
+            catalog_id=args.catalog_id,
+        )
+    if args.table:
+        return ResourceRef(
+            kind="table",
+            database_name=args.database,
+            table_name=args.table,
+            catalog_id=args.catalog_id,
+        )
+    return ResourceRef(kind="database", database_name=args.database, catalog_id=args.catalog_id)
+
+
+def _parse_optional_csv(value: Optional[str]) -> Tuple[str, ...]:
+    if value is None:
+        return ()
+    return _parse_csv_option(value, "--permissions")
+
+
+def _desired_with_explain_scope(desired: DesiredState, principal: str, resource: ResourceRef) -> DesiredState:
+    resource_tags = list(desired.resource_tags)
+    existing_tag_resources = {assignment.resource for assignment in resource_tags}
+    for scoped_resource in _explain_resource_scope(resource):
+        if scoped_resource not in existing_tag_resources:
+            resource_tags.append(ResourceTagAssignment(resource=scoped_resource, tags={}))
+            existing_tag_resources.add(scoped_resource)
+
+    grants = list(desired.grants)
+    existing_grants = {(grant.principal, grant.resource) for grant in grants}
+    for scoped_resource in _explain_grant_scope(resource):
+        key = (principal, scoped_resource)
+        if key in existing_grants:
+            continue
+        grants.append(
+            Grant(
+                principal=principal,
+                resource=scoped_resource,
+                permissions=(_scope_permission(scoped_resource),),
+            )
+        )
+        existing_grants.add(key)
+
+    return DesiredState(
+        lf_tags=desired.lf_tags,
+        lf_tag_expressions=desired.lf_tag_expressions,
+        lf_tag_key_metadata=desired.lf_tag_key_metadata,
+        resource_tags=tuple(resource_tags),
+        grants=tuple(grants),
+        config=desired.config,
+    )
+
+
+def _explain_resource_scope(resource: ResourceRef) -> Tuple[ResourceRef, ...]:
+    if resource.kind == "database":
+        return (resource,)
+    if resource.kind == "table":
+        return (_database_resource(resource), resource)
+    if resource.kind == "table_with_columns":
+        return (_database_resource(resource), _table_resource(resource), resource)
+    return (resource,)
+
+
+def _explain_grant_scope(resource: ResourceRef) -> Tuple[ResourceRef, ...]:
+    if resource.kind == "table":
+        return (_database_resource(resource), resource)
+    if resource.kind == "table_with_columns":
+        return (_database_resource(resource), _table_resource(resource), resource)
+    return (resource,)
+
+
+def _database_resource(resource: ResourceRef) -> ResourceRef:
+    return ResourceRef(kind="database", database_name=resource.database_name, catalog_id=resource.catalog_id)
+
+
+def _table_resource(resource: ResourceRef) -> ResourceRef:
+    return ResourceRef(
+        kind="table",
+        database_name=resource.database_name,
+        table_name=resource.table_name,
+        catalog_id=resource.catalog_id,
+    )
+
+
+def _scope_permission(resource: ResourceRef) -> str:
+    if resource.kind == "table" or resource.kind == "table_with_columns":
+        return "SELECT"
+    if resource.kind == "data_location":
+        return "DATA_LOCATION_ACCESS"
+    return "DESCRIBE"
 
 
 def _aws_adapter(args: argparse.Namespace) -> AWSLakeFormationAdapter:
@@ -1192,6 +1363,7 @@ _COMPLETION_COMMANDS = (
     "summary",
     "audit",
     "plan",
+    "explain",
     "snapshot",
     "import",
     "apply",
@@ -1269,6 +1441,23 @@ _COMPLETION_OPTIONS = {
         "--allow-resource-tag-removals",
         "--allow-permission-revokes",
         "--fail-on-changes",
+        "--help",
+    ),
+    "explain": (
+        "--desired",
+        "--current-snapshot",
+        "--profile",
+        "--region",
+        "--catalog-id",
+        "--principal",
+        "--database",
+        "--table",
+        "--columns",
+        "--location",
+        "--permissions",
+        "--output",
+        "--output-file",
+        "--github-summary",
         "--help",
     ),
     "snapshot": ("--desired", "--profile", "--region", "--catalog-id", "--output-file", "--help"),
@@ -2589,6 +2778,101 @@ lfguard plan \\
         desired_name=desired_name,
         yaml_note=yaml_note,
     )
+
+
+def _render_explain(report: ExplainReport, output: str) -> str:
+    if output == "json":
+        return dumps_json(report.to_dict())
+    if output == "markdown":
+        return _render_explain_markdown(report)
+    summary = report.summary()
+    lines = [
+        "Explain: {principal} -> {resource}".format(
+            principal=report.principal,
+            resource=report.resource.identity,
+        ),
+        "Findings: {matched} matched, {not_matched} not matched, {missing} missing, {context} context.".format(
+            **summary
+        ),
+    ]
+    if report.requested_permissions:
+        lines.append("Requested permissions: {}".format(", ".join(report.requested_permissions)))
+    else:
+        lines.append("Requested permissions: any")
+    if report.effective_lf_tags:
+        rendered_tags = ", ".join(
+            "{}={}".format(key, "|".join(values))
+            for key, values in sorted(report.effective_lf_tags.items())
+        )
+        lines.append("Effective LF-Tags: {}".format(rendered_tags))
+    else:
+        lines.append("Effective LF-Tags: none")
+    if report.findings:
+        lines.append("Explanation:")
+        for finding in report.findings:
+            permissions = ", ".join(finding.permissions) if finding.permissions else "none"
+            resource = finding.resource.identity if finding.resource else "n/a"
+            lines.append(
+                "- [{status}] {source} {permissions} on {resource}: {message}".format(
+                    status=finding.status,
+                    source=finding.source,
+                    permissions=permissions,
+                    resource=resource,
+                    message=finding.message,
+                )
+            )
+    if report.notes:
+        lines.append("Notes:")
+        for note in report.notes:
+            lines.append("- {}".format(note))
+    return "\n".join(lines) + "\n"
+
+
+def _render_explain_markdown(report: ExplainReport) -> str:
+    summary = report.summary()
+    lines = [
+        "### lfguard explain",
+        "",
+        "- Principal: `{}`".format(report.principal),
+        "- Resource: `{}`".format(report.resource.identity),
+        "- Matched grants: {matched}".format(**summary),
+        "- Not matched: {not_matched}".format(**summary),
+        "- Missing desired grants: {missing}".format(**summary),
+        "- Context grants: {context}".format(**summary),
+    ]
+    if report.requested_permissions:
+        lines.append("- Requested permissions: `{}`".format(", ".join(report.requested_permissions)))
+    if report.effective_lf_tags:
+        lines.extend(["", "#### Effective LF-Tags", "", "| Key | Values |", "| --- | --- |"])
+        for key, values in sorted(report.effective_lf_tags.items()):
+            lines.append("| {} | {} |".format(_markdown_cell(key), _markdown_cell(", ".join(values))))
+    else:
+        lines.extend(["", "No effective LF-Tags found for the target in current state."])
+    if report.findings:
+        lines.extend(
+            [
+                "",
+                "#### Findings",
+                "",
+                "| Status | Source | Permissions | Resource | Message |",
+                "| --- | --- | --- | --- | --- |",
+            ]
+        )
+        for finding in report.findings:
+            lines.append(
+                "| {status} | {source} | {permissions} | {resource} | {message} |".format(
+                    status=_markdown_cell(finding.status),
+                    source=_markdown_cell(finding.source),
+                    permissions=_markdown_cell(", ".join(finding.permissions)),
+                    resource=_markdown_cell(finding.resource.identity if finding.resource else ""),
+                    message=_markdown_cell(finding.message),
+                )
+            )
+    if report.notes:
+        lines.extend(["", "#### Notes"])
+        for note in report.notes:
+            lines.append("- {}".format(note))
+    return "\n".join(lines) + "\n"
 
 
 def _print_plan(change_plan: Plan, output: str, *, prefix: Optional[str] = None) -> None:

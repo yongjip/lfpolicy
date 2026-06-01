@@ -15,8 +15,8 @@ Start with the core workflow:
 
 Everything else is supporting workflow. Use `sample`, `init`, `generate`,
 `bootstrap`, `schema`, `doctor`, `permissions`, `completion`, `validate`,
-`lint`, `summary`, `snapshot`, and `import` when they remove real setup or review
-friction. They are not the reason to adopt the package.
+`lint`, `summary`, `explain`, `snapshot`, and `import` when they remove real
+setup or review friction. They are not the reason to adopt the package.
 
 ## Command Overview
 
@@ -26,6 +26,7 @@ friction. They are not the reason to adopt the package.
 | `audit` | Report drift between desired and current state. | Only when `--current-snapshot` is omitted |
 | `plan` | Produce a conservative change plan. | Only when `--current-snapshot` is omitted |
 | `apply` | Dry-run or execute a Lake Formation change plan. | Yes when live state is loaded or `--execute` is used |
+| `explain` | Explain current access for one principal and resource. | Only when `--current-snapshot` is omitted |
 | `init` | Generate a starter desired-state policy file. | No |
 | `generate` | Generate desired state from a Python policy file. | No |
 | `bootstrap` | Create a starter policy repository layout with CI and pre-commit files. | No |
@@ -46,18 +47,19 @@ State-aware commands use these options:
 
 - `--desired PATH`: desired state JSON/YAML file.
 - `--current-snapshot PATH`: current state JSON/YAML file. When omitted,
-  `audit`, `plan`, and `apply` load live AWS state through `boto3`.
+  `audit`, `plan`, `explain`, and `apply` load live AWS state through `boto3`.
 - `--profile NAME`: AWS profile for live operations.
 - `--region NAME`: AWS region for live operations.
 - `--catalog-id ID`: Glue Data Catalog ID.
 - `--output text|json|markdown|sarif`: output format where supported. `audit`
-  and `lint` support SARIF; `permissions`, `lint`, `summary`, `audit`, `plan`,
-  and `apply` support Markdown.
+  and `lint` support SARIF; `permissions`, `lint`, `summary`, `audit`,
+  `explain`, `plan`, and `apply` support Markdown.
 - `--output-file PATH`: write the command report to a file instead of stdout
   where supported. `doctor`, `permissions`, `completion`, `check`, `validate`,
-  `lint`, `summary`, `audit`, `plan`, and `apply` support this for reports;
-  `init`, `schema`, and `snapshot` use it for generated files. `import` uses
-  `--output` for the generated desired-state path and `--format` for JSON/YAML.
+  `lint`, `summary`, `audit`, `explain`, `plan`, and `apply` support this for
+  reports; `init`, `schema`, and `snapshot` use it for generated files.
+  `import` uses `--output` for the generated desired-state path and `--format`
+  for JSON/YAML.
 - `--github-summary`: append a Markdown report to `$GITHUB_STEP_SUMMARY` where
   supported.
 
@@ -93,7 +95,7 @@ Report files and GitHub summaries are written before `check --fail-on-findings`,
 `plan --fail-on-changes` return exit code `1`.
 
 See [`report-formats.md`](report-formats.md) for JSON and Markdown payload
-examples for check, summary, audit, plan, and apply reports.
+examples for check, summary, audit, explain, plan, and apply reports.
 
 ## `init`
 
@@ -467,6 +469,46 @@ Destructive planning flags:
 - `--allow-lf-tag-expression-deletes`
 - `--allow-resource-tag-removals`
 - `--allow-permission-revokes`
+
+## `explain`
+
+Explain current access for one principal and resource:
+
+```bash
+lfguard explain \
+  --desired policy/desired.json \
+  --current-snapshot snapshots/prod-current.json \
+  --principal arn:aws:iam::111122223333:role/Analyst \
+  --database analytics \
+  --table orders \
+  --permissions SELECT
+```
+
+`explain` reports direct grants, LF-Tag policy grants, named LF-Tag expression
+matches, effective LF-Tags on the target, data-location grant context, and
+desired grants that are missing from current state. It does not apply changes.
+
+Target options:
+
+- `--database NAME`: explain a database resource.
+- `--database NAME --table NAME`: explain a table resource.
+- `--database NAME --table NAME --columns c1,c2`: explain a column subset.
+- `--location S3_ARN_OR_PATH`: explain a data-location resource instead of a
+  catalog resource.
+
+Useful options:
+
+- `--principal ARN_OR_ID`: required Lake Formation principal.
+- `--permissions LIST`: optional comma-separated permissions that must be
+  covered by matching grants.
+- `--output text|json|markdown`: choose report format.
+- `--github-summary`: append the Markdown explain report to the GitHub Actions
+  job summary.
+
+When `--current-snapshot` is omitted, live loading is still scoped. The desired
+file should include the LF-Tag policy grants or named LF-Tag expressions you
+want explained; otherwise use `lfguard import` or `lfguard snapshot` first for
+a broader reviewed snapshot.
 
 ## `snapshot`
 

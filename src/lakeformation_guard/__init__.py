@@ -2,6 +2,7 @@
 
 from .audit import AuditFinding, audit
 from ._version import __version__
+from .explain import ExplainFinding, ExplainReport, explain
 from .lint import LintFinding, lint_desired
 from .models import (
     CurrentState,
@@ -34,13 +35,21 @@ from .policy import (
     table_creator,
 )
 from .planner import Change, Plan, PlanOptions, plan
+from .provider import (
+    CurrentStateProvider,
+    SnapshotCurrentStateProvider,
+    SnapshotFileCurrentStateProvider,
+)
 from .schema import state_json_schema
 
 __all__ = [
     "AuditFinding",
     "Change",
     "CurrentState",
+    "CurrentStateProvider",
     "DesiredState",
+    "ExplainFinding",
+    "ExplainReport",
     "Grant",
     "GuardrailState",
     "GuardrailConfig",
@@ -61,12 +70,15 @@ __all__ = [
     "ResourcePattern",
     "ResourceTagAssignment",
     "RoleBinding",
+    "SnapshotCurrentStateProvider",
+    "SnapshotFileCurrentStateProvider",
     "TagAssignmentScope",
     "TagKey",
     "__version__",
     "audit",
     "database_creator",
     "editor",
+    "explain",
     "load_policy",
     "lint_desired",
     "plan",

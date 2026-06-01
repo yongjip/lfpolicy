@@ -104,7 +104,10 @@ class PackageMetadataTests(unittest.TestCase):
             self.assertIn("/tmp/lfguard-policy-bootstrap/policy.py", workflow)
             self.assertIn("/lfguard check", workflow)
             self.assertIn("--current-snapshot /tmp/lfguard-demo/current-snapshot.json", workflow)
+            self.assertIn("/lfguard explain", workflow)
             self.assertIn("LakePolicy", workflow)
+            self.assertIn("CurrentStateProvider", workflow)
+            self.assertIn("callable(explain)", workflow)
             self.assertIn("table_creator", workflow)
 
     def test_release_workflow_verifies_published_package(self):
@@ -137,6 +140,9 @@ class PackageMetadataTests(unittest.TestCase):
         self.assertIn("lfguard generate /tmp/lfguard-pypi-policy/policy.py", workflow)
         self.assertIn("--output-file /tmp/lfguard-pypi-policy/policy/desired.json --check", workflow)
         self.assertIn("lfguard sample --output-dir /tmp/lfguard-pypi-demo", workflow)
+        self.assertIn("lfguard explain", workflow)
         self.assertIn("LakePolicy", workflow)
+        self.assertIn("CurrentStateProvider", workflow)
+        self.assertIn("callable(explain)", workflow)
         self.assertIn("table_creator", workflow)
         self.assertNotIn("aws-lakeformation-guard --version", workflow)

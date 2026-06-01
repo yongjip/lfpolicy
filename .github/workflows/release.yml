@@ -111,10 +111,18 @@ jobs:
           /tmp/lfguard-wheel-smoke/bin/lfguard lint --desired /tmp/lfguard-demo/desired.json
           /tmp/lfguard-wheel-smoke/bin/lfguard lint --desired /tmp/lfguard-demo/desired.json --output sarif --output-file /tmp/lfguard-lint.sarif
           /tmp/lfguard-wheel-smoke/bin/lfguard summary --desired /tmp/lfguard-demo/desired.json --current-snapshot /tmp/lfguard-demo/current-snapshot.json --output markdown
+          /tmp/lfguard-wheel-smoke/bin/lfguard explain \
+            --desired /tmp/lfguard-demo/desired.json \
+            --current-snapshot /tmp/lfguard-demo/current-snapshot.json \
+            --principal arn:aws:iam::111122223333:role/DataConsumer \
+            --database sales_curated \
+            --table customers \
+            --permissions SELECT \
+            --output json
           /tmp/lfguard-wheel-smoke/bin/lfguard plan \
             --desired /tmp/lfguard-demo/desired.json \
             --current-snapshot /tmp/lfguard-demo/current-snapshot.json
-          /tmp/lfguard-wheel-smoke/bin/python -c "from lakeformation_guard import DesiredState, CurrentState, LakePolicy, audit, plan, table_creator; print(DesiredState.__name__, CurrentState.__name__, LakePolicy.__name__, callable(audit), callable(plan), callable(table_creator))"
+          /tmp/lfguard-wheel-smoke/bin/python -c "from lakeformation_guard import CurrentStateProvider, DesiredState, CurrentState, LakePolicy, audit, explain, plan, table_creator; print(DesiredState.__name__, CurrentState.__name__, LakePolicy.__name__, CurrentStateProvider, callable(audit), callable(explain), callable(plan), callable(table_creator))"
       - uses: actions/upload-artifact@v6
         with:
           name: distributions
@@ -174,4 +182,12 @@ jobs:
             --desired /tmp/lfguard-pypi-demo/desired.json \
             --current-snapshot /tmp/lfguard-pypi-demo/current-snapshot.json \
             --fail-on-findings
-          python -c "from lakeformation_guard import DesiredState, LakePolicy, plan, table_creator; print(DesiredState.__name__, LakePolicy.__name__, callable(plan), callable(table_creator))"
+          lfguard explain \
+            --desired /tmp/lfguard-pypi-demo/desired.json \
+            --current-snapshot /tmp/lfguard-pypi-demo/current-snapshot.json \
+            --principal arn:aws:iam::111122223333:role/DataConsumer \
+            --database sales_curated \
+            --table customers \
+            --permissions SELECT \
+            --output json
+          python -c "from lakeformation_guard import CurrentStateProvider, DesiredState, LakePolicy, explain, plan, table_creator; print(DesiredState.__name__, LakePolicy.__name__, CurrentStateProvider, callable(explain), callable(plan), callable(table_creator))"

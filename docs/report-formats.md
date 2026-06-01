@@ -210,6 +210,81 @@ one object for current snapshot:
 Markdown summary reports use a compact table for pull request comments and
 GitHub Actions artifacts.
 
+## Explain Reports
+
+Use explain reports when reviewers need to understand why access exists or why
+a desired grant is still missing:
+
+```bash
+lfguard explain \
+  --desired examples/desired.json \
+  --current-snapshot examples/current-snapshot.json \
+  --principal arn:aws:iam::111122223333:role/Analyst \
+  --database analytics \
+  --table orders \
+  --permissions SELECT \
+  --output json
+```
+
+JSON explain reports contain the target, effective LF-Tags, a summary by
+explanation status, and ordered findings:
+
+```json
+{
+  "schema_version": "lfguard.explain.v1",
+  "principal": "arn:aws:iam::111122223333:role/Analyst",
+  "resource": {
+    "kind": "table",
+    "database": "analytics",
+    "table": "orders"
+  },
+  "requested_permissions": ["SELECT"],
+  "effective_lf_tags": {
+    "domain": ["sales"],
+    "sensitivity": ["internal"]
+  },
+  "summary": {
+    "matched": 1,
+    "not_matched": 0,
+    "missing": 0,
+    "context": 0
+  },
+  "findings": [
+    {
+      "source": "named_lf_tag_policy",
+      "status": "matched",
+      "message": "Named LF-Tag expression 'sales_tables' matches the target's effective LF-Tags.",
+      "permissions": ["SELECT"],
+      "grantable_permissions": [],
+      "resource": {
+        "kind": "lf_tag_policy",
+        "resource_type": "TABLE",
+        "expression_name": "sales_tables"
+      },
+      "details": {
+        "expression_name": "sales_tables",
+        "matched": true
+      }
+    }
+  ],
+  "notes": []
+}
+```
+
+Finding statuses have these meanings:
+
+- `matched`: a current grant applies to the target and covers requested
+  permissions when `--permissions` is set.
+- `not_matched`: a current grant was relevant to the principal but its LF-Tag
+  expression, columns, or permissions did not cover the request.
+- `missing`: a desired grant matches the target but is absent from current
+  state.
+- `context`: related current state exists, such as a data-location grant, but
+  `lfguard` cannot prove it grants the requested catalog access by itself.
+
+Markdown explain reports include the same summary, effective LF-Tag table, and
+finding table for pull request comments or GitHub Actions summaries.
+
 ## Plan Reports
 
 Use plan reports when you want a reviewable change list before touching AWS.

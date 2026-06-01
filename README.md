@@ -20,6 +20,7 @@ The import package is `lakeformation_guard`; the CLI command is `lfguard`.
   LF-Tag policy resources.
 - Python-native permission groups that generate reviewable desired state.
 - Offline audit and plan workflows from JSON or YAML snapshots.
+- Offline effective-access explanations from JSON or YAML snapshots.
 - Live AWS inventory and apply workflows through the optional `boto3` adapter.
 - Live AWS import for starter desired-state scaffolds.
 
@@ -41,6 +42,7 @@ desired-state file so drift checks stay focused and reviewable.
 - Conservative defaults that avoid accidental revokes and tag removals.
 - Works offline from snapshots, which makes CI drift checks possible.
 - Lints desired policy for undefined LF-Tag keys and values before AWS access.
+- Explains why access exists or is missing before changing policy.
 - Keeps the Python API dependency-light while isolating boto3 in the AWS adapter.
 - Produces text, JSON, Markdown, and SARIF output suitable for pull request
   comments, release checks, code scanning, and platform automation.
@@ -58,8 +60,8 @@ desired-state file so drift checks stay focused and reviewable.
 
 Everything else is supporting workflow: Python policy generation, sample files,
 repository bootstrap, schema export, install diagnostics, IAM policy starters,
-and report formatting. Those helpers are optional. The core value is still
-check, audit, plan, and conservative apply.
+effective-access explanation, and report formatting. Those helpers are optional.
+The core value is still check, audit, plan, and conservative apply.
 
 `lfguard check --fail-on-findings` is deliberately rigid: it blocks undefined
 tags, mixed-case LF-Tags, multiple values for one key on a resource, broad
@@ -78,6 +80,9 @@ Existing environments can tune lint severities in desired state with a top-level
 - Generate a safe change plan for new LF-Tag values, table tag assignments, and
   LF-Tag policy grants, including grants that reference named LF-Tag
   expressions.
+- Explain why a role can see a database, table, column set, or data location
+  from direct grants, LF-Tag policies, named LF-Tag expressions, and effective
+  LF-Tags.
 - Let platform teams review destructive operations separately from additive
   changes.
 - Keep data access policy as code without writing direct boto3 orchestration for
@@ -307,6 +312,12 @@ lfguard generate policy.py --output-file policy/desired.json --check
 lfguard sample --output-dir lfguard-demo
 lfguard bootstrap --output-dir lfguard-policy
 lfguard import --catalog-id 123456789012 --output policy/imported-desired.json
+lfguard explain \
+  --desired desired.json \
+  --current-snapshot current.json \
+  --principal role \
+  --database analytics \
+  --table orders
 lfguard schema --output-file policy/lfguard.schema.json
 lfguard doctor --require aws
 lfguard permissions --template read-only --include-glue-read
@@ -333,7 +344,16 @@ lfguard plan \
 ## Python API
 
 ```python
-from lakeformation_guard import DesiredState, CurrentState, PlanOptions, audit, lint_desired, plan
+from lakeformation_guard import (
+    CurrentState,
+    DesiredState,
+    PlanOptions,
+    ResourceRef,
+    audit,
+    explain,
+    lint_desired,
+    plan,
+)
 
 desired = DesiredState.from_dict({
     "lf_tags": {"sensitivity": ["public", "internal"]},
@@ -350,6 +370,12 @@ current = CurrentState.empty()
 lint_findings = lint_desired(desired)
 findings = audit(desired, current)
 change_plan = plan(desired, current, PlanOptions())
+access_report = explain(
+    desired,
+    current,
+    principal="arn:aws:iam::111122223333:role/Analyst",
+    resource=ResourceRef(kind="database", database_name="analytics"),
+)
 
 for finding in lint_findings:
     print(finding.code, finding.message)
@@ -385,7 +411,7 @@ not turn destructive changes on by default.
 The repository includes GitHub Actions for CI and PyPI Trusted Publishing. See
 [`docs/publishing.md`](docs/publishing.md) for the release path and the exact
 PyPI publisher settings. The latest release notes are in
-[`docs/release-notes/v0.3.0.md`](docs/release-notes/v0.3.0.md), with prior
+[`docs/release-notes/v0.4.0.md`](docs/release-notes/v0.4.0.md), with prior
 release notes under [`docs/release-notes/`](docs/release-notes/).
 
 ## More docs
@@ -406,7 +432,7 @@ release notes under [`docs/release-notes/`](docs/release-notes/).
   Python-native permission group authoring layer with reader, editor,
   table creator, and database creator templates.
 - [`docs/report-formats.md`](docs/report-formats.md): JSON and Markdown report
-  shapes for audits, plans, applies, and CI artifacts.
+  shapes for audits, explains, plans, applies, and CI artifacts.
 - [`docs/architecture.md`](docs/architecture.md): package boundaries, data
   flow, public API, and AWS adapter responsibilities.
 - [`docs/roadmap.md`](docs/roadmap.md): release scope, near-term priorities,

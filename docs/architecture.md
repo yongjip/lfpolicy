@@ -19,6 +19,10 @@ pure audit and planning functions, and an optional boto3 adapter.
 - `lakeformation_guard.planner` compares desired and current state and returns a
   conservative ordered plan. Destructive changes are included only when the
   matching `PlanOptions` flag is set.
+- `lakeformation_guard.explain` explains one principal/resource access question
+  from desired and current state. It is read-only and does not call AWS.
+- `lakeformation_guard.provider` defines the narrow `CurrentStateProvider`
+  protocol used by the CLI and integrations to supply current state.
 - `lakeformation_guard.io` reads JSON or optional YAML state files.
 - `lakeformation_guard.cli` handles command parsing, report rendering, file
   output, and exit codes.
@@ -41,12 +45,14 @@ Most workflows follow the same path:
 2. Load current state from a local snapshot or the AWS adapter.
 3. Normalize both inputs into `DesiredState` and `CurrentState`.
 4. Optionally run `lint_desired()` for desired-policy authoring issues.
-5. Run `audit()` for drift findings or `plan()` for reviewable changes.
+5. Run `audit()` for drift findings, `plan()` for reviewable changes, or
+   `explain()` for one effective-access question.
 6. Render text, JSON, Markdown, or SARIF output.
 7. Optionally pass the plan to the AWS adapter for dry-run or execution.
 
-The audit and planner layers do not know whether current state came from a file
-or AWS. This keeps CI snapshot workflows and live workflows aligned.
+The audit, planner, and explain layers do not know whether current state came
+from a file, AWS, or another provider. This keeps CI snapshot workflows and
+live workflows aligned.
 
 ## Safety Invariants
 
@@ -85,17 +91,32 @@ planner code used by offline workflows. The separate import path can scaffold a
 starter desired-state file from live LF-Tags, named LF-Tag expressions, grants,
 and resource tags discovered through imported grants.
 
+The `CurrentStateProvider` protocol is intentionally small:
+
+```python
+class CurrentStateProvider:
+    def load_current_state_for(self, desired: DesiredState) -> CurrentState: ...
+```
+
+The boto3 adapter implements that protocol, and snapshot-backed providers let
+tests, CI, caches, internal APIs, or databases provide current state without
+importing boto3.
+
 ## Public API
 
 The intended import surface is exposed from `lakeformation_guard`:
 
 ```python
-from lakeformation_guard import CurrentState, DesiredState, PlanOptions, audit, lint_desired, plan
+from lakeformation_guard import CurrentState, DesiredState, PlanOptions, audit, explain, lint_desired, plan
 ```
 
 Use `lakeformation_guard.aws.AWSLakeFormationAdapter` only for live inventory or
 apply workflows. Internal helper functions and CLI rendering helpers are not
 part of the stable public API.
+
+Use `CurrentStateProvider` when a downstream system already has current state in
+files, APIs, caches, or databases and wants to reuse `audit()`, `plan()`, or
+`explain()` without the default AWS adapter.
 
 The public API includes a narrow authoring layer under
 `lakeformation_guard.policy` for teams that want rigid permission groups
@@ -111,6 +132,8 @@ The most common changes should stay within the existing boundaries:
 - Add drift reporting in `audit.py`.
 - Add desired-policy semantic checks in `lint.py`.
 - Add planned changes in `planner.py`.
+- Add access explanation behavior in `explain.py`.
+- Add current-state source integrations behind `provider.py`.
 - Add boto3 translation or execution in `aws.py`.
 - Add CLI flags and report rendering in `cli.py`.
 - Add docs and tests for any public behavior or output shape change.

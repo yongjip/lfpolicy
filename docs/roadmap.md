@@ -17,6 +17,12 @@ The first release focuses on the core guardrail loop:
 - Optional boto3 integration for scoped Lake Formation inventory and execution.
 - Text, JSON, Markdown, and SARIF reports for local review and CI artifacts.
 
+## Current Direction
+
+Recent releases added adoption controls, named LF-Tag expressions, import
+scaffolding, stable plan JSON, selective apply, safety budgets, a small
+current-state provider interface, and effective-access explanations.
+
 ## Near-Term Priorities
 
 The most useful next improvements are:
@@ -32,8 +38,8 @@ The most useful next improvements are:
   hand-written desired state.
 - More real-world examples for LF-Tag policy grants, table-with-columns grants,
   and data location permissions.
-- Better current-state explanation output for "why can this role see this
-  database/table/column?" reviews.
+- Broader `explain` coverage from real account snapshots, especially around
+  column-level tags, data filters, and data-location-to-table evidence.
 - Better validation messages that point directly at the problematic field in a
   desired-state file.
 - Additional report examples for pull request comments and scheduled governance
