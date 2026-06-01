@@ -177,7 +177,7 @@ models them.
 | LF-Tag policy - table | Table permissions on tables/views/columns matching an LF-Tag expression. | Supported as `lf_tag_policy` with `resource_type=TABLE`. |
 | LF-Tag values | `ASSOCIATE`, `DESCRIBE`, and grant-with-LF-Tag-expression permissions. | Not modeled as desired grants. Use native Lake Formation administration for LF-Tag permission delegation. |
 | LF-Tags themselves | `ALTER`, `DROP`. | `lfguard` can create/update LF-Tag definitions during apply, but does not model administrative LF-Tag delegation grants. |
-| Data filters / cell filters | `SELECT`, `DESCRIBE`, `DROP` on filtered table resources. | `data_cells_filter` grants are supported for existing Lake Formation filters; filter definitions remain in native Lake Formation or infrastructure tooling. |
+| Data filters / cell filters | `SELECT`, `DESCRIBE`, `DROP` on filtered table resources. | `data_cells_filter` grants and `data_cells_filters` definitions are supported, including row filters and included or excluded columns. |
 | Resource links | `DESCRIBE`, `DROP`. | Not modeled separately. |
 
 ## Permission Behavior Matrix

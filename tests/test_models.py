@@ -1,6 +1,6 @@
 import unittest
 
-from lakeformation_guard.models import DesiredState, LFTagKeyMetadata, PolicyException, ResourceRef
+from lakeformation_guard.models import DataCellsFilterDefinition, DesiredState, LFTagKeyMetadata, PolicyException, ResourceRef
 
 
 class ModelTests(unittest.TestCase):
@@ -230,6 +230,100 @@ class ModelTests(unittest.TestCase):
             {(expression.catalog_id, expression.name) for expression in round_tripped.lf_tag_expressions},
             {("111111111111", "shared"), ("222222222222", "shared")},
         )
+
+    def test_state_parses_data_cells_filter_definitions(self):
+        state = DesiredState.from_dict(
+            {
+                "data_cells_filters": [
+                    {
+                        "name": "orders_public",
+                        "catalog_id": "222222222222",
+                        "database": "analytics",
+                        "table": "orders",
+                        "row_filter": "country = 'US'",
+                        "columns": ["status", "order_id", "status"],
+                        "version_id": "v1",
+                    },
+                    {
+                        "Name": "orders_private",
+                        "TableCatalogId": "333333333333",
+                        "DatabaseName": "analytics",
+                        "TableName": "orders",
+                        "RowFilter": {"AllRowsWildcard": {}},
+                        "ColumnWildcard": {"ExcludedColumnNames": ["notes"]},
+                    },
+                ]
+            }
+        )
+
+        filters = {filter_definition.name: filter_definition for filter_definition in state.data_cells_filters}
+        first = filters["orders_public"]
+        second = filters["orders_private"]
+
+        self.assertEqual(first.name, "orders_public")
+        self.assertEqual(first.catalog_id, "222222222222")
+        self.assertEqual(first.row_filter, "country = 'US'")
+        self.assertEqual(first.columns, ("order_id", "status"))
+        self.assertEqual(first.version_id, "v1")
+        self.assertEqual(
+            second.to_dict(),
+            {
+                "name": "orders_private",
+                "catalog_id": "333333333333",
+                "database": "analytics",
+                "table": "orders",
+                "all_rows": True,
+                "excluded_columns": ["notes"],
+            },
+        )
+        self.assertEqual(
+            first.resource.identity,
+            "data_cells_filter:catalog=222222222222:database=analytics:table=orders:filter_name=orders_public",
+        )
+        self.assertEqual(
+            DesiredState.from_dict(state.to_dict()).data_cells_filters,
+            state.data_cells_filters,
+        )
+
+    def test_data_cells_filter_version_id_does_not_drive_policy_equality(self):
+        desired = DataCellsFilterDefinition(
+            name="orders_public",
+            catalog_id="222222222222",
+            database_name="analytics",
+            table_name="orders",
+            all_rows=True,
+            columns=("order_id",),
+        )
+        current = DataCellsFilterDefinition(
+            name="orders_public",
+            catalog_id="222222222222",
+            database_name="analytics",
+            table_name="orders",
+            all_rows=True,
+            columns=("order_id",),
+            version_id="current-version",
+        )
+
+        self.assertEqual(desired, current)
+
+    def test_data_cells_filter_definition_rejects_ambiguous_row_or_column_shapes(self):
+        with self.assertRaisesRegex(ValueError, "row_filter and all_rows"):
+            DataCellsFilterDefinition(
+                name="orders_public",
+                database_name="analytics",
+                table_name="orders",
+                row_filter="country = 'US'",
+                all_rows=True,
+            )
+
+        with self.assertRaisesRegex(ValueError, "columns and excluded_columns"):
+            DataCellsFilterDefinition(
+                name="orders_public",
+                database_name="analytics",
+                table_name="orders",
+                columns=("order_id",),
+                excluded_columns=("notes",),
+            )
 
     def test_state_parses_optional_lf_tag_key_metadata(self):
         state = DesiredState.from_dict(

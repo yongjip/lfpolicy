@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from .models import (
     CurrentState,
+    DataCellsFilterDefinition,
     DesiredState,
     Grant,
     LFTagDefinition,
@@ -16,6 +17,9 @@ from .models import (
 )
 from .planner import Change, Plan
 from .state_index import (
+    data_cells_filter_definition_key,
+    data_cells_filter_resource_key,
+    data_cells_filter_sort_key,
     lf_tag_expression_definition_key,
     lf_tag_expression_key,
     lf_tag_expression_sort_key,
@@ -69,11 +73,13 @@ class AWSLakeFormationAdapter:
 
         lf_tags = list(self._load_lf_tags(desired))
         lf_tag_expressions = list(self._load_lf_tag_expressions(desired))
+        data_cells_filters = list(self._load_data_cells_filters(desired))
         resource_tags = list(self._load_resource_tags(desired))
         grants = list(self._load_grants(desired))
         return CurrentState(
             lf_tags=tuple(lf_tags),
             lf_tag_expressions=tuple(lf_tag_expressions),
+            data_cells_filters=tuple(data_cells_filters),
             resource_tags=tuple(resource_tags),
             grants=tuple(grants),
         )
@@ -85,9 +91,14 @@ class AWSLakeFormationAdapter:
             list(self._import_lf_tag_expressions()) if "lf-tag-expressions" in include_set else []
         )
         discovered_grants = (
-            list(self._import_grants()) if {"grants", "resource-tags"} & include_set else []
+            list(self._import_grants()) if {"grants", "resource-tags", "data-cells-filters"} & include_set else []
         )
         grants = discovered_grants if "grants" in include_set else []
+        data_cells_filters = (
+            list(self._import_data_cells_filters_from_grants(discovered_grants))
+            if "data-cells-filters" in include_set
+            else []
+        )
         resource_tags = []
         if "resource-tags" in include_set:
             resources = {
@@ -99,6 +110,7 @@ class AWSLakeFormationAdapter:
         return CurrentState(
             lf_tags=tuple(lf_tags),
             lf_tag_expressions=tuple(lf_tag_expressions),
+            data_cells_filters=tuple(data_cells_filters),
             resource_tags=tuple(resource_tags),
             grants=tuple(grants),
         )
@@ -152,6 +164,36 @@ class AWSLakeFormationAdapter:
             if expression:
                 yield expression
 
+    def _load_data_cells_filters(self, desired: DesiredState) -> Iterable[DataCellsFilterDefinition]:
+        filter_keys = {
+            data_cells_filter_definition_key(filter_definition)
+            for filter_definition in desired.data_cells_filters
+        }
+        filter_keys.update(
+            data_cells_filter_resource_key(grant.resource)
+            for grant in desired.grants
+            if grant.resource.kind == "data_cells_filter"
+        )
+        for catalog_id, database_name, table_name, name in sorted(filter_keys, key=data_cells_filter_sort_key):
+            request = _data_cells_filter_get_request(
+                catalog_id=catalog_id or self.catalog_id,
+                database_name=database_name,
+                table_name=table_name,
+                name=name,
+            )
+            try:
+                response = self.lakeformation.get_data_cells_filter(**request)
+            except Exception as exc:
+                if _is_not_found(exc):
+                    continue
+                raise
+            definition = _data_cells_filter_definition_from_response(
+                response.get("DataCellsFilter", {}),
+                fallback_catalog_id=catalog_id or self.catalog_id,
+            )
+            if definition:
+                yield definition
+
     def _load_resource_tags(self, desired: DesiredState) -> Iterable[ResourceTagAssignment]:
         resources = {assignment.resource for assignment in desired.resource_tags}
         resources.update(grant.resource for grant in desired.grants if grant.resource.kind != "lf_tag_policy")
@@ -195,6 +237,44 @@ class AWSLakeFormationAdapter:
             grant = _grant_from_permission_item(item, fallback_catalog_id=self.catalog_id)
             if grant:
                 yield grant
+
+    def _import_data_cells_filters_from_grants(self, grants: Iterable[Grant]) -> Iterable[DataCellsFilterDefinition]:
+        table_resources = set()
+        for grant in grants:
+            resource = grant.resource
+            if resource.kind == "data_cells_filter":
+                table_resources.add(
+                    ResourceRef(
+                        kind="table",
+                        database_name=resource.database_name,
+                        table_name=resource.table_name,
+                        catalog_id=resource.catalog_id,
+                    )
+                )
+            elif resource.kind in {"table", "table_with_columns"}:
+                table_resources.add(
+                    ResourceRef(
+                        kind="table",
+                        database_name=resource.database_name,
+                        table_name=resource.table_name,
+                        catalog_id=resource.catalog_id,
+                    )
+                )
+        for resource in sorted(table_resources):
+            table = {
+                "DatabaseName": resource.database_name,
+                "Name": resource.table_name,
+            }
+            if resource.catalog_id or self.catalog_id:
+                table["CatalogId"] = resource.catalog_id or self.catalog_id
+            request = {"Table": {key: value for key, value in table.items() if value not in (None, "")}, "MaxResults": 100}
+            for item in self._paginate_or_call("list_data_cells_filter", request, "DataCellsFilters"):
+                definition = _data_cells_filter_definition_from_response(
+                    item,
+                    fallback_catalog_id=resource.catalog_id or self.catalog_id,
+                )
+                if definition:
+                    yield definition
 
     def _load_grants(self, desired: DesiredState) -> Iterable[Grant]:
         seen = set()
@@ -287,6 +367,26 @@ class AWSLakeFormationAdapter:
                 "Name": payload["name"],
                 "catalog_id": payload.get("catalog_id"),
             }))
+        elif action == "data_cells_filter.create":
+            definition = DataCellsFilterDefinition.from_dict(payload)
+            response = self.lakeformation.create_data_cells_filter(
+                TableData=_data_cells_filter_table_data(definition, fallback_catalog_id=self.catalog_id)
+            )
+        elif action == "data_cells_filter.update":
+            definition = DataCellsFilterDefinition.from_dict(payload)
+            response = self.lakeformation.update_data_cells_filter(
+                TableData=_data_cells_filter_table_data(definition, fallback_catalog_id=self.catalog_id)
+            )
+        elif action == "data_cells_filter.delete":
+            definition = DataCellsFilterDefinition.from_dict(payload)
+            response = self.lakeformation.delete_data_cells_filter(
+                **_data_cells_filter_get_request(
+                    catalog_id=definition.catalog_id or self.catalog_id,
+                    database_name=definition.database_name,
+                    table_name=definition.table_name,
+                    name=definition.name,
+                )
+            )
         elif action == "resource_tag.add_values":
             resource = ResourceRef.from_dict(payload["resource"])
             response = self.lakeformation.add_lf_tags_to_resource(**self._with_catalog_id({
@@ -558,6 +658,75 @@ def _expression_definition_from_response(
                 for item in expression
             },
         },
+    )
+
+
+def _data_cells_filter_get_request(
+    *,
+    catalog_id: Optional[str],
+    database_name: str,
+    table_name: str,
+    name: str,
+) -> Dict[str, Any]:
+    request = {
+        "TableCatalogId": catalog_id,
+        "DatabaseName": database_name,
+        "TableName": table_name,
+        "Name": name,
+    }
+    return {key: value for key, value in request.items() if value not in (None, "")}
+
+
+def _data_cells_filter_table_data(
+    definition: DataCellsFilterDefinition,
+    *,
+    fallback_catalog_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    table_data: Dict[str, Any] = {
+        "TableCatalogId": definition.catalog_id or fallback_catalog_id,
+        "DatabaseName": definition.database_name,
+        "TableName": definition.table_name,
+        "Name": definition.name,
+    }
+    if definition.row_filter:
+        table_data["RowFilter"] = {"FilterExpression": definition.row_filter}
+    elif definition.all_rows:
+        table_data["RowFilter"] = {"AllRowsWildcard": {}}
+    if definition.columns:
+        table_data["ColumnNames"] = list(definition.columns)
+    elif definition.excluded_columns:
+        table_data["ColumnWildcard"] = {"ExcludedColumnNames": list(definition.excluded_columns)}
+    if definition.version_id:
+        table_data["VersionId"] = definition.version_id
+    return {key: value for key, value in table_data.items() if value not in (None, "")}
+
+
+def _data_cells_filter_definition_from_response(
+    raw: Mapping[str, Any],
+    *,
+    fallback_catalog_id: Optional[str] = None,
+) -> Optional[DataCellsFilterDefinition]:
+    name = raw.get("Name")
+    database_name = raw.get("DatabaseName")
+    table_name = raw.get("TableName")
+    if not name or not database_name or not table_name:
+        return None
+    row_filter = raw.get("RowFilter", {})
+    column_wildcard = raw.get("ColumnWildcard", {})
+    return DataCellsFilterDefinition.from_dict(
+        {
+            "name": name,
+            "catalog_id": raw.get("TableCatalogId") or raw.get("CatalogId") or fallback_catalog_id,
+            "database": database_name,
+            "table": table_name,
+            "row_filter": {
+                "filter_expression": row_filter.get("FilterExpression"),
+                "all_rows": row_filter.get("AllRowsWildcard") is not None,
+            },
+            "columns": raw.get("ColumnNames", ()),
+            "excluded_columns": column_wildcard.get("ExcludedColumnNames", ()),
+            "version_id": raw.get("VersionId"),
+        }
     )
 
 

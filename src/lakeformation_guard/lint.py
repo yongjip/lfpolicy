@@ -9,8 +9,11 @@ from .config import lint_exception_applies, lint_severity
 from .models import DesiredState, Grant, GuardrailConfig, PolicyException, ResourceTagAssignment
 from .permissions import BROAD_PERMISSION_COVERAGE
 from .state_index import (
+    DataCellsFilterKey,
     LFTagExpressionKey,
     LFTagKey,
+    data_cells_filter_key_identity,
+    duplicate_data_cells_filter_keys,
     duplicate_lf_tag_key_metadata_keys,
     duplicate_lf_tag_keys,
     duplicate_lf_tag_expression_keys,
@@ -74,13 +77,22 @@ def lint_desired(desired: DesiredState) -> Tuple[LintFinding, ...]:
     """Return semantic desired-policy findings without making AWS calls."""
 
     findings: List[LintFinding] = []
-    if not desired.lf_tags and not desired.lf_tag_expressions and not desired.resource_tags and not desired.grants:
+    if (
+        not desired.lf_tags
+        and not desired.lf_tag_expressions
+        and not desired.data_cells_filters
+        and not desired.resource_tags
+        and not desired.grants
+    ):
         findings.append(
             LintFinding(
                 code="DESIRED_STATE_EMPTY",
                 severity="warning",
                 target="desired_state",
-                message="Desired state does not define any LF-Tags, LF-Tag expressions, resource tag assignments, or grants",
+                message=(
+                    "Desired state does not define any LF-Tags, LF-Tag expressions, "
+                    "data cells filters, resource tag assignments, or grants"
+                ),
                 details={},
             )
         )
@@ -99,6 +111,7 @@ def lint_desired(desired: DesiredState) -> Tuple[LintFinding, ...]:
         for metadata in desired.lf_tag_key_metadata
     }
     duplicate_expression_keys = duplicate_lf_tag_expression_keys(desired.lf_tag_expressions)
+    duplicate_filter_keys = duplicate_data_cells_filter_keys(desired.data_cells_filters)
     expression_index = lf_tag_expression_index(
         desired.lf_tag_expressions,
         allow_duplicates=bool(duplicate_expression_keys),
@@ -108,6 +121,7 @@ def lint_desired(desired: DesiredState) -> Tuple[LintFinding, ...]:
     findings.extend(_lint_duplicate_lf_tag_key_metadata_keys(duplicate_metadata_keys))
     findings.extend(_lint_lf_tag_definitions(tag_values))
     findings.extend(_lint_duplicate_lf_tag_expression_keys(duplicate_expression_keys))
+    findings.extend(_lint_duplicate_data_cells_filter_keys(duplicate_filter_keys))
     for expression in desired.lf_tag_expressions:
         findings.extend(_lint_lf_tag_expression_definition(expression, tag_values))
     for assignment in desired.resource_tags:
@@ -374,6 +388,28 @@ def _lint_duplicate_lf_tag_expression_keys(
                 target=lf_tag_expression_key_identity(key),
                 message="Desired state defines multiple LF-Tag expressions with the same catalog ID and name",
                 details={"catalog_id": key[0], "name": key[1]},
+            )
+        )
+    return findings
+
+
+def _lint_duplicate_data_cells_filter_keys(
+    duplicate_keys: Tuple[DataCellsFilterKey, ...],
+) -> List[LintFinding]:
+    findings: List[LintFinding] = []
+    for key in duplicate_keys:
+        findings.append(
+            LintFinding(
+                code="DATA_CELLS_FILTER_DUPLICATE_IDENTITY",
+                severity="error",
+                target=data_cells_filter_key_identity(key),
+                message="Desired state defines multiple data cells filters with the same catalog, database, table, and name",
+                details={
+                    "catalog_id": key[0],
+                    "database": key[1],
+                    "table": key[2],
+                    "name": key[3],
+                },
             )
         )
     return findings

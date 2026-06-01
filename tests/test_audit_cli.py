@@ -1575,6 +1575,7 @@ class AuditCliTests(unittest.TestCase):
                 payload,
                 {
                     "current_snapshot": {
+                        "data_cells_filters": 0,
                         "grants": 0,
                         "lf_tag_expressions": 0,
                         "lf_tags": 0,
@@ -1582,6 +1583,7 @@ class AuditCliTests(unittest.TestCase):
                         "valid": True,
                     },
                     "desired": {
+                        "data_cells_filters": 0,
                         "grants": 1,
                         "lf_tag_expressions": 0,
                         "lf_tags": 1,
@@ -2116,6 +2118,90 @@ class AuditCliTests(unittest.TestCase):
             ).details["resource"]["kind"],
             "data_cells_filter",
         )
+
+    def test_lint_flags_duplicate_data_cells_filter_identity(self):
+        desired = DesiredState.from_dict(
+            {
+                "data_cells_filters": [
+                    {
+                        "name": "orders_public",
+                        "catalog_id": "222222222222",
+                        "database": "analytics",
+                        "table": "orders",
+                        "all_rows": True,
+                    },
+                    {
+                        "name": "orders_public",
+                        "catalog_id": "222222222222",
+                        "database": "analytics",
+                        "table": "orders",
+                        "row_filter": "country = 'US'",
+                    },
+                ]
+            }
+        )
+
+        findings = lint_desired(desired)
+
+        self.assertEqual([finding.code for finding in findings], ["DATA_CELLS_FILTER_DUPLICATE_IDENTITY"])
+        self.assertIn(
+            "data_cells_filter:catalog=222222222222:database=analytics:table=orders:name=orders_public",
+            findings[0].target,
+        )
+
+    def test_audit_reports_data_cells_filter_missing_drift_and_unmanaged(self):
+        desired = DesiredState.from_dict(
+            {
+                "data_cells_filters": [
+                    {
+                        "name": "orders_internal",
+                        "catalog_id": "222222222222",
+                        "database": "analytics",
+                        "table": "orders",
+                        "row_filter": "sensitivity <> 'restricted'",
+                    },
+                    {
+                        "name": "orders_public",
+                        "catalog_id": "222222222222",
+                        "database": "analytics",
+                        "table": "orders",
+                        "all_rows": True,
+                        "columns": ["order_id", "status"],
+                    },
+                ]
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "data_cells_filters": [
+                    {
+                        "name": "orders_legacy",
+                        "catalog_id": "222222222222",
+                        "database": "analytics",
+                        "table": "orders",
+                        "all_rows": True,
+                    },
+                    {
+                        "name": "orders_public",
+                        "catalog_id": "222222222222",
+                        "database": "analytics",
+                        "table": "orders",
+                        "row_filter": "country = 'US'",
+                        "columns": ["order_id"],
+                    },
+                ]
+            }
+        )
+
+        findings = audit(desired, current)
+
+        self.assertEqual(
+            [finding.code for finding in findings],
+            ["DATA_CELLS_FILTER_MISSING", "DATA_CELLS_FILTER_DRIFT", "DATA_CELLS_FILTER_UNMANAGED"],
+        )
+        self.assertEqual(findings[0].severity, "error")
+        self.assertEqual(findings[1].details["desired"]["all_rows"], True)
+        self.assertEqual(findings[2].severity, "warning")
 
     def test_cli_lint_outputs_json_and_can_fail_on_findings(self):
         with tempfile.TemporaryDirectory() as tmp:

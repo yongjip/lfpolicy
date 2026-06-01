@@ -7,12 +7,15 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from .models import (
     CurrentState,
+    DataCellsFilterDefinition,
     DesiredState,
     LFTagExpressionDefinition,
     ResourceRef,
 )
 from .permissions import BROAD_PERMISSION_COVERAGE, missing_permissions
 from .state_index import (
+    data_cells_filter_index,
+    data_cells_filter_sort_key,
     grant_index,
     grant_target,
     lf_tag_expression_index,
@@ -32,6 +35,9 @@ _ACTION_AWS_API = {
     "lf_tag_expression.create": "create_lf_tag_expression",
     "lf_tag_expression.update": "update_lf_tag_expression",
     "lf_tag_expression.delete": "delete_lf_tag_expression",
+    "data_cells_filter.create": "create_data_cells_filter",
+    "data_cells_filter.update": "update_data_cells_filter",
+    "data_cells_filter.delete": "delete_data_cells_filter",
     "resource_tag.add_values": "add_lf_tags_to_resource",
     "resource_tag.remove_values": "remove_lf_tags_from_resource",
     "grant.add_permissions": "grant_permissions",
@@ -42,6 +48,8 @@ _ACTION_REQUIRED_FLAG = {
     "lf_tag.remove_values": "--allow-lf-tag-value-removals",
     "lf_tag_expression.update": "--allow-lf-tag-expression-updates",
     "lf_tag_expression.delete": "--allow-lf-tag-expression-deletes",
+    "data_cells_filter.update": "--allow-data-cells-filter-updates",
+    "data_cells_filter.delete": "--allow-data-cells-filter-deletes",
     "resource_tag.remove_values": "--allow-resource-tag-removals",
     "grant.revoke_permissions": "--allow-permission-revokes",
 }
@@ -54,6 +62,8 @@ class PlanOptions:
     allow_lf_tag_value_removals: bool = False
     allow_lf_tag_expression_updates: bool = False
     allow_lf_tag_expression_deletes: bool = False
+    allow_data_cells_filter_updates: bool = False
+    allow_data_cells_filter_deletes: bool = False
     allow_resource_tag_removals: bool = False
     allow_permission_revokes: bool = False
 
@@ -180,6 +190,7 @@ def plan(desired: DesiredState, current: CurrentState, options: PlanOptions = Pl
     changes: List[Change] = []
     changes.extend(_plan_lf_tags(desired, current, options))
     changes.extend(_plan_lf_tag_expressions(desired, current, options))
+    changes.extend(_plan_data_cells_filters(desired, current, options))
     changes.extend(_plan_resource_tags(desired, current, options))
     changes.extend(_plan_grants(desired, current, options))
     return Plan(tuple(changes))
@@ -265,6 +276,46 @@ def _plan_lf_tag_expressions(desired: DesiredState, current: CurrentState, optio
                 payload={"name": current_expression.name, "catalog_id": current_expression.catalog_id},
                 destructive=True,
                 before=current_expression.to_dict(),
+                after=None,
+            )
+
+
+def _plan_data_cells_filters(desired: DesiredState, current: CurrentState, options: PlanOptions) -> Iterable[Change]:
+    current_filters = data_cells_filter_index(current.data_cells_filters)
+    desired_filters = data_cells_filter_index(desired.data_cells_filters)
+    for key, desired_filter in sorted(desired_filters.items(), key=lambda item: data_cells_filter_sort_key(item[0])):
+        current_filter = current_filters.get(key)
+        if current_filter is None:
+            yield Change(
+                action="data_cells_filter.create",
+                target=desired_filter.identity,
+                reason="Data cells filter is missing",
+                payload=_data_cells_filter_payload(desired_filter),
+                before=None,
+                after=desired_filter.to_dict(),
+            )
+            continue
+        if current_filter != desired_filter and options.allow_data_cells_filter_updates:
+            yield Change(
+                action="data_cells_filter.update",
+                target=desired_filter.identity,
+                reason="Data cells filter definition differs from desired state",
+                payload=_data_cells_filter_payload(desired_filter),
+                destructive=True,
+                before=current_filter.to_dict(),
+                after=desired_filter.to_dict(),
+            )
+    if options.allow_data_cells_filter_deletes:
+        for key, current_filter in sorted(current_filters.items(), key=lambda item: data_cells_filter_sort_key(item[0])):
+            if key in desired_filters:
+                continue
+            yield Change(
+                action="data_cells_filter.delete",
+                target=current_filter.identity,
+                reason="Data cells filter is not present in desired state",
+                payload=_data_cells_filter_payload(current_filter),
+                destructive=True,
+                before=current_filter.to_dict(),
                 after=None,
             )
 
@@ -438,6 +489,10 @@ def _lf_tag_payload(key: str, values: Iterable[str], catalog_id: Optional[str]) 
     if catalog_id:
         payload["catalog_id"] = catalog_id
     return payload
+
+
+def _data_cells_filter_payload(definition: DataCellsFilterDefinition) -> Dict[str, Any]:
+    return definition.to_dict()
 
 
 def _change_id(index: int) -> str:

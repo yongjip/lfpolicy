@@ -154,6 +154,105 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(change_plan.changes[1].aws_api, "create_lf_tag_expression")
         self.assertFalse(change_plan.changes[1].destructive)
 
+    def test_plan_data_cells_filter_create_update_and_delete(self):
+        desired = DesiredState.from_dict(
+            {
+                "data_cells_filters": [
+                    {
+                        "name": "orders_internal",
+                        "catalog_id": "222222222222",
+                        "database": "analytics",
+                        "table": "orders",
+                        "row_filter": "sensitivity <> 'restricted'",
+                        "excluded_columns": ["notes"],
+                    },
+                    {
+                        "name": "orders_public",
+                        "catalog_id": "222222222222",
+                        "database": "analytics",
+                        "table": "orders",
+                        "all_rows": True,
+                        "columns": ["order_id", "status"],
+                    },
+                ]
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "data_cells_filters": [
+                    {
+                        "name": "orders_legacy",
+                        "catalog_id": "222222222222",
+                        "database": "analytics",
+                        "table": "orders",
+                        "all_rows": True,
+                    },
+                    {
+                        "name": "orders_public",
+                        "catalog_id": "222222222222",
+                        "database": "analytics",
+                        "table": "orders",
+                        "row_filter": "country = 'US'",
+                        "columns": ["order_id"],
+                    },
+                ]
+            }
+        )
+
+        default_plan = plan(desired, current)
+        full_plan = plan(
+            desired,
+            current,
+            PlanOptions(
+                allow_data_cells_filter_updates=True,
+                allow_data_cells_filter_deletes=True,
+            ),
+        )
+
+        self.assertEqual([change.action for change in default_plan.changes], ["data_cells_filter.create"])
+        self.assertEqual(
+            [change.action for change in full_plan.changes],
+            ["data_cells_filter.create", "data_cells_filter.update", "data_cells_filter.delete"],
+        )
+        self.assertEqual(full_plan.changes[0].aws_api, "create_data_cells_filter")
+        self.assertEqual(full_plan.changes[1].requires_flag, "--allow-data-cells-filter-updates")
+        self.assertEqual(full_plan.changes[2].requires_flag, "--allow-data-cells-filter-deletes")
+        self.assertEqual(full_plan.changes[1].before["row_filter"], "country = 'US'")
+        self.assertIsNone(full_plan.changes[2].after)
+
+    def test_plan_ignores_current_data_cells_filter_version_id(self):
+        desired = DesiredState.from_dict(
+            {
+                "data_cells_filters": [
+                    {
+                        "name": "orders_public",
+                        "catalog_id": "222222222222",
+                        "database": "analytics",
+                        "table": "orders",
+                        "all_rows": True,
+                        "columns": ["order_id"],
+                    }
+                ]
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "data_cells_filters": [
+                    {
+                        "name": "orders_public",
+                        "catalog_id": "222222222222",
+                        "database": "analytics",
+                        "table": "orders",
+                        "all_rows": True,
+                        "columns": ["order_id"],
+                        "version_id": "aws-version",
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(plan(desired, current, PlanOptions(allow_data_cells_filter_updates=True)).changes, ())
+
     def test_plan_keys_lf_tag_expressions_by_catalog_id(self):
         desired = DesiredState.from_dict(
             {

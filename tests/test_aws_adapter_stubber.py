@@ -792,6 +792,106 @@ class AwsAdapterStubberTests(unittest.TestCase):
         self.assertTrue(results[0].applied)
         self.stubber.assert_no_pending_responses()
 
+    def test_apply_data_cells_filter_definition_changes_use_table_catalog_id(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id="111111111111")
+        create_payload = {
+            "name": "orders_public",
+            "catalog_id": "222222222222",
+            "database": "analytics",
+            "table": "orders",
+            "row_filter": "country = 'US'",
+            "columns": ["order_id", "status"],
+        }
+        update_payload = {
+            "name": "orders_public",
+            "catalog_id": "222222222222",
+            "database": "analytics",
+            "table": "orders",
+            "all_rows": True,
+            "excluded_columns": ["notes"],
+            "version_id": "v1",
+        }
+        delete_payload = {
+            "name": "orders_legacy",
+            "catalog_id": "222222222222",
+            "database": "analytics",
+            "table": "orders",
+        }
+        change_plan = Plan.from_dict(
+            {
+                "changes": [
+                    {
+                        "action": "data_cells_filter.create",
+                        "target": "data_cells_filter:catalog=222222222222:database=analytics:table=orders:name=orders_public",
+                        "reason": "missing filter",
+                        "payload": create_payload,
+                    },
+                    {
+                        "action": "data_cells_filter.update",
+                        "target": "data_cells_filter:catalog=222222222222:database=analytics:table=orders:name=orders_public",
+                        "reason": "filter drift",
+                        "destructive": True,
+                        "payload": update_payload,
+                    },
+                    {
+                        "action": "data_cells_filter.delete",
+                        "target": "data_cells_filter:catalog=222222222222:database=analytics:table=orders:name=orders_legacy",
+                        "reason": "unmanaged filter",
+                        "destructive": True,
+                        "payload": delete_payload,
+                    },
+                ]
+            }
+        )
+
+        self.stubber.add_response(
+            "create_data_cells_filter",
+            {},
+            {
+                "TableData": {
+                    "TableCatalogId": "222222222222",
+                    "DatabaseName": "analytics",
+                    "TableName": "orders",
+                    "Name": "orders_public",
+                    "RowFilter": {"FilterExpression": "country = 'US'"},
+                    "ColumnNames": ["order_id", "status"],
+                }
+            },
+        )
+        self.stubber.add_response(
+            "update_data_cells_filter",
+            {},
+            {
+                "TableData": {
+                    "TableCatalogId": "222222222222",
+                    "DatabaseName": "analytics",
+                    "TableName": "orders",
+                    "Name": "orders_public",
+                    "RowFilter": {"AllRowsWildcard": {}},
+                    "ColumnWildcard": {"ExcludedColumnNames": ["notes"]},
+                    "VersionId": "v1",
+                }
+            },
+        )
+        self.stubber.add_response(
+            "delete_data_cells_filter",
+            {},
+            {
+                "TableCatalogId": "222222222222",
+                "DatabaseName": "analytics",
+                "TableName": "orders",
+                "Name": "orders_legacy",
+            },
+        )
+
+        results = adapter.apply(change_plan, dry_run=False, allow_destructive=True)
+
+        self.assertEqual(
+            [result.action for result in results],
+            ["data_cells_filter.create", "data_cells_filter.update", "data_cells_filter.delete"],
+        )
+        self.stubber.assert_no_pending_responses()
+
     def test_apply_lf_tag_expression_changes_without_catalog_id(self):
         adapter = AWSLakeFormationAdapter(self.client)
         change_plan = _lf_tag_expression_change_plan()
@@ -1408,6 +1508,25 @@ class AwsAdapterStubberTests(unittest.TestCase):
         }
 
         self.stubber.add_response(
+            "get_data_cells_filter",
+            {
+                "DataCellsFilter": {
+                    "TableCatalogId": "222222222222",
+                    "DatabaseName": "analytics",
+                    "TableName": "orders",
+                    "Name": "orders_public",
+                    "RowFilter": {"AllRowsWildcard": {}},
+                    "ColumnNames": ["order_id", "status"],
+                }
+            },
+            {
+                "TableCatalogId": "222222222222",
+                "DatabaseName": "analytics",
+                "TableName": "orders",
+                "Name": "orders_public",
+            },
+        )
+        self.stubber.add_response(
             "get_resource_lf_tags",
             {},
             {
@@ -1446,6 +1565,83 @@ class AwsAdapterStubberTests(unittest.TestCase):
                 "database": "analytics",
                 "table": "orders",
                 "filter_name": "orders_public",
+            },
+        )
+        self.assertEqual(
+            current.data_cells_filters[0].to_dict(),
+            {
+                "name": "orders_public",
+                "catalog_id": "222222222222",
+                "database": "analytics",
+                "table": "orders",
+                "all_rows": True,
+                "columns": ["order_id", "status"],
+            },
+        )
+        self.stubber.assert_no_pending_responses()
+
+    def test_import_data_cells_filters_discovers_tables_from_grants_without_returning_grants(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id=CATALOG_ID)
+
+        self.stubber.add_response(
+            "list_permissions",
+            {
+                "PrincipalResourcePermissions": [
+                    {
+                        "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                        "Resource": {
+                            "Table": {
+                                "CatalogId": CATALOG_ID,
+                                "DatabaseName": "analytics",
+                                "Name": "orders",
+                            }
+                        },
+                        "Permissions": ["SELECT"],
+                        "PermissionsWithGrantOption": [],
+                    }
+                ]
+            },
+            {
+                "CatalogId": CATALOG_ID,
+                "MaxResults": 100,
+            },
+        )
+        self.stubber.add_response(
+            "list_data_cells_filter",
+            {
+                "DataCellsFilters": [
+                    {
+                        "TableCatalogId": CATALOG_ID,
+                        "DatabaseName": "analytics",
+                        "TableName": "orders",
+                        "Name": "orders_public",
+                        "RowFilter": {"FilterExpression": "country = 'US'"},
+                        "ColumnWildcard": {"ExcludedColumnNames": ["notes"]},
+                    }
+                ]
+            },
+            {
+                "Table": {
+                    "CatalogId": CATALOG_ID,
+                    "DatabaseName": "analytics",
+                    "Name": "orders",
+                },
+                "MaxResults": 100,
+            },
+        )
+
+        current = adapter.import_state(include=("data-cells-filters",))
+
+        self.assertEqual(current.grants, ())
+        self.assertEqual(
+            current.data_cells_filters[0].to_dict(),
+            {
+                "name": "orders_public",
+                "catalog_id": CATALOG_ID,
+                "database": "analytics",
+                "table": "orders",
+                "row_filter": "country = 'US'",
+                "excluded_columns": ["notes"],
             },
         )
         self.stubber.assert_no_pending_responses()

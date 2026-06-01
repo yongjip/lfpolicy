@@ -27,9 +27,15 @@ from .models import (
     ResourceTagAssignment,
 )
 from .planner import Plan, PlanOptions, plan
-from .provider import CurrentStateProvider, SnapshotFileCurrentStateProvider
+from .provider import (
+    CachedCurrentStateProvider,
+    CurrentStateProvider,
+    LazyCurrentStateProvider,
+    SnapshotFileCurrentStateProvider,
+)
 from .schema import state_json_schema
 from .state_index import (
+    data_cells_filter_index,
     duplicate_lf_tag_key_metadata_keys,
     lf_tag_expression_index,
     lf_tag_index,
@@ -251,6 +257,7 @@ def build_parser() -> argparse.ArgumentParser:
     audit_parser = subparsers.add_parser("audit", help="Report drift between desired and current Lake Formation state.")
     _add_state_args(audit_parser)
     _add_aws_args(audit_parser)
+    _add_current_cache_args(audit_parser)
     _add_output_arg(audit_parser, markdown=True, sarif=True)
     _add_report_output_file_arg(audit_parser)
     _add_github_summary_arg(audit_parser)
@@ -290,6 +297,7 @@ def build_parser() -> argparse.ArgumentParser:
     plan_parser = subparsers.add_parser("plan", help="Produce a conservative Lake Formation change plan.")
     _add_state_args(plan_parser)
     _add_aws_args(plan_parser)
+    _add_current_cache_args(plan_parser)
     _add_output_arg(plan_parser, markdown=True)
     _add_report_output_file_arg(plan_parser)
     _add_github_summary_arg(plan_parser)
@@ -306,6 +314,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Current state JSON/YAML snapshot. When omitted, live AWS state is loaded with boto3.",
     )
     _add_aws_args(explain_parser)
+    _add_current_cache_args(explain_parser)
     explain_parser.add_argument("--principal", required=True, help="Lake Formation principal ARN or identifier.")
     explain_parser.add_argument("--database", help="Database name to explain.")
     explain_parser.add_argument("--table", help="Table name to explain. Requires --database.")
@@ -338,8 +347,8 @@ def build_parser() -> argparse.ArgumentParser:
     _add_aws_args(import_parser)
     import_parser.add_argument(
         "--include",
-        default="lf-tags,lf-tag-expressions,resource-tags,grants",
-        help="Comma-separated sections to import: lf-tags, lf-tag-expressions, resource-tags, grants.",
+        default="lf-tags,lf-tag-expressions,data-cells-filters,resource-tags,grants",
+        help="Comma-separated sections to import: lf-tags, lf-tag-expressions, data-cells-filters, resource-tags, grants.",
     )
     import_parser.add_argument("--output", required=True, help="Write imported desired state to this JSON/YAML file.")
     import_parser.add_argument(
@@ -357,6 +366,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     apply_parser.add_argument("--plan", help="Saved JSON plan from lfguard plan --output json.")
     _add_aws_args(apply_parser)
+    _add_current_cache_args(apply_parser)
     _add_output_arg(apply_parser, markdown=True)
     _add_report_output_file_arg(apply_parser)
     _add_github_summary_arg(apply_parser)
@@ -674,6 +684,7 @@ def _validate_state_model(state: GuardrailState, label: str) -> None:
     try:
         lf_tag_index(state.lf_tags)
         lf_tag_expression_index(state.lf_tag_expressions)
+        data_cells_filter_index(state.data_cells_filters)
     except ValueError as exc:
         raise ValueError("{}: {}".format(label, exc)) from exc
     duplicate_metadata = duplicate_lf_tag_key_metadata_keys(state.lf_tag_key_metadata)
@@ -763,6 +774,23 @@ def _add_aws_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--catalog-id", help="AWS Glue Data Catalog ID.")
 
 
+def _add_current_cache_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--current-cache",
+        help="Read/write a JSON current-state cache. Only valid when live AWS state would otherwise be loaded.",
+    )
+    parser.add_argument(
+        "--refresh-current-cache",
+        action="store_true",
+        help="Refresh --current-cache from the upstream current-state provider.",
+    )
+    parser.add_argument(
+        "--current-cache-max-age",
+        type=int,
+        help="Refresh --current-cache when its cached entry is older than this many seconds.",
+    )
+
+
 def _add_output_arg(parser: argparse.ArgumentParser, *, markdown: bool = False, sarif: bool = False) -> None:
     choices = ["text", "json"]
     if markdown:
@@ -788,6 +816,8 @@ def _add_plan_option_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--allow-lf-tag-value-removals", action="store_true", help="Plan LF-Tag value removals.")
     parser.add_argument("--allow-lf-tag-expression-updates", action="store_true", help="Plan LF-Tag expression updates.")
     parser.add_argument("--allow-lf-tag-expression-deletes", action="store_true", help="Plan LF-Tag expression deletes.")
+    parser.add_argument("--allow-data-cells-filter-updates", action="store_true", help="Plan data cells filter definition updates.")
+    parser.add_argument("--allow-data-cells-filter-deletes", action="store_true", help="Plan data cells filter deletes.")
     parser.add_argument("--allow-resource-tag-removals", action="store_true", help="Plan LF-Tag assignment removals.")
     parser.add_argument("--allow-permission-revokes", action="store_true", help="Plan Lake Formation permission revokes.")
 
@@ -797,8 +827,24 @@ def _load_current(args: argparse.Namespace, desired: DesiredState) -> CurrentSta
 
 
 def _current_state_provider(args: argparse.Namespace) -> CurrentStateProvider:
+    current_cache = getattr(args, "current_cache", None)
+    refresh_current_cache = bool(getattr(args, "refresh_current_cache", False))
+    current_cache_max_age = getattr(args, "current_cache_max_age", None)
+    if (refresh_current_cache or current_cache_max_age is not None) and not current_cache:
+        raise RuntimeError("--refresh-current-cache and --current-cache-max-age require --current-cache")
+    if current_cache and args.current_snapshot:
+        raise RuntimeError("--current-cache cannot be combined with --current-snapshot")
+    if current_cache_max_age is not None and current_cache_max_age < 0:
+        raise RuntimeError("--current-cache-max-age must be >= 0")
     if args.current_snapshot:
         return SnapshotFileCurrentStateProvider(args.current_snapshot)
+    if current_cache:
+        return CachedCurrentStateProvider(
+            LazyCurrentStateProvider(lambda: _aws_adapter(args)),
+            current_cache,
+            refresh=refresh_current_cache,
+            max_age_seconds=current_cache_max_age,
+        )
     return _aws_adapter(args)
 
 
@@ -873,6 +919,7 @@ def _desired_with_explain_scope(desired: DesiredState, principal: str, resource:
     return DesiredState(
         lf_tags=desired.lf_tags,
         lf_tag_expressions=desired.lf_tag_expressions,
+        data_cells_filters=desired.data_cells_filters,
         lf_tag_key_metadata=desired.lf_tag_key_metadata,
         resource_tags=tuple(resource_tags),
         grants=tuple(grants),
@@ -932,6 +979,8 @@ def _plan_options(args: argparse.Namespace) -> PlanOptions:
         allow_lf_tag_value_removals=args.allow_lf_tag_value_removals,
         allow_lf_tag_expression_updates=args.allow_lf_tag_expression_updates,
         allow_lf_tag_expression_deletes=args.allow_lf_tag_expression_deletes,
+        allow_data_cells_filter_updates=args.allow_data_cells_filter_updates,
+        allow_data_cells_filter_deletes=args.allow_data_cells_filter_deletes,
         allow_resource_tag_removals=args.allow_resource_tag_removals,
         allow_permission_revokes=args.allow_permission_revokes,
     )
@@ -942,6 +991,8 @@ def _has_destructive_allowance(args: argparse.Namespace) -> bool:
         args.allow_lf_tag_value_removals
         or args.allow_lf_tag_expression_updates
         or args.allow_lf_tag_expression_deletes
+        or args.allow_data_cells_filter_updates
+        or args.allow_data_cells_filter_deletes
         or args.allow_resource_tag_removals
         or args.allow_permission_revokes
     )
@@ -949,8 +1000,16 @@ def _has_destructive_allowance(args: argparse.Namespace) -> bool:
 
 def _load_apply_plan(args: argparse.Namespace) -> Plan:
     if args.plan:
-        if args.desired or args.current_snapshot:
-            raise RuntimeError("--plan cannot be combined with --desired or --current-snapshot")
+        if (
+            args.desired
+            or args.current_snapshot
+            or args.current_cache
+            or args.refresh_current_cache
+            or args.current_cache_max_age is not None
+        ):
+            raise RuntimeError(
+                "--plan cannot be combined with --desired, --current-snapshot, or current cache options"
+            )
         return _load_plan_file(args.plan)
     if not args.desired:
         raise RuntimeError("apply requires --desired or --plan")
@@ -1035,7 +1094,7 @@ def _flag_dest(flag: str) -> str:
 
 
 def _parse_import_include(raw: str) -> Tuple[str, ...]:
-    supported = {"lf-tags", "lf-tag-expressions", "resource-tags", "grants"}
+    supported = {"lf-tags", "lf-tag-expressions", "data-cells-filters", "resource-tags", "grants"}
     includes = tuple(item.strip() for item in raw.split(",") if item.strip())
     unsupported = sorted(set(includes) - supported)
     if unsupported:
@@ -1049,6 +1108,7 @@ def _state_summary(state: GuardrailState) -> dict:
     return {
         "lf_tags": len(state.lf_tags),
         "lf_tag_expressions": len(state.lf_tag_expressions),
+        "data_cells_filters": len(state.data_cells_filters),
         "resource_tags": len(state.resource_tags),
         "grants": len(state.grants),
     }
@@ -1073,6 +1133,8 @@ def _state_profile(state: GuardrailState) -> dict:
         "lf_tag_expressions": len(state.lf_tag_expressions),
         "lf_tag_expression_names": [expression.name for expression in state.lf_tag_expressions],
         "lf_tag_expression_ids": [expression.identity for expression in state.lf_tag_expressions],
+        "data_cells_filters": len(state.data_cells_filters),
+        "data_cells_filter_ids": [filter_definition.identity for filter_definition in state.data_cells_filters],
         "resource_tags": len(state.resource_tags),
         "resource_kinds": dict(sorted(resource_kinds.items())),
         "resource_tag_keys": resource_tag_keys,
@@ -1088,6 +1150,7 @@ def _format_validation_summary(prefix: str, summary: dict) -> str:
     return (
         "{prefix}: {lf_tags} LF-Tag definition(s), "
         "{lf_tag_expressions} LF-Tag expression(s), "
+        "{data_cells_filters} data cells filter(s), "
         "{resource_tags} resource tag assignment(s), {grants} grant(s)."
     ).format(prefix=prefix, **summary)
 
@@ -1466,6 +1529,9 @@ _COMPLETION_OPTIONS = {
         "--profile",
         "--region",
         "--catalog-id",
+        "--current-cache",
+        "--refresh-current-cache",
+        "--current-cache-max-age",
         "--output",
         "--output-file",
         "--github-summary",
@@ -1479,12 +1545,17 @@ _COMPLETION_OPTIONS = {
         "--profile",
         "--region",
         "--catalog-id",
+        "--current-cache",
+        "--refresh-current-cache",
+        "--current-cache-max-age",
         "--output",
         "--output-file",
         "--github-summary",
         "--allow-lf-tag-value-removals",
         "--allow-lf-tag-expression-updates",
         "--allow-lf-tag-expression-deletes",
+        "--allow-data-cells-filter-updates",
+        "--allow-data-cells-filter-deletes",
         "--allow-resource-tag-removals",
         "--allow-permission-revokes",
         "--fail-on-changes",
@@ -1496,6 +1567,9 @@ _COMPLETION_OPTIONS = {
         "--profile",
         "--region",
         "--catalog-id",
+        "--current-cache",
+        "--refresh-current-cache",
+        "--current-cache-max-age",
         "--principal",
         "--database",
         "--table",
@@ -1517,12 +1591,17 @@ _COMPLETION_OPTIONS = {
         "--profile",
         "--region",
         "--catalog-id",
+        "--current-cache",
+        "--refresh-current-cache",
+        "--current-cache-max-age",
         "--output",
         "--output-file",
         "--github-summary",
         "--allow-lf-tag-value-removals",
         "--allow-lf-tag-expression-updates",
         "--allow-lf-tag-expression-deletes",
+        "--allow-data-cells-filter-updates",
+        "--allow-data-cells-filter-deletes",
         "--allow-resource-tag-removals",
         "--allow-permission-revokes",
         "--only",
@@ -1815,6 +1894,7 @@ def _state_profile_metrics(profile: dict) -> tuple:
                 profile.get("lf_tag_expression_ids", profile["lf_tag_expression_names"]),
             ),
         ),
+        ("Data cells filters", _count_with_list(profile["data_cells_filters"], profile["data_cells_filter_ids"])),
         ("Resource tag assignments", str(profile["resource_tags"])),
         ("Resource kinds", _format_counts(profile["resource_kinds"])),
         ("Resource tag keys", _format_list(profile["resource_tag_keys"])),

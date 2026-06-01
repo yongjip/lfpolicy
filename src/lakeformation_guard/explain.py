@@ -5,10 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
-from .models import CurrentState, DesiredState, Grant, LFTagValue, ResourceRef
+from .models import CurrentState, DataCellsFilterDefinition, DesiredState, Grant, LFTagValue, ResourceRef
 from .permissions import missing_permissions
 from .state_index import (
+    DataCellsFilterKey,
     LFTagExpressionKey,
+    data_cells_filter_index,
+    data_cells_filter_resource_key,
     lf_tag_expression_index,
     resolve_lf_tag_expression_key,
 )
@@ -91,6 +94,7 @@ class ExplainReport:
     effective_lf_tags: Mapping[str, Tuple[str, ...]]
     effective_lf_tags_by_catalog: Mapping[Optional[str], Mapping[str, Tuple[str, ...]]]
     findings: Tuple[ExplainFinding, ...]
+    data_cells_filter: Optional[DataCellsFilterDefinition] = None
     notes: Tuple[str, ...] = field(default_factory=tuple)
 
     def summary(self) -> Dict[str, int]:
@@ -122,6 +126,7 @@ class ExplainReport:
                     key=lambda item: item[0] or "",
                 )
             ],
+            "data_cells_filter": self.data_cells_filter.to_dict() if self.data_cells_filter else None,
             "summary": self.summary(),
             "findings": [finding.to_dict() for finding in self.findings],
             "notes": list(self.notes),
@@ -160,6 +165,8 @@ def explain(
     effective_lf_tags = _flatten_effective_lf_tag_scopes(effective_lf_tags_by_catalog)
     expression_index = _expression_index(current)
     desired_expression_index = _expression_index(desired)
+    data_cells_filters = data_cells_filter_index(current.data_cells_filters)
+    target_data_cells_filter = _find_data_cells_filter(data_cells_filters, resource)
     findings: List[ExplainFinding] = []
     notes: List[str] = []
 
@@ -169,7 +176,7 @@ def explain(
         relevance = _grant_relevance(grant.resource, resource, effective_lf_tags_by_catalog, expression_index)
         if relevance is None:
             continue
-        findings.append(_finding_for_current_grant(grant, relevance, requested_permissions))
+        findings.append(_finding_for_current_grant(grant, relevance, requested_permissions, data_cells_filters))
 
     for grant in desired.grants:
         if grant.principal != principal:
@@ -215,6 +222,7 @@ def explain(
         effective_lf_tags=effective_lf_tags,
         effective_lf_tags_by_catalog=effective_lf_tags_by_catalog,
         findings=_assign_finding_ids(findings),
+        data_cells_filter=target_data_cells_filter,
         notes=tuple(notes),
     )
 
@@ -230,6 +238,7 @@ def _finding_for_current_grant(
     grant: Grant,
     relevance: _GrantRelevance,
     requested_permissions: Tuple[str, ...],
+    data_cells_filters: Mapping[DataCellsFilterKey, DataCellsFilterDefinition],
 ) -> ExplainFinding:
     status = relevance.status
     message = relevance.message
@@ -244,6 +253,10 @@ def _finding_for_current_grant(
             )
             details["missing_permissions"] = missing_permission_names
     details["requested_permissions"] = list(requested_permissions)
+    if grant.resource.kind == "data_cells_filter":
+        definition = _find_data_cells_filter(data_cells_filters, grant.resource)
+        if definition:
+            details["data_cells_filter"] = definition.to_dict()
     return ExplainFinding(
         source=_grant_source(grant.resource),
         status=status,
@@ -520,6 +533,15 @@ def _current_covers_desired_grant(desired_grant: Grant, current_grants: Iterable
         ):
             return True
     return False
+
+
+def _find_data_cells_filter(
+    data_cells_filters: Mapping[DataCellsFilterKey, DataCellsFilterDefinition],
+    resource: ResourceRef,
+) -> Optional[DataCellsFilterDefinition]:
+    if resource.kind != "data_cells_filter":
+        return None
+    return data_cells_filters.get(data_cells_filter_resource_key(resource))
 
 
 def _grant_resource_covers(current: ResourceRef, desired: ResourceRef) -> bool:

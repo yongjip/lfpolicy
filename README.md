@@ -262,6 +262,15 @@ shape:
       }
     }
   },
+  "data_cells_filters": [
+    {
+      "name": "orders_public",
+      "database": "analytics",
+      "table": "orders",
+      "row_filter": "country = 'US'",
+      "columns": ["order_id", "status"]
+    }
+  ],
   "resource_tags": [
     {
       "resource": {
@@ -290,8 +299,8 @@ shape:
 ```
 
 Supported resource kinds are `catalog`, `database`, `table`,
-`table_with_columns`, `data_location`, `lf_tag_policy`, and
-`lf_tag_expression`.
+`table_with_columns`, `data_location`, `data_cells_filter`, `lf_tag_policy`,
+and `lf_tag_expression`.
 Write LF-Tag keys and values in lower case. AWS stores them in lower case, and
 allows only one value for a given LF-Tag key on a single resource.
 See [`docs/state-format.md`](docs/state-format.md) for copyable examples of
@@ -414,6 +423,16 @@ change_plan = plan(desired, current, PlanOptions())
 adapter.apply(change_plan, dry_run=False)
 ```
 
+For repeated live reads, keep caching outside the planner by wrapping the live
+adapter as a provider:
+
+```python
+from lakeformation_guard import CachedCurrentStateProvider
+
+provider = CachedCurrentStateProvider(adapter, ".lfguard/current-cache.json", max_age_seconds=900)
+current = provider.load_current_state_for(desired)
+```
+
 Use an IAM principal with the minimum Lake Formation permissions required for the
 actions you intend to run. The package does not bypass AWS authorization and does
 not turn destructive changes on by default.
@@ -423,7 +442,7 @@ not turn destructive changes on by default.
 The repository includes GitHub Actions for CI and PyPI Trusted Publishing. See
 [`docs/publishing.md`](docs/publishing.md) for the release path and the exact
 PyPI publisher settings. The latest release notes are in
-[`docs/release-notes/v0.5.2.md`](docs/release-notes/v0.5.2.md), with prior
+[`docs/release-notes/v0.6.0.md`](docs/release-notes/v0.6.0.md), with prior
 release notes under [`docs/release-notes/`](docs/release-notes/).
 
 ## More docs

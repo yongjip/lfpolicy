@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Dict, FrozenSet, Iterable, Mapping, Optional, Set, Tuple
 
 from .models import (
+    DataCellsFilterDefinition,
     Grant,
     LFTagDefinition,
     LFTagExpressionDefinition,
@@ -15,6 +16,7 @@ from .models import (
 
 LFTagExpressionKey = Tuple[Optional[str], str]
 LFTagKey = Tuple[Optional[str], str]
+DataCellsFilterKey = Tuple[Optional[str], str, str, str]
 
 
 def lf_tag_key(catalog_id: Optional[str], key: str) -> LFTagKey:
@@ -192,6 +194,78 @@ def resolve_lf_tag_expression_key(
     if len(scoped_matches) == 1:
         return next(iter(scoped_matches))
     return None
+
+
+def data_cells_filter_key(
+    catalog_id: Optional[str],
+    database_name: str,
+    table_name: str,
+    name: str,
+) -> DataCellsFilterKey:
+    return (catalog_id, database_name, table_name, name)
+
+
+def data_cells_filter_definition_key(definition: DataCellsFilterDefinition) -> DataCellsFilterKey:
+    return data_cells_filter_key(
+        definition.catalog_id,
+        definition.database_name,
+        definition.table_name,
+        definition.name,
+    )
+
+
+def data_cells_filter_resource_key(resource: ResourceRef) -> DataCellsFilterKey:
+    return data_cells_filter_key(
+        resource.catalog_id,
+        resource.database_name or "",
+        resource.table_name or "",
+        resource.filter_name or "",
+    )
+
+
+def data_cells_filter_sort_key(key: DataCellsFilterKey) -> str:
+    return "{}:{}:{}:{}".format(key[0] or "", key[1], key[2], key[3])
+
+
+def duplicate_data_cells_filter_keys(
+    definitions: Iterable[DataCellsFilterDefinition],
+) -> Tuple[DataCellsFilterKey, ...]:
+    seen: Set[DataCellsFilterKey] = set()
+    duplicates: Set[DataCellsFilterKey] = set()
+    for definition in definitions:
+        key = data_cells_filter_definition_key(definition)
+        if key in seen:
+            duplicates.add(key)
+        seen.add(key)
+    return tuple(sorted(duplicates, key=data_cells_filter_sort_key))
+
+
+def data_cells_filter_key_identity(key: DataCellsFilterKey) -> str:
+    parts = ["data_cells_filter"]
+    if key[0]:
+        parts.append("catalog={}".format(key[0]))
+    parts.append("database={}".format(key[1]))
+    parts.append("table={}".format(key[2]))
+    parts.append("name={}".format(key[3]))
+    return ":".join(parts)
+
+
+def data_cells_filter_index(
+    definitions: Iterable[DataCellsFilterDefinition],
+    *,
+    allow_duplicates: bool = False,
+) -> Dict[DataCellsFilterKey, DataCellsFilterDefinition]:
+    result: Dict[DataCellsFilterKey, DataCellsFilterDefinition] = {}
+    for definition in definitions:
+        key = data_cells_filter_definition_key(definition)
+        if key in result and not allow_duplicates:
+            raise ValueError(
+                "Duplicate data cells filter identity: {}".format(
+                    data_cells_filter_key_identity(key)
+                )
+            )
+        result[key] = definition
+    return result
 
 
 def resource_tag_index(assignments: Iterable[ResourceTagAssignment]) -> Dict[ResourceRef, Dict[str, FrozenSet[str]]]:

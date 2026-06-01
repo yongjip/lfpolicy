@@ -7,15 +7,29 @@ from pathlib import Path
 from unittest.mock import patch
 
 from lakeformation_guard import (
+    CachedCurrentStateProvider,
     CurrentState,
     DesiredState,
+    LazyCurrentStateProvider,
     ResourceRef,
     SnapshotCurrentStateProvider,
     SnapshotFileCurrentStateProvider,
+    desired_state_fingerprint,
     explain,
     lint_desired,
 )
 from lakeformation_guard.cli import main
+from lakeformation_guard.provider import CURRENT_STATE_CACHE_SCHEMA_VERSION
+
+
+class FakeCurrentStateProvider:
+    def __init__(self, current):
+        self.current = current
+        self.calls = []
+
+    def load_current_state_for(self, desired):
+        self.calls.append(desired)
+        return self.current
 
 
 class ProviderExplainTests(unittest.TestCase):
@@ -38,6 +52,113 @@ class ProviderExplainTests(unittest.TestCase):
             loaded = file_provider.load_current_state_for(DesiredState.empty())
 
         self.assertEqual(loaded, current)
+
+    def test_lazy_provider_defers_factory_until_load(self):
+        current = CurrentState.from_dict({"grants": []})
+        calls = []
+
+        def factory():
+            calls.append("called")
+            return FakeCurrentStateProvider(current)
+
+        provider = LazyCurrentStateProvider(factory)
+
+        self.assertEqual(calls, [])
+        self.assertEqual(provider.load_current_state_for(DesiredState.empty()), current)
+        self.assertEqual(calls, ["called"])
+
+    def test_cached_provider_writes_and_reuses_current_state_cache(self):
+        desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cache_path = Path(tmp) / "current-cache.json"
+            upstream = FakeCurrentStateProvider(current)
+            provider = CachedCurrentStateProvider(upstream, str(cache_path), clock=lambda: 1000.0)
+
+            self.assertEqual(provider.load_current_state_for(desired), current)
+            self.assertEqual(len(upstream.calls), 1)
+
+            envelope = json.loads(cache_path.read_text(encoding="utf-8"))
+            self.assertEqual(envelope["schema_version"], CURRENT_STATE_CACHE_SCHEMA_VERSION)
+            self.assertEqual(envelope["desired_fingerprint"], desired_state_fingerprint(desired))
+            self.assertEqual(envelope["created_at"], "1970-01-01T00:16:40Z")
+
+            second_upstream = FakeCurrentStateProvider(CurrentState.empty())
+            cached_provider = CachedCurrentStateProvider(second_upstream, str(cache_path), clock=lambda: 1001.0)
+
+            self.assertEqual(cached_provider.load_current_state_for(desired), current)
+            self.assertEqual(second_upstream.calls, [])
+
+    def test_cached_provider_refreshes_on_scope_mismatch_or_expiry(self):
+        desired = DesiredState.from_dict({"grants": []})
+        different_desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {"kind": "database", "database": "analytics"},
+                        "permissions": ["DESCRIBE"],
+                    }
+                ]
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {"kind": "database", "database": "analytics"},
+                        "permissions": ["DESCRIBE"],
+                    }
+                ]
+            }
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cache_path = Path(tmp) / "current-cache.json"
+            CachedCurrentStateProvider(
+                FakeCurrentStateProvider(CurrentState.empty()),
+                str(cache_path),
+                clock=lambda: 1000.0,
+            ).load_current_state_for(different_desired)
+
+            mismatch_upstream = FakeCurrentStateProvider(current)
+            mismatch_provider = CachedCurrentStateProvider(mismatch_upstream, str(cache_path), clock=lambda: 1001.0)
+
+            self.assertEqual(mismatch_provider.load_current_state_for(desired), current)
+            self.assertEqual(len(mismatch_upstream.calls), 1)
+
+            expired_upstream = FakeCurrentStateProvider(CurrentState.empty())
+            expired_provider = CachedCurrentStateProvider(
+                expired_upstream,
+                str(cache_path),
+                max_age_seconds=1,
+                clock=lambda: 1003.0,
+            )
+
+            self.assertEqual(expired_provider.load_current_state_for(desired), CurrentState.empty())
+            self.assertEqual(len(expired_upstream.calls), 1)
 
     def test_explain_reports_direct_table_grant_and_effective_tags(self):
         desired = DesiredState.empty()
@@ -80,6 +201,16 @@ class ProviderExplainTests(unittest.TestCase):
     def test_explain_reports_data_cells_filter_grant_for_target_table(self):
         current = CurrentState.from_dict(
             {
+                "data_cells_filters": [
+                    {
+                        "name": "orders_public",
+                        "catalog_id": "222222222222",
+                        "database": "analytics",
+                        "table": "orders",
+                        "row_filter": "country = 'US'",
+                        "columns": ["order_id", "status"],
+                    }
+                ],
                 "grants": [
                     {
                         "principal": "role",
@@ -112,7 +243,59 @@ class ProviderExplainTests(unittest.TestCase):
         self.assertEqual(report.summary()["matched"], 1)
         self.assertEqual(report.findings[0].resource.kind, "data_cells_filter")
         self.assertEqual(report.findings[0].details["filter_name"], "orders_public")
+        self.assertEqual(
+            report.findings[0].details["data_cells_filter"]["row_filter"],
+            "country = 'US'",
+        )
         self.assertIn("row/column restrictions", report.findings[0].message)
+
+    def test_explain_includes_target_data_cells_filter_definition(self):
+        current = CurrentState.from_dict(
+            {
+                "data_cells_filters": [
+                    {
+                        "name": "orders_public",
+                        "catalog_id": "222222222222",
+                        "database": "analytics",
+                        "table": "orders",
+                        "all_rows": True,
+                        "excluded_columns": ["notes"],
+                    }
+                ],
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "data_cells_filter",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                            "filter_name": "orders_public",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ],
+            }
+        )
+
+        report = explain(
+            DesiredState.empty(),
+            current,
+            principal="role",
+            resource=ResourceRef(
+                kind="data_cells_filter",
+                catalog_id="222222222222",
+                database_name="analytics",
+                table_name="orders",
+                filter_name="orders_public",
+            ),
+            permissions=("SELECT",),
+        )
+        payload = report.to_dict()
+
+        self.assertEqual(payload["data_cells_filter"]["name"], "orders_public")
+        self.assertEqual(payload["data_cells_filter"]["excluded_columns"], ["notes"])
+        self.assertEqual(payload["findings"][0]["details"]["data_cells_filter"]["all_rows"], True)
 
     def test_explain_does_not_match_different_data_cells_filter_target(self):
         current = CurrentState.from_dict(
@@ -1000,6 +1183,138 @@ class ProviderExplainTests(unittest.TestCase):
             self.assertEqual(payload["effective_lf_tags"], {"domain": ["sales"]})
             self.assertEqual(payload["findings"][0]["resource"]["filter_name"], "orders_public")
             from_boto3.assert_not_called()
+
+    def test_cli_plan_uses_current_cache_without_constructing_aws_adapter(self):
+        desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            desired_path = tmp_path / "desired.json"
+            cache_path = tmp_path / "current-cache.json"
+            desired_path.write_text(json.dumps(desired.to_dict()), encoding="utf-8")
+            CachedCurrentStateProvider(FakeCurrentStateProvider(current), str(cache_path)).load_current_state_for(desired)
+
+            stdout = io.StringIO()
+            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter.from_boto3") as from_boto3:
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "plan",
+                            "--desired",
+                            str(desired_path),
+                            "--current-cache",
+                            str(cache_path),
+                            "--output",
+                            "json",
+                        ]
+                    )
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(payload["changes"], [])
+            from_boto3.assert_not_called()
+
+    def test_cli_plan_refreshes_current_cache_from_live_provider(self):
+        desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            desired_path = tmp_path / "desired.json"
+            cache_path = tmp_path / "current-cache.json"
+            desired_path.write_text(json.dumps(desired.to_dict()), encoding="utf-8")
+
+            adapter = FakeCurrentStateProvider(current)
+            stdout = io.StringIO()
+            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter.from_boto3", return_value=adapter) as from_boto3:
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "plan",
+                            "--desired",
+                            str(desired_path),
+                            "--current-cache",
+                            str(cache_path),
+                            "--refresh-current-cache",
+                            "--output",
+                            "json",
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(json.loads(stdout.getvalue())["changes"], [])
+            self.assertEqual(len(adapter.calls), 1)
+            from_boto3.assert_called_once()
+            envelope = json.loads(cache_path.read_text(encoding="utf-8"))
+            self.assertEqual(envelope["schema_version"], CURRENT_STATE_CACHE_SCHEMA_VERSION)
+            self.assertEqual(envelope["current"], current.to_dict())
+
+    def test_cli_rejects_current_cache_with_current_snapshot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            desired_path = tmp_path / "desired.json"
+            current_path = tmp_path / "current.json"
+            cache_path = tmp_path / "current-cache.json"
+            desired_path.write_text(json.dumps({"grants": []}), encoding="utf-8")
+            current_path.write_text(json.dumps({"grants": []}), encoding="utf-8")
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                exit_code = main(
+                    [
+                        "plan",
+                        "--desired",
+                        str(desired_path),
+                        "--current-snapshot",
+                        str(current_path),
+                        "--current-cache",
+                        str(cache_path),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 2)
+            self.assertIn("--current-cache cannot be combined with --current-snapshot", stderr.getvalue())
 
     def test_cli_explain_outputs_markdown(self):
         with tempfile.TemporaryDirectory() as tmp:

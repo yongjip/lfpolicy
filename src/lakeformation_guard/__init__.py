@@ -6,6 +6,7 @@ from .explain import ExplainFinding, ExplainReport, explain
 from .lint import LintFinding, lint_desired
 from .models import (
     CurrentState,
+    DataCellsFilterDefinition,
     DesiredState,
     Grant,
     GuardrailState,
@@ -41,17 +42,22 @@ from .policy import (
 )
 from .planner import Change, Plan, PlanOptions, plan
 from .provider import (
+    CachedCurrentStateProvider,
     CurrentStateProvider,
+    LazyCurrentStateProvider,
     SnapshotCurrentStateProvider,
     SnapshotFileCurrentStateProvider,
+    desired_state_fingerprint,
 )
 from .schema import state_json_schema
 
 __all__ = [
     "AuditFinding",
+    "CachedCurrentStateProvider",
     "Change",
     "CurrentState",
     "CurrentStateProvider",
+    "DataCellsFilterDefinition",
     "DesiredState",
     "ExplainFinding",
     "ExplainReport",
@@ -64,6 +70,7 @@ __all__ = [
     "LFTagKeyMetadata",
     "LFTagValue",
     "LakePolicy",
+    "LazyCurrentStateProvider",
     "LintFinding",
     "Plan",
     "PlanOptions",
@@ -85,6 +92,7 @@ __all__ = [
     "audit",
     "data_location_access",
     "database_creator",
+    "desired_state_fingerprint",
     "editor",
     "explain",
     "load_policy",

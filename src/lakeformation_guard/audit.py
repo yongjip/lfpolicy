@@ -9,6 +9,8 @@ from .config import unmanaged_severity
 from .models import CurrentState, DesiredState, Grant, ResourceRef
 from .permissions import missing_permissions
 from .state_index import (
+    data_cells_filter_index,
+    data_cells_filter_sort_key,
     grant_index,
     grant_target,
     lf_tag_expression_index,
@@ -62,6 +64,7 @@ def audit(desired: DesiredState, current: CurrentState) -> Tuple[AuditFinding, .
     findings: List[AuditFinding] = []
     findings.extend(_audit_lf_tags(desired, current))
     findings.extend(_audit_lf_tag_expressions(desired, current))
+    findings.extend(_audit_data_cells_filters(desired, current))
     findings.extend(_audit_resource_tags(desired, current))
     findings.extend(_audit_grants(desired, current))
     return _assign_finding_ids(findings)
@@ -210,6 +213,61 @@ def _expression_details(expression: Any, field_name: str) -> Dict[str, Any]:
         "name": expression.name,
         "catalog_id": expression.catalog_id,
         field_name: expression.to_dict(),
+    }
+
+
+def _audit_data_cells_filters(desired: DesiredState, current: CurrentState) -> List[AuditFinding]:
+    findings: List[AuditFinding] = []
+    desired_filters = data_cells_filter_index(desired.data_cells_filters)
+    current_filters = data_cells_filter_index(current.data_cells_filters)
+    for key, desired_filter in sorted(desired_filters.items(), key=lambda item: data_cells_filter_sort_key(item[0])):
+        current_filter = current_filters.get(key)
+        if current_filter is None:
+            findings.append(
+                AuditFinding(
+                    code="DATA_CELLS_FILTER_MISSING",
+                    severity="error",
+                    target=desired_filter.identity,
+                    message="Desired data cells filter is missing",
+                    details=_data_cells_filter_details(desired_filter, "desired"),
+                )
+            )
+            continue
+        if current_filter != desired_filter:
+            findings.append(
+                AuditFinding(
+                    code="DATA_CELLS_FILTER_DRIFT",
+                    severity="error",
+                    target=desired_filter.identity,
+                    message="Current data cells filter definition differs from desired state",
+                    details={
+                        "resource": desired_filter.resource.to_dict(),
+                        "desired": desired_filter.to_dict(),
+                        "current": current_filter.to_dict(),
+                    },
+                )
+            )
+    for key, current_filter in sorted(current_filters.items(), key=lambda item: data_cells_filter_sort_key(item[0])):
+        if key in desired_filters:
+            continue
+        severity = unmanaged_severity(desired.config, None, current_filter.resource)
+        if severity:
+            findings.append(
+                AuditFinding(
+                    code="DATA_CELLS_FILTER_UNMANAGED",
+                    severity=severity,
+                    target=current_filter.identity,
+                    message="Current data cells filter is not present in desired state",
+                    details=_data_cells_filter_details(current_filter, "current"),
+                )
+            )
+    return findings
+
+
+def _data_cells_filter_details(filter_definition: Any, field_name: str) -> Dict[str, Any]:
+    return {
+        "resource": filter_definition.resource.to_dict(),
+        field_name: filter_definition.to_dict(),
     }
 
 

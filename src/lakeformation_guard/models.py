@@ -92,6 +92,19 @@ def _resource_name(raw: Mapping[str, Any], *names: str) -> Optional[str]:
     return None
 
 
+def _data_cells_row_filter_from_raw(raw: Mapping[str, Any]) -> Tuple[Optional[str], bool]:
+    row_filter_raw = raw.get("row_filter", raw.get("RowFilter"))
+    if isinstance(row_filter_raw, Mapping):
+        filter_expression = _resource_name(row_filter_raw, "filter_expression", "FilterExpression")
+        all_rows = bool(row_filter_raw.get("all_rows")) or row_filter_raw.get("AllRowsWildcard") is not None
+        return filter_expression, all_rows
+    filter_expression = _resource_name(raw, "filter_expression", "FilterExpression")
+    if row_filter_raw not in (None, "") and not isinstance(row_filter_raw, Mapping):
+        filter_expression = _optional_str(row_filter_raw)
+    all_rows = bool(raw.get("all_rows")) or bool(raw.get("all_rows_wildcard")) or raw.get("AllRowsWildcard") is not None
+    return filter_expression, all_rows
+
+
 @dataclass(frozen=True, order=True)
 class LFTagValue:
     """An LF-Tag expression item: one tag key matched to one or more values."""
@@ -364,6 +377,118 @@ class LFTagExpressionDefinition:
         if self.catalog_id:
             data["catalog_id"] = self.catalog_id
         return data
+
+
+@dataclass(frozen=True)
+class DataCellsFilterDefinition:
+    """Lake Formation data cells filter definition for a table."""
+
+    name: str
+    database_name: str
+    table_name: str
+    catalog_id: Optional[str] = None
+    row_filter: Optional[str] = None
+    all_rows: bool = False
+    columns: Tuple[str, ...] = field(default_factory=tuple)
+    excluded_columns: Tuple[str, ...] = field(default_factory=tuple)
+    version_id: Optional[str] = field(default=None, compare=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "name", self.name.strip())
+        object.__setattr__(self, "database_name", self.database_name.strip())
+        object.__setattr__(self, "table_name", self.table_name.strip())
+        object.__setattr__(self, "catalog_id", _optional_str(self.catalog_id))
+        object.__setattr__(self, "row_filter", _optional_str(self.row_filter))
+        object.__setattr__(self, "all_rows", bool(self.all_rows))
+        object.__setattr__(self, "columns", tuple(sorted({column.strip() for column in self.columns if column.strip()})))
+        object.__setattr__(
+            self,
+            "excluded_columns",
+            tuple(sorted({column.strip() for column in self.excluded_columns if column.strip()})),
+        )
+        object.__setattr__(self, "version_id", _optional_str(self.version_id))
+        if not self.name:
+            raise ValueError("data_cells_filters[] requires name or filter_name")
+        if not self.database_name or not self.table_name:
+            raise ValueError("data_cells_filters[] requires database and table")
+        if self.row_filter and self.all_rows:
+            raise ValueError("data_cells_filters[] cannot combine row_filter and all_rows")
+        if self.columns and self.excluded_columns:
+            raise ValueError("data_cells_filters[] cannot combine columns and excluded_columns")
+
+    @classmethod
+    def from_dict(cls, raw: Mapping[str, Any]) -> "DataCellsFilterDefinition":
+        row_filter, all_rows = _data_cells_row_filter_from_raw(raw)
+        columns = raw.get("columns", raw.get("column_names", raw.get("ColumnNames", ())))
+        column_wildcard = raw.get("column_wildcard", raw.get("ColumnWildcard"))
+        excluded_columns = raw.get("excluded_columns", raw.get("excluded_column_names", ()))
+        if isinstance(column_wildcard, Mapping):
+            excluded_columns = column_wildcard.get("excluded_columns", column_wildcard.get("ExcludedColumnNames", excluded_columns))
+        return cls(
+            name=str(_resource_name(raw, "name", "filter_name", "Name") or ""),
+            database_name=str(_resource_name(raw, "database", "database_name", "DatabaseName") or ""),
+            table_name=str(_resource_name(raw, "table", "table_name", "TableName") or ""),
+            catalog_id=_resource_name(raw, "catalog_id", "catalog", "table_catalog_id", "TableCatalogId"),
+            row_filter=row_filter,
+            all_rows=all_rows,
+            columns=_optional_string_tuple(columns, "data_cells_filters[].columns"),
+            excluded_columns=_optional_string_tuple(excluded_columns, "data_cells_filters[].excluded_columns"),
+            version_id=_resource_name(raw, "version_id", "VersionId"),
+        )
+
+    @property
+    def resource(self) -> ResourceRef:
+        return ResourceRef(
+            kind="data_cells_filter",
+            database_name=self.database_name,
+            table_name=self.table_name,
+            filter_name=self.name,
+            catalog_id=self.catalog_id,
+        )
+
+    @property
+    def identity(self) -> str:
+        parts = ["data_cells_filter"]
+        if self.catalog_id:
+            parts.append("catalog={}".format(self.catalog_id))
+        parts.append("database={}".format(self.database_name))
+        parts.append("table={}".format(self.table_name))
+        parts.append("name={}".format(self.name))
+        return ":".join(parts)
+
+    def to_dict(self) -> Dict[str, Any]:
+        data: Dict[str, Any] = {
+            "name": self.name,
+            "database": self.database_name,
+            "table": self.table_name,
+        }
+        if self.catalog_id:
+            data["catalog_id"] = self.catalog_id
+        if self.row_filter:
+            data["row_filter"] = self.row_filter
+        if self.all_rows:
+            data["all_rows"] = True
+        if self.columns:
+            data["columns"] = list(self.columns)
+        if self.excluded_columns:
+            data["excluded_columns"] = list(self.excluded_columns)
+        if self.version_id:
+            data["version_id"] = self.version_id
+        return data
+
+
+def _data_cells_filter_definition_sort_key(definition: DataCellsFilterDefinition) -> Tuple[Any, ...]:
+    return (
+        definition.catalog_id or "",
+        definition.database_name,
+        definition.table_name,
+        definition.name,
+        definition.row_filter or "",
+        definition.all_rows,
+        definition.columns,
+        definition.excluded_columns,
+        definition.version_id or "",
+    )
 
 
 @dataclass(frozen=True, order=True)
@@ -832,6 +957,7 @@ class GuardrailState:
 
     lf_tags: Tuple[LFTagDefinition, ...] = field(default_factory=tuple)
     lf_tag_expressions: Tuple[LFTagExpressionDefinition, ...] = field(default_factory=tuple)
+    data_cells_filters: Tuple[DataCellsFilterDefinition, ...] = field(default_factory=tuple)
     lf_tag_key_metadata: Tuple[LFTagKeyMetadata, ...] = field(default_factory=tuple)
     resource_tags: Tuple[ResourceTagAssignment, ...] = field(default_factory=tuple)
     grants: Tuple[Grant, ...] = field(default_factory=tuple)
@@ -868,6 +994,11 @@ class GuardrailState:
         else:
             raise ValueError("lf_tag_expressions must be a mapping or list")
 
+        data_cells_filters = tuple(
+            DataCellsFilterDefinition.from_dict(_require_mapping(item, "data_cells_filters[]"))
+            for item in raw.get("data_cells_filters", ())
+        )
+
         metadata_raw = raw.get("lf_tag_key_metadata", {})
         if isinstance(metadata_raw, Mapping):
             lf_tag_key_metadata = tuple(
@@ -897,6 +1028,7 @@ class GuardrailState:
         return cls(
             lf_tags=tuple(sorted(lf_tags)),
             lf_tag_expressions=tuple(sorted(lf_tag_expressions)),
+            data_cells_filters=tuple(sorted(data_cells_filters, key=_data_cells_filter_definition_sort_key)),
             lf_tag_key_metadata=tuple(sorted(lf_tag_key_metadata)),
             resource_tags=resource_tags,
             grants=tuple(sorted(grants)),
@@ -931,6 +1063,8 @@ class GuardrailState:
                     }
                     for expression in self.lf_tag_expressions
                 }
+        if self.data_cells_filters:
+            data["data_cells_filters"] = [filter_definition.to_dict() for filter_definition in self.data_cells_filters]
         if self.lf_tag_key_metadata:
             metadata_keys = [metadata.key for metadata in self.lf_tag_key_metadata]
             if any(metadata.catalog_id for metadata in self.lf_tag_key_metadata) or len(metadata_keys) != len(set(metadata_keys)):

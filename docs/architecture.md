@@ -87,11 +87,12 @@ state. Users who only run offline lint, audit, plan, sample, schema, or
 validation workflows do not need the `aws` extra.
 
 The adapter scopes live inventory from desired state. It reads only the LF-Tags,
-named LF-Tag expressions, resources, and grants needed for the requested
-comparison, then returns a normal `CurrentState` object to the same audit and
-planner code used by offline workflows. The separate import path can scaffold a
-starter desired-state file from live LF-Tags, named LF-Tag expressions, grants,
-and resource tags discovered through imported grants.
+named LF-Tag expressions, data cells filters, resources, and grants needed for
+the requested comparison, then returns a normal `CurrentState` object to the
+same audit and planner code used by offline workflows. The separate import path
+can scaffold a starter desired-state file from live LF-Tags, named LF-Tag
+expressions, data cells filters discovered through imported grants, grants, and
+resource tags discovered through imported grants.
 
 The `CurrentStateProvider` protocol is intentionally small:
 
@@ -100,9 +101,11 @@ class CurrentStateProvider:
     def load_current_state_for(self, desired: DesiredState) -> CurrentState: ...
 ```
 
-The boto3 adapter implements that protocol, and snapshot-backed providers let
-tests, CI, caches, internal APIs, or databases provide current state without
-importing boto3.
+The boto3 adapter implements that protocol. Snapshot-backed providers let tests
+and CI provide reviewed current state without importing boto3. The cached
+provider wraps any other provider and stores a desired-scope fingerprint plus
+current state in a JSON cache envelope, so caches remain an implementation of
+the provider boundary rather than planner or audit behavior.
 
 ## Public API
 
@@ -118,7 +121,9 @@ part of the stable public API.
 
 Use `CurrentStateProvider` when a downstream system already has current state in
 files, APIs, caches, or databases and wants to reuse `audit()`, `plan()`, or
-`explain()` without the default AWS adapter.
+`explain()` without the default AWS adapter. Use
+`CachedCurrentStateProvider` when the upstream source is expensive but still
+should be refreshed through the same provider interface.
 
 The public API includes a narrow authoring layer under
 `lakeformation_guard.policy` for teams that want rigid permission groups and

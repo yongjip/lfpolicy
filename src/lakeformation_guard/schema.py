@@ -71,6 +71,10 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
                 },
             ],
         },
+        "data_cells_filters": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/dataCellsFilterDefinition"},
+        },
         "resource_tags": {
             "type": "array",
             "items": {"$ref": "#/$defs/resourceTagAssignment"},
@@ -170,6 +174,38 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
             "properties": {
                 "key": _STRING_VALUE,
                 "values": _VALUE_LIST,
+            },
+        },
+        "dataCellsFilterDefinition": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["name", "database", "table"],
+            "properties": {
+                "name": _STRING_VALUE,
+                "catalog_id": _STRING_VALUE,
+                "database": _STRING_VALUE,
+                "table": _STRING_VALUE,
+                "row_filter": _STRING_VALUE,
+                "all_rows": {"type": "boolean"},
+                "columns": {
+                    "type": "array",
+                    "items": _STRING_VALUE,
+                    "minItems": 1,
+                    "uniqueItems": True,
+                },
+                "excluded_columns": {
+                    "type": "array",
+                    "items": _STRING_VALUE,
+                    "minItems": 1,
+                    "uniqueItems": True,
+                },
+                "version_id": _STRING_VALUE,
+            },
+            "not": {
+                "anyOf": [
+                    {"required": ["row_filter", "all_rows"]},
+                    {"required": ["columns", "excluded_columns"]},
+                ]
             },
         },
         "tagAssignmentScopeList": {

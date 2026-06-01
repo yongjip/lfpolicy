@@ -16,6 +16,78 @@
       ],
       "type": "object"
     },
+    "dataCellsFilterDefinition": {
+      "additionalProperties": false,
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "row_filter",
+              "all_rows"
+            ]
+          },
+          {
+            "required": [
+              "columns",
+              "excluded_columns"
+            ]
+          }
+        ]
+      },
+      "properties": {
+        "all_rows": {
+          "type": "boolean"
+        },
+        "catalog_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "columns": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "database": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "excluded_columns": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "row_filter": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "table": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "version_id": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "database",
+        "table"
+      ],
+      "type": "object"
+    },
     "dataCellsFilterResource": {
       "additionalProperties": false,
       "properties": {
@@ -754,6 +826,12 @@
   "additionalProperties": false,
   "description": "Desired or current AWS Lake Formation LF-Tag guardrail state.",
   "properties": {
+    "data_cells_filters": {
+      "items": {
+        "$ref": "#/$defs/dataCellsFilterDefinition"
+      },
+      "type": "array"
+    },
     "exceptions": {
       "items": {
         "$ref": "#/$defs/policyException"

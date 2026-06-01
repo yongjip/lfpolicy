@@ -48,6 +48,12 @@ State-aware commands use these options:
 - `--desired PATH`: desired state JSON/YAML file.
 - `--current-snapshot PATH`: current state JSON/YAML file. When omitted,
   `audit`, `plan`, `explain`, and `apply` load live AWS state through `boto3`.
+- `--current-cache PATH`: read or write a JSON current-state cache when live AWS
+  state would otherwise be loaded. Cache hits avoid constructing the AWS
+  adapter; cache misses, stale entries, and scope mismatches refresh from AWS.
+- `--refresh-current-cache`: force `--current-cache` to refresh from AWS.
+- `--current-cache-max-age SECONDS`: refresh `--current-cache` when its entry is
+  older than the given age.
 - `--profile NAME`: AWS profile for live operations.
 - `--region NAME`: AWS region for live operations.
 - `--catalog-id ID`: Glue Data Catalog ID.
@@ -77,6 +83,10 @@ Live AWS commands require the AWS extra:
 ```bash
 python -m pip install "lfguard[aws]"
 ```
+
+Current-state cache files are JSON envelopes, not plain current snapshots. Use
+`--current-snapshot` for reviewed immutable evidence, and `--current-cache` when
+you want repeated live workflows to share a scoped current-state lookup.
 
 For isolated CLI installs, use `pipx install lfguard` or
 `uv tool install lfguard`. Add extras with pip when you need live AWS or YAML
@@ -337,7 +347,8 @@ lfguard validate \
 
 `validate` does not call AWS. Use it in pre-commit hooks or CI before comparing
 against live state. It also enforces model invariants such as unique
-`(catalog_id, name)` identities for named LF-Tag expressions.
+`(catalog_id, name)` identities for named LF-Tag expressions and unique
+`(catalog_id, database, table, name)` identities for data cells filters.
 
 ```bash
 lfguard validate \
@@ -443,6 +454,19 @@ lfguard plan \
   --current-snapshot snapshots/prod-current.json
 ```
 
+For repeated live planning against the same desired scope, cache current state
+behind the provider boundary:
+
+```bash
+lfguard plan \
+  --desired policy/desired.json \
+  --current-cache .lfguard/current-cache.json \
+  --current-cache-max-age 900
+```
+
+Pass `--refresh-current-cache` when you want to force a new live read before
+planning.
+
 By default, the plan includes additive changes only. Destructive changes are
 omitted unless the matching allow flag is set.
 
@@ -468,6 +492,8 @@ Destructive planning flags:
 - `--allow-lf-tag-value-removals`
 - `--allow-lf-tag-expression-updates`
 - `--allow-lf-tag-expression-deletes`
+- `--allow-data-cells-filter-updates`
+- `--allow-data-cells-filter-deletes`
 - `--allow-resource-tag-removals`
 - `--allow-permission-revokes`
 
@@ -486,8 +512,9 @@ lfguard explain \
 ```
 
 `explain` reports direct grants, LF-Tag policy grants, named LF-Tag expression
-matches, effective LF-Tags on the target, data-location grant context, and
-desired grants that are missing from current state. It does not apply changes.
+matches, effective LF-Tags on the target, data-location grant context, data
+cells filter definitions for matching filtered grants, and desired grants that
+are missing from current state. It does not apply changes.
 
 Target options:
 
@@ -536,7 +563,7 @@ Import live AWS state into a starter desired-state file:
 ```bash
 lfguard import \
   --catalog-id 123456789012 \
-  --include lf-tags,lf-tag-expressions,resource-tags,grants \
+  --include lf-tags,lf-tag-expressions,data-cells-filters,resource-tags,grants \
   --output policy/imported-desired.json
 ```
 
@@ -547,7 +574,8 @@ generated file, remove unmanaged legacy access that should stay outside
 Useful options:
 
 - `--include`: comma-separated sections to import. Supported values are
-  `lf-tags`, `lf-tag-expressions`, `resource-tags`, and `grants`.
+  `lf-tags`, `lf-tag-expressions`, `data-cells-filters`, `resource-tags`, and
+  `grants`.
 - `--output PATH`: write the starter desired-state file. This is required.
 - `--format json|yaml`: force the output format. When omitted, `.yaml` and
   `.yml` paths produce YAML; other paths produce JSON.
@@ -557,6 +585,10 @@ Resource-tag import is intentionally bounded. `lfguard` reads LF-Tag
 assignments for resources discovered through Lake Formation grants, even when
 `resource-tags` is requested without including `grants` in the generated file.
 It does not crawl the whole Glue Data Catalog.
+
+Data-cells-filter import is also bounded. `lfguard` lists filters only for
+tables discovered through imported grants, even when `data-cells-filters` is
+requested without including `grants` in the generated file.
 
 ## `apply`
 

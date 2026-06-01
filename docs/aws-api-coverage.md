@@ -27,6 +27,7 @@ It does not perform full account-wide catalog discovery.
 | --- | --- | --- |
 | Read LF-Tag definitions named in desired state | `get_lf_tag` | `lakeformation:GetLFTag` |
 | Read named LF-Tag expressions named in desired state or grants | `get_lf_tag_expression` | `lakeformation:GetLFTagExpression` |
+| Read data cells filters named in desired state or grants | `get_data_cells_filter` | `lakeformation:GetDataCellsFilter` |
 | Read LF-Tag assignments for desired resources and grant resources | `get_resource_lf_tags` | `lakeformation:GetResourceLFTags` |
 | Read permissions for desired principal/resource pairs | `list_permissions` | `lakeformation:ListPermissions` |
 
@@ -43,12 +44,14 @@ needs human review before becoming owned desired state.
 | --- | --- | --- |
 | `lf-tags` | `list_lf_tags` | `lakeformation:ListLFTags` |
 | `lf-tag-expressions` | `list_lf_tag_expressions` | `lakeformation:ListLFTagExpressions` |
+| `data-cells-filters` | `list_data_cells_filter` for tables discovered from imported grants | `lakeformation:ListDataCellsFilter` |
 | `grants` | `list_permissions` | `lakeformation:ListPermissions` |
 | `resource-tags` | `get_resource_lf_tags` for resources discovered from imported grants | `lakeformation:GetResourceLFTags` |
 
-`list_lf_tags`, `list_lf_tag_expressions`, and `list_permissions` use
-paginators when available and fall back to manual `NextToken` paging otherwise.
-Import does not crawl Glue databases and tables directly.
+`list_lf_tags`, `list_lf_tag_expressions`, `list_data_cells_filter`, and
+`list_permissions` use paginators when available and fall back to manual
+`NextToken` paging otherwise. Import does not crawl Glue databases and tables
+directly.
 
 ## Apply
 
@@ -64,6 +67,9 @@ selected changes in a saved JSON plan passed with `--plan`.
 | `lf_tag_expression.create` | `create_lf_tag_expression` | `lakeformation:CreateLFTagExpression` |
 | `lf_tag_expression.update` | `update_lf_tag_expression` | `lakeformation:UpdateLFTagExpression` |
 | `lf_tag_expression.delete` | `delete_lf_tag_expression` | `lakeformation:DeleteLFTagExpression` |
+| `data_cells_filter.create` | `create_data_cells_filter` | `lakeformation:CreateDataCellsFilter` |
+| `data_cells_filter.update` | `update_data_cells_filter` | `lakeformation:UpdateDataCellsFilter` |
+| `data_cells_filter.delete` | `delete_data_cells_filter` | `lakeformation:DeleteDataCellsFilter` |
 | `resource_tag.add_values` | `add_lf_tags_to_resource` | `lakeformation:AddLFTagsToResource` |
 | `resource_tag.remove_values` | `remove_lf_tags_from_resource` | `lakeformation:RemoveLFTagsFromResource` |
 | `grant.add_permissions` | `grant_permissions` | `lakeformation:GrantPermissions` |
@@ -75,6 +81,8 @@ flag is supplied:
 - `lf_tag.remove_values` requires `--allow-lf-tag-value-removals`;
 - `lf_tag_expression.update` requires `--allow-lf-tag-expression-updates`;
 - `lf_tag_expression.delete` requires `--allow-lf-tag-expression-deletes`;
+- `data_cells_filter.update` requires `--allow-data-cells-filter-updates`;
+- `data_cells_filter.delete` requires `--allow-data-cells-filter-deletes`;
 - `resource_tag.remove_values` requires `--allow-resource-tag-removals`;
 - `grant.revoke_permissions` requires `--allow-permission-revokes`.
 
@@ -85,6 +93,7 @@ requests. Resource-level `catalog_id` values in state files are also preserved
 when rendering Lake Formation resource payloads. LF-Tag definitions can also
 carry `catalog_id`; those scoped definitions override the adapter default for
 `get_lf_tag`, `create_lf_tag`, and `update_lf_tag` request shapes.
+Data cells filter definitions use `catalog_id` as the AWS `TableCatalogId`.
 
 ## Error Handling
 

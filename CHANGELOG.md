@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.6.0
+
+- Adds `CachedCurrentStateProvider`, a read-through JSON cache wrapper for any
+  `CurrentStateProvider`.
+- Adds `--current-cache`, `--refresh-current-cache`, and
+  `--current-cache-max-age` to live current-state CLI paths so `audit`, `plan`,
+  `explain`, and desired-driven `apply` can reuse cached current state without
+  constructing the AWS adapter on cache hits.
+- Adds managed `data_cells_filters` definitions for Lake Formation
+  `DataCellsFilter` bodies, including create/update/delete planning, audit
+  drift, lint duplicate-identity checks, explain evidence, live inventory, and
+  bounded import.
+- Adds `--allow-data-cells-filter-updates` and
+  `--allow-data-cells-filter-deletes` destructive planning/apply gates.
+
 ## 0.5.2
 
 - Adds catalog-scoped LF-Tag definitions so same-name tag keys in different

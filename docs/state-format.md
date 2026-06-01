@@ -8,6 +8,7 @@ now.
 {
   "lf_tags": {},
   "lf_tag_expressions": {},
+  "data_cells_filters": [],
   "lf_tag_key_metadata": {},
   "resource_tags": [],
   "grants": [],
@@ -106,6 +107,50 @@ The equivalent list form is also accepted:
 ```
 
 Single values may be written as strings anywhere a value list is accepted.
+
+## Data Cells Filter Definitions
+
+Use `data_cells_filters` to manage Lake Formation row and column filter
+definitions. The `catalog_id` field maps to AWS `TableCatalogId`.
+
+```json
+{
+  "data_cells_filters": [
+    {
+      "name": "orders_public",
+      "catalog_id": "111122223333",
+      "database": "analytics",
+      "table": "orders",
+      "row_filter": "country = 'US'",
+      "columns": ["order_id", "status"]
+    }
+  ]
+}
+```
+
+Use `all_rows: true` when the filter should not narrow rows, and use
+`excluded_columns` when it should expose all columns except a denied subset:
+
+```json
+{
+  "data_cells_filters": [
+    {
+      "name": "orders_internal",
+      "catalog_id": "111122223333",
+      "database": "analytics",
+      "table": "orders",
+      "all_rows": true,
+      "excluded_columns": ["internal_notes"]
+    }
+  ]
+}
+```
+
+`row_filter` and `all_rows` are mutually exclusive. `columns` and
+`excluded_columns` are also mutually exclusive. Exact duplicate identities
+`(catalog_id, database, table, name)` are rejected by validation and lint.
+Imported AWS `VersionId` values may appear in snapshots or scaffolded state for
+evidence, but they are treated as provider metadata rather than policy drift.
 
 ## LF-Tag Key Metadata
 
