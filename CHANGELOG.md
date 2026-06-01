@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.6.2
+
+- Adds `CachedCurrentStateProvider.for_aws(...)` and
+  `aws_current_state_provider_context(...)` so direct library users can scope
+  live AWS current-state caches consistently with the CLI.
+- Writes current-state caches through unique temporary files before atomic
+  replace, avoiding fixed temporary-path collisions when jobs share a cache
+  directory.
+
 ## 0.6.1
 
 - Scopes current-state cache hits by provider context as well as desired-state

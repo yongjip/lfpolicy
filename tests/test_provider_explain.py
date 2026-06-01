@@ -14,6 +14,7 @@ from lakeformation_guard import (
     ResourceRef,
     SnapshotCurrentStateProvider,
     SnapshotFileCurrentStateProvider,
+    aws_current_state_provider_context,
     desired_state_fingerprint,
     explain,
     lint_desired,
@@ -112,6 +113,89 @@ class ProviderExplainTests(unittest.TestCase):
 
             self.assertEqual(cached_provider.load_current_state_for(desired), current)
             self.assertEqual(second_upstream.calls, [])
+
+    def test_cached_provider_for_aws_records_context(self):
+        desired = DesiredState.from_dict({"grants": []})
+        current = CurrentState.empty()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cache_path = Path(tmp) / "current-cache.json"
+            provider = CachedCurrentStateProvider.for_aws(
+                FakeCurrentStateProvider(current),
+                str(cache_path),
+                profile_name="prod",
+                region_name="us-east-1",
+                catalog_id="111122223333",
+            )
+
+            self.assertEqual(provider.load_current_state_for(desired), current)
+            envelope = json.loads(cache_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                envelope["provider_context"],
+                {
+                    "catalog_id": "111122223333",
+                    "profile": "prod",
+                    "provider": "aws-lakeformation",
+                    "region": "us-east-1",
+                },
+            )
+
+    def test_aws_current_state_provider_context_uses_explicit_environment_and_defaults(self):
+        self.assertEqual(
+            aws_current_state_provider_context(
+                profile_name="prod",
+                region_name="us-east-1",
+                catalog_id="111122223333",
+                environ={
+                    "AWS_PROFILE": "stage",
+                    "AWS_REGION": "us-west-2",
+                },
+            ),
+            {
+                "catalog_id": "111122223333",
+                "profile": "prod",
+                "provider": "aws-lakeformation",
+                "region": "us-east-1",
+            },
+        )
+        self.assertEqual(
+            aws_current_state_provider_context(
+                environ={
+                    "AWS_DEFAULT_PROFILE": "stage-default",
+                    "AWS_DEFAULT_REGION": "us-west-2",
+                },
+            ),
+            {
+                "catalog_id": None,
+                "profile": "stage-default",
+                "provider": "aws-lakeformation",
+                "region": "us-west-2",
+            },
+        )
+        self.assertEqual(
+            aws_current_state_provider_context(environ={}),
+            {
+                "catalog_id": None,
+                "profile": "__default__",
+                "provider": "aws-lakeformation",
+                "region": "__default__",
+            },
+        )
+
+    def test_cached_provider_does_not_use_fixed_temp_path(self):
+        desired = DesiredState.from_dict({"grants": []})
+        current = CurrentState.empty()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cache_path = Path(tmp) / "current-cache.json"
+            fixed_tmp_path = Path(tmp) / "current-cache.json.tmp"
+            fixed_tmp_path.write_text("sentinel", encoding="utf-8")
+
+            provider = CachedCurrentStateProvider(FakeCurrentStateProvider(current), str(cache_path))
+            self.assertEqual(provider.load_current_state_for(desired), current)
+
+            self.assertEqual(fixed_tmp_path.read_text(encoding="utf-8"), "sentinel")
+            self.assertEqual(json.loads(cache_path.read_text(encoding="utf-8"))["current"], current.to_dict())
 
     def test_cached_provider_refreshes_on_scope_or_provider_context_mismatch_or_expiry(self):
         desired = DesiredState.from_dict({"grants": []})

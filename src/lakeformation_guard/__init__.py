@@ -47,6 +47,7 @@ from .provider import (
     LazyCurrentStateProvider,
     SnapshotCurrentStateProvider,
     SnapshotFileCurrentStateProvider,
+    aws_current_state_provider_context,
     desired_state_fingerprint,
     provider_context_fingerprint,
 )
@@ -91,6 +92,7 @@ __all__ = [
     "__version__",
     "admin",
     "audit",
+    "aws_current_state_provider_context",
     "data_location_access",
     "database_creator",
     "desired_state_fingerprint",

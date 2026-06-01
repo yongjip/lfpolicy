@@ -126,7 +126,10 @@ files, APIs, caches, or databases and wants to reuse `audit()`, `plan()`, or
 should be refreshed through the same provider interface. Cached entries are
 keyed by desired-state fingerprint and a provider-context fingerprint so live
 AWS cache reuse can distinguish profile, region, catalog, and provider
-identity.
+identity. AWS library integrations should use
+`CachedCurrentStateProvider.for_aws(...)` or
+`aws_current_state_provider_context(...)`; custom providers should pass a
+provider context that identifies their own source environment.
 
 The public API includes a narrow authoring layer under
 `lakeformation_guard.policy` for teams that want rigid permission groups and

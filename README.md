@@ -468,23 +468,21 @@ adapter as a provider:
 ```python
 from lakeformation_guard import CachedCurrentStateProvider
 
-provider = CachedCurrentStateProvider(
+provider = CachedCurrentStateProvider.for_aws(
     adapter,
     ".lfguard/prod-ap-northeast-2-111122223333-current.json",
     max_age_seconds=900,
-    provider_context={
-        "provider": "aws-lakeformation",
-        "profile": "prod",
-        "region": "ap-northeast-2",
-        "catalog_id": "111122223333",
-    },
+    profile_name="prod",
+    region_name="ap-northeast-2",
+    catalog_id="111122223333",
 )
 current = provider.load_current_state_for(desired)
 ```
 
 Cache entries are keyed by both desired-state scope and provider context. Use
-separate cache files, or explicit provider contexts, for stage/prod, regions,
-and catalogs.
+`CachedCurrentStateProvider.for_aws(...)` for live AWS caches, and pass an
+explicit `provider_context` for custom providers. Keep separate cache files for
+stage/prod, regions, and catalogs.
 
 Use an IAM principal with the minimum Lake Formation permissions required for the
 actions you intend to run. The package does not bypass AWS authorization and does
@@ -495,7 +493,7 @@ not turn destructive changes on by default.
 The repository includes GitHub Actions for CI and PyPI Trusted Publishing. See
 [`docs/publishing.md`](docs/publishing.md) for the release path and the exact
 PyPI publisher settings. The latest release notes are in
-[`docs/release-notes/v0.6.1.md`](docs/release-notes/v0.6.1.md), with prior
+[`docs/release-notes/v0.6.2.md`](docs/release-notes/v0.6.2.md), with prior
 release notes under [`docs/release-notes/`](docs/release-notes/).
 
 ## More docs

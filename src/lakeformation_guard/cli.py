@@ -32,6 +32,7 @@ from .provider import (
     CurrentStateProvider,
     LazyCurrentStateProvider,
     SnapshotFileCurrentStateProvider,
+    aws_current_state_provider_context,
 )
 from .schema import state_json_schema
 from .state_index import (
@@ -844,35 +845,13 @@ def _current_state_provider(args: argparse.Namespace) -> CurrentStateProvider:
             current_cache,
             refresh=refresh_current_cache,
             max_age_seconds=current_cache_max_age,
-            provider_context=_current_cache_provider_context(args),
+            provider_context=aws_current_state_provider_context(
+                profile_name=args.profile,
+                region_name=args.region,
+                catalog_id=args.catalog_id,
+            ),
         )
     return _aws_adapter(args)
-
-
-def _current_cache_provider_context(args: argparse.Namespace) -> Mapping[str, Any]:
-    return {
-        "provider": "aws-lakeformation",
-        "profile": _cache_context_value(
-            args.profile,
-            os.environ.get("AWS_PROFILE"),
-            os.environ.get("AWS_DEFAULT_PROFILE"),
-            default="__default__",
-        ),
-        "region": _cache_context_value(
-            args.region,
-            os.environ.get("AWS_REGION"),
-            os.environ.get("AWS_DEFAULT_REGION"),
-            default="__default__",
-        ),
-        "catalog_id": _cache_context_value(args.catalog_id),
-    }
-
-
-def _cache_context_value(*values: Optional[str], default: Optional[str] = None) -> Optional[str]:
-    for value in values:
-        if value not in (None, ""):
-            return str(value)
-    return default
 
 
 def _explain_resource(args: argparse.Namespace) -> ResourceRef:

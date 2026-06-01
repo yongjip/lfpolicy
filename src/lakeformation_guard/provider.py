@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import tempfile
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -62,6 +64,10 @@ class CachedCurrentStateProvider:
     ``load_current_state_for`` and a provider context. If the file is missing,
     expired, refreshed, or scoped to a different desired state/provider context,
     the upstream provider is used and the cache is rewritten.
+
+    Use ``for_aws(...)`` for live AWS providers. For custom providers, pass a
+    ``provider_context`` that identifies the source environment; the empty
+    default is intended only for provider-independent snapshots or tests.
     """
 
     upstream: CurrentStateProvider
@@ -70,6 +76,34 @@ class CachedCurrentStateProvider:
     max_age_seconds: Optional[int] = None
     clock: Callable[[], float] = time.time
     provider_context: Mapping[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def for_aws(
+        cls,
+        upstream: CurrentStateProvider,
+        path: str,
+        *,
+        profile_name: Optional[str] = None,
+        region_name: Optional[str] = None,
+        catalog_id: Optional[str] = None,
+        refresh: bool = False,
+        max_age_seconds: Optional[int] = None,
+        clock: Callable[[], float] = time.time,
+    ) -> "CachedCurrentStateProvider":
+        """Create a cache provider scoped to the default AWS Lake Formation context."""
+
+        return cls(
+            upstream,
+            path,
+            refresh=refresh,
+            max_age_seconds=max_age_seconds,
+            clock=clock,
+            provider_context=aws_current_state_provider_context(
+                profile_name=profile_name,
+                region_name=region_name,
+                catalog_id=catalog_id,
+            ),
+        )
 
     def __post_init__(self) -> None:
         if self.max_age_seconds is not None and self.max_age_seconds < 0:
@@ -136,13 +170,54 @@ class CachedCurrentStateProvider:
             "provider_context": _normalize_json(self.provider_context),
             "current": current.to_dict(),
         }
+        tmp_path: Optional[Path] = None
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            tmp_path = path.with_name("{}.tmp".format(path.name))
-            tmp_path.write_text(dumps_json(payload), encoding="utf-8")
+            with tempfile.NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                dir=path.parent,
+                prefix="{}.tmp.".format(path.name),
+                delete=False,
+            ) as tmp_file:
+                tmp_path = Path(tmp_file.name)
+                tmp_file.write(dumps_json(payload))
             tmp_path.replace(path)
         except OSError as exc:
+            if tmp_path is not None:
+                try:
+                    tmp_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
             raise StateFormatError("Could not write current-state cache {}: {}".format(path, exc)) from exc
+
+
+def aws_current_state_provider_context(
+    *,
+    profile_name: Optional[str] = None,
+    region_name: Optional[str] = None,
+    catalog_id: Optional[str] = None,
+    environ: Optional[Mapping[str, str]] = None,
+) -> Mapping[str, Any]:
+    """Return a stable cache context for AWS Lake Formation current-state providers."""
+
+    env = os.environ if environ is None else environ
+    return {
+        "provider": "aws-lakeformation",
+        "profile": _context_value(
+            profile_name,
+            env.get("AWS_PROFILE"),
+            env.get("AWS_DEFAULT_PROFILE"),
+            default="__default__",
+        ),
+        "region": _context_value(
+            region_name,
+            env.get("AWS_REGION"),
+            env.get("AWS_DEFAULT_REGION"),
+            default="__default__",
+        ),
+        "catalog_id": _context_value(catalog_id),
+    }
 
 
 def desired_state_fingerprint(desired: DesiredState) -> str:
@@ -160,6 +235,13 @@ def provider_context_fingerprint(context: Mapping[str, Any]) -> str:
 def _json_fingerprint(payload: Any) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _context_value(*values: Optional[str], default: Optional[str] = None) -> Optional[str]:
+    for value in values:
+        if value not in (None, ""):
+            return str(value)
+    return default
 
 
 def _normalize_json(value: Any) -> Any:
