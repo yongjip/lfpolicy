@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, FrozenSet, Iterable, Optional, Tuple
+from typing import Dict, FrozenSet, Iterable, Mapping, Optional, Set, Tuple
 
 from .models import (
     Grant,
@@ -30,14 +30,68 @@ def lf_tag_expression_definition_key(expression: LFTagExpressionDefinition) -> L
     return lf_tag_expression_key(expression.catalog_id, expression.name)
 
 
+def lf_tag_expression_key_identity(key: LFTagExpressionKey) -> str:
+    parts = ["lf_tag_expression"]
+    if key[0]:
+        parts.append("catalog={}".format(key[0]))
+    parts.append("name={}".format(key[1]))
+    return ":".join(parts)
+
+
+def duplicate_lf_tag_expression_keys(
+    expressions: Iterable[LFTagExpressionDefinition],
+) -> Tuple[LFTagExpressionKey, ...]:
+    seen: Set[LFTagExpressionKey] = set()
+    duplicates: Set[LFTagExpressionKey] = set()
+    for expression in expressions:
+        key = lf_tag_expression_definition_key(expression)
+        if key in seen:
+            duplicates.add(key)
+        seen.add(key)
+    return tuple(sorted(duplicates, key=lf_tag_expression_sort_key))
+
+
 def lf_tag_expression_index(
     expressions: Iterable[LFTagExpressionDefinition],
+    *,
+    allow_duplicates: bool = False,
 ) -> Dict[LFTagExpressionKey, LFTagExpressionDefinition]:
-    return {lf_tag_expression_definition_key(expression): expression for expression in expressions}
+    result: Dict[LFTagExpressionKey, LFTagExpressionDefinition] = {}
+    for expression in expressions:
+        key = lf_tag_expression_definition_key(expression)
+        if key in result and not allow_duplicates:
+            raise ValueError(
+                "Duplicate LF-Tag expression identity: {}".format(
+                    lf_tag_expression_key_identity(key)
+                )
+            )
+        result[key] = expression
+    return result
 
 
 def lf_tag_expression_sort_key(key: LFTagExpressionKey) -> str:
     return "{}:{}".format(key[0] or "", key[1])
+
+
+def resolve_lf_tag_expression_key(
+    expression_index: Mapping[LFTagExpressionKey, object],
+    catalog_id: Optional[str],
+    name: str,
+) -> Optional[LFTagExpressionKey]:
+    if catalog_id:
+        key = lf_tag_expression_key(catalog_id, name)
+        return key if key in expression_index else None
+    unscoped_key = lf_tag_expression_key(None, name)
+    if unscoped_key in expression_index:
+        return unscoped_key
+    scoped_matches = {
+        key
+        for key in expression_index
+        if key[0] and key[1] == name
+    }
+    if len(scoped_matches) == 1:
+        return next(iter(scoped_matches))
+    return None
 
 
 def resource_tag_index(assignments: Iterable[ResourceTagAssignment]) -> Dict[ResourceRef, Dict[str, FrozenSet[str]]]:

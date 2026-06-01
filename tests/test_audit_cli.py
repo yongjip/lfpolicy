@@ -2424,6 +2424,31 @@ class AuditCliTests(unittest.TestCase):
         self.assertEqual([finding.code for finding in findings], ["LF_TAG_POLICY_EXPRESSION_NAME_UNDEFINED"])
         self.assertEqual(findings[0].details["catalog_id"], "222222222222")
 
+    def test_lint_rejects_duplicate_lf_tag_expression_identity(self):
+        desired = DesiredState.from_dict(
+            {
+                "lf_tags": {"domain": ["sales", "finance"]},
+                "lf_tag_expressions": [
+                    {
+                        "name": "shared",
+                        "catalog_id": "111111111111",
+                        "expression": {"domain": ["sales"]},
+                    },
+                    {
+                        "name": "shared",
+                        "catalog_id": "111111111111",
+                        "expression": {"domain": ["finance"]},
+                    },
+                ],
+            }
+        )
+
+        findings = lint_desired(desired)
+
+        self.assertEqual([finding.code for finding in findings], ["LF_TAG_EXPRESSION_DUPLICATE_IDENTITY"])
+        self.assertEqual(findings[0].target, "lf_tag_expression:catalog=111111111111:name=shared")
+        self.assertEqual(findings[0].details, {"catalog_id": "111111111111", "name": "shared"})
+
     def test_lint_unscoped_named_lf_tag_expression_reference_requires_unambiguous_match(self):
         desired = DesiredState.from_dict(
             {

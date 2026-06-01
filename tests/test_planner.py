@@ -187,6 +187,27 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(change_plan.changes[0].payload["catalog_id"], "222222222222")
         self.assertEqual(change_plan.changes[1].payload["catalog_id"], "111111111111")
 
+    def test_plan_rejects_duplicate_lf_tag_expression_identity(self):
+        desired = DesiredState.from_dict(
+            {
+                "lf_tag_expressions": [
+                    {
+                        "name": "shared",
+                        "catalog_id": "111111111111",
+                        "expression": {"domain": ["sales"]},
+                    },
+                    {
+                        "name": "shared",
+                        "catalog_id": "111111111111",
+                        "expression": {"domain": ["finance"]},
+                    },
+                ]
+            }
+        )
+
+        with self.assertRaisesRegex(ValueError, "Duplicate LF-Tag expression identity"):
+            plan(desired, CurrentState.empty())
+
     def test_audit_keys_lf_tag_expressions_by_catalog_id(self):
         desired = DesiredState.from_dict(
             {

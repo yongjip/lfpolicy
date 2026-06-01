@@ -6,7 +6,11 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
 from .models import CurrentState, DesiredState, Grant, LFTagValue, ResourceRef
-from .state_index import LFTagExpressionKey, lf_tag_expression_definition_key, lf_tag_expression_key
+from .state_index import (
+    LFTagExpressionKey,
+    lf_tag_expression_definition_key,
+    resolve_lf_tag_expression_key,
+)
 
 
 EXPLAIN_SCHEMA_VERSION = "lfguard.explain.v1"
@@ -420,7 +424,10 @@ def _find_lf_tag_expression(
     catalog_id: Optional[str],
     name: str,
 ) -> Tuple[LFTagValue, ...]:
-    return expression_index.get(lf_tag_expression_key(catalog_id, name), ())
+    key = resolve_lf_tag_expression_key(expression_index, catalog_id, name)
+    if key is None:
+        return ()
+    return expression_index.get(key, ())
 
 
 def _normalize_permissions(permissions: Iterable[str]) -> Tuple[str, ...]:

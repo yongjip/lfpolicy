@@ -7,7 +7,13 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from .config import lint_severity
 from .models import DesiredState, Grant, ResourceTagAssignment
-from .state_index import LFTagExpressionKey, lf_tag_expression_index, lf_tag_expression_key
+from .state_index import (
+    LFTagExpressionKey,
+    duplicate_lf_tag_expression_keys,
+    lf_tag_expression_index,
+    lf_tag_expression_key_identity,
+    resolve_lf_tag_expression_key,
+)
 
 
 BROAD_PRINCIPALS = {"alliamprincipals", "iamallowedprincipals", "iam_allowed_principals"}
@@ -66,8 +72,13 @@ def lint_desired(desired: DesiredState) -> Tuple[LintFinding, ...]:
         metadata.key: set(metadata.assignable_to)
         for metadata in desired.lf_tag_key_metadata
     }
-    expression_index = lf_tag_expression_index(desired.lf_tag_expressions)
+    duplicate_expression_keys = duplicate_lf_tag_expression_keys(desired.lf_tag_expressions)
+    expression_index = lf_tag_expression_index(
+        desired.lf_tag_expressions,
+        allow_duplicates=bool(duplicate_expression_keys),
+    )
     findings.extend(_lint_lf_tag_definitions(tag_values))
+    findings.extend(_lint_duplicate_lf_tag_expression_keys(duplicate_expression_keys))
     for expression in desired.lf_tag_expressions:
         findings.extend(_lint_lf_tag_expression_definition(expression, tag_values))
     for assignment in desired.resource_tags:
@@ -267,22 +278,29 @@ def _resource_tag_assignment_scope(resource_kind: str) -> Any:
     return None
 
 
+def _lint_duplicate_lf_tag_expression_keys(
+    duplicate_keys: Tuple[LFTagExpressionKey, ...],
+) -> List[LintFinding]:
+    findings: List[LintFinding] = []
+    for key in duplicate_keys:
+        findings.append(
+            LintFinding(
+                code="LF_TAG_EXPRESSION_DUPLICATE_IDENTITY",
+                severity="error",
+                target=lf_tag_expression_key_identity(key),
+                message="Desired state defines multiple LF-Tag expressions with the same catalog ID and name",
+                details={"catalog_id": key[0], "name": key[1]},
+            )
+        )
+    return findings
+
+
 def _named_lf_tag_expression_defined(
     expression_index: Mapping[LFTagExpressionKey, Any],
     catalog_id: Optional[str],
     expression_name: str,
 ) -> bool:
-    if catalog_id:
-        return lf_tag_expression_key(catalog_id, expression_name) in expression_index
-    if lf_tag_expression_key(None, expression_name) in expression_index:
-        return True
-    # Without a grant catalog_id, only a single scoped definition is unambiguous.
-    scoped_matches = {
-        expression_catalog_id
-        for expression_catalog_id, name in expression_index
-        if expression_catalog_id and name == expression_name
-    }
-    return len(scoped_matches) == 1
+    return resolve_lf_tag_expression_key(expression_index, catalog_id, expression_name) is not None
 
 
 def _lint_grant(

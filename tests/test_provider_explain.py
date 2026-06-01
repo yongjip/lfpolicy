@@ -13,6 +13,7 @@ from lakeformation_guard import (
     SnapshotCurrentStateProvider,
     SnapshotFileCurrentStateProvider,
     explain,
+    lint_desired,
 )
 from lakeformation_guard.cli import main
 
@@ -163,6 +164,49 @@ class ProviderExplainTests(unittest.TestCase):
 
         self.assertEqual(report.summary()["matched"], 1)
         self.assertEqual(report.findings[0].details["expression_name"], "shared")
+
+    def test_explain_resolves_unscoped_named_lf_tag_expression_to_single_scoped_definition(self):
+        state = {
+            "lf_tags": {"domain": ["sales"]},
+            "lf_tag_expressions": [
+                {
+                    "name": "shared",
+                    "catalog_id": "222222222222",
+                    "expression": {"domain": ["sales"]},
+                }
+            ],
+            "resource_tags": [
+                {
+                    "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                    "tags": {"domain": ["sales"]},
+                }
+            ],
+            "grants": [
+                {
+                    "principal": "role",
+                    "resource": {
+                        "kind": "lf_tag_policy",
+                        "resource_type": "TABLE",
+                        "expression_name": "shared",
+                    },
+                    "permissions": ["SELECT"],
+                }
+            ],
+        }
+        desired = DesiredState.from_dict(state)
+        current = CurrentState.from_dict(state)
+
+        report = explain(
+            DesiredState.empty(),
+            current,
+            principal="role",
+            resource=ResourceRef(kind="table", database_name="analytics", table_name="orders"),
+            permissions=("SELECT",),
+        )
+
+        self.assertEqual(lint_desired(desired), ())
+        self.assertEqual(report.summary()["matched"], 1)
+        self.assertEqual(report.findings[0].details["expression"], {"domain": ["sales"]})
 
     def test_explain_reports_non_matching_lf_tag_policy_conditions(self):
         current = CurrentState.from_dict(
