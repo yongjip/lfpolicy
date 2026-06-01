@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.3
+
+- Preserves same-name LF-Tag expressions across catalogs when serializing
+  desired/current state by emitting list form for duplicate expression names.
+- Validates named LF-Tag expression grant references by `(catalog_id, name)`,
+  with an explicit unscoped-grant fallback only when the match is unambiguous.
+- Centralizes normalized state indexing helpers so plan, audit, lint, explain,
+  and AWS loading paths share the same catalog-aware expression keys.
+- Makes summary/profile output catalog-aware by adding `lf_tag_expression_ids`
+  while retaining the existing `lf_tag_expression_names` field.
+- Adds regression coverage for duplicate expression serialization,
+  catalog-scoped lint references, ambiguous unscoped references, and
+  catalog-aware summary output.
+
 ## 0.4.2
 
 - Fixes catalog ID precedence for live apply request building. A change payload
