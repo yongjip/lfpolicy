@@ -118,14 +118,18 @@ class AWSLakeFormationAdapter:
                 yield LFTagDefinition(tag.key, tuple(values))
 
     def _load_lf_tag_expressions(self, desired: DesiredState) -> Iterable[LFTagExpressionDefinition]:
-        expression_names = {expression.name for expression in desired.lf_tag_expressions}
-        expression_names.update(
-            grant.resource.expression_name
+        expression_keys = {
+            (expression.catalog_id, expression.name)
+            for expression in desired.lf_tag_expressions
+        }
+        expression_keys.update(
+            (grant.resource.catalog_id, grant.resource.expression_name)
             for grant in desired.grants
             if grant.resource.kind in {"lf_tag_policy", "lf_tag_expression"} and grant.resource.expression_name
         )
-        for name in sorted(expression_names):
-            kwargs = self._with_catalog_id({"Name": name})
+        for catalog_id, name in sorted(expression_keys, key=lambda item: (item[0] or "", item[1])):
+            request = {"Name": name, "catalog_id": catalog_id}
+            kwargs = self._with_catalog_id(request)
             try:
                 response = self.lakeformation.get_lf_tag_expression(**kwargs)
             except Exception as exc:
@@ -290,10 +294,10 @@ class AWSLakeFormationAdapter:
     def _with_catalog_id(self, kwargs: Mapping[str, Any]) -> Dict[str, Any]:
         request = dict(kwargs)
         payload_catalog_id = request.pop("catalog_id", None)
-        if self.catalog_id:
-            request.setdefault("CatalogId", self.catalog_id)
         if payload_catalog_id:
             request.setdefault("CatalogId", payload_catalog_id)
+        if self.catalog_id:
+            request.setdefault("CatalogId", self.catalog_id)
         return request
 
     def _paginate_or_call(

@@ -385,8 +385,14 @@ def _lf_tag_index(tags: Iterable[LFTagDefinition]) -> Dict[str, LFTagDefinition]
     return {key: LFTagDefinition(key, tuple(values)) for key, values in merged.items()}
 
 
-def _lf_tag_expression_index(expressions: Iterable[LFTagExpressionDefinition]) -> Dict[str, LFTagExpressionDefinition]:
-    return {expression.name: expression for expression in expressions}
+def _lf_tag_expression_index(
+    expressions: Iterable[LFTagExpressionDefinition],
+) -> Dict[Tuple[Optional[str], str], LFTagExpressionDefinition]:
+    return {_lf_tag_expression_key(expression): expression for expression in expressions}
+
+
+def _lf_tag_expression_key(expression: LFTagExpressionDefinition) -> Tuple[Optional[str], str]:
+    return (expression.catalog_id, expression.name)
 
 
 def _resource_tag_index(assignments: Iterable[ResourceTagAssignment]) -> Dict[ResourceRef, Dict[str, FrozenSet[str]]]:

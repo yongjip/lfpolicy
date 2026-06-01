@@ -411,7 +411,7 @@ not turn destructive changes on by default.
 The repository includes GitHub Actions for CI and PyPI Trusted Publishing. See
 [`docs/publishing.md`](docs/publishing.md) for the release path and the exact
 PyPI publisher settings. The latest release notes are in
-[`docs/release-notes/v0.4.1.md`](docs/release-notes/v0.4.1.md), with prior
+[`docs/release-notes/v0.4.2.md`](docs/release-notes/v0.4.2.md), with prior
 release notes under [`docs/release-notes/`](docs/release-notes/).
 
 ## More docs

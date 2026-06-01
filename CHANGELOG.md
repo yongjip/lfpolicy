@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.2
+
+- Fixes catalog ID precedence for live apply request building. A change payload
+  `catalog_id` now overrides the adapter default catalog ID.
+- Keys named LF-Tag expression drift detection by `(catalog_id, name)` in plan
+  and audit paths, preventing same-name expressions in different catalogs from
+  being treated as equivalent.
+- Loads named LF-Tag expressions by catalog-scoped keys for live current-state
+  inventory.
+- Resolves named LF-Tag expressions by catalog-scoped keys in `explain()`.
+- Adds regression coverage for payload catalog precedence and catalog-scoped
+  named LF-Tag expression planning, audit, loading, and explanation.
+
 ## 0.4.1
 
 - Fixes live apply for named LF-Tag expression create, update, and delete

@@ -404,6 +404,111 @@ class AwsAdapterStubberTests(unittest.TestCase):
         self.assertTrue(all(result.applied for result in results))
         self.stubber.assert_no_pending_responses()
 
+    def test_apply_lf_tag_expression_payload_catalog_id_overrides_adapter_default(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id="111111111111")
+        change_plan = Plan.from_dict(
+            {
+                "changes": [
+                    {
+                        "action": "lf_tag_expression.create",
+                        "target": "lf_tag_expression:catalog=222222222222:name=sales_tables",
+                        "reason": "missing",
+                        "payload": {
+                            "name": "sales_tables",
+                            "catalog_id": "222222222222",
+                            "expression": [{"key": "domain", "values": ["sales"]}],
+                        },
+                    }
+                ]
+            }
+        )
+
+        self.stubber.add_response(
+            "create_lf_tag_expression",
+            {},
+            {
+                "CatalogId": "222222222222",
+                "Name": "sales_tables",
+                "Description": "",
+                "Expression": [{"TagKey": "domain", "TagValues": ["sales"]}],
+            },
+        )
+
+        results = adapter.apply(change_plan, dry_run=False)
+
+        self.assertEqual(len(results), 1)
+        self.assertTrue(results[0].applied)
+        self.stubber.assert_no_pending_responses()
+
+    def test_load_current_state_fetches_lf_tag_expressions_by_catalog_id(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id=CATALOG_ID)
+        desired = DesiredState.from_dict(
+            {
+                "lf_tag_expressions": [
+                    {
+                        "name": "shared",
+                        "catalog_id": "222222222222",
+                        "expression": {"domain": ["sales"]},
+                    }
+                ],
+                "grants": [
+                    {
+                        "principal": PRINCIPAL,
+                        "resource": {
+                            "kind": "lf_tag_policy",
+                            "catalog_id": "333333333333",
+                            "resource_type": "TABLE",
+                            "expression_name": "grant_expression",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ],
+            }
+        )
+
+        self.stubber.add_response(
+            "get_lf_tag_expression",
+            {
+                "Name": "shared",
+                "CatalogId": "222222222222",
+                "Expression": [{"TagKey": "domain", "TagValues": ["sales"]}],
+            },
+            {"CatalogId": "222222222222", "Name": "shared"},
+        )
+        self.stubber.add_response(
+            "get_lf_tag_expression",
+            {
+                "Name": "grant_expression",
+                "CatalogId": "333333333333",
+                "Expression": [{"TagKey": "domain", "TagValues": ["finance"]}],
+            },
+            {"CatalogId": "333333333333", "Name": "grant_expression"},
+        )
+        self.stubber.add_response(
+            "list_permissions",
+            {"PrincipalResourcePermissions": []},
+            {
+                "CatalogId": CATALOG_ID,
+                "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                "Resource": {
+                    "LFTagPolicy": {
+                        "CatalogId": "333333333333",
+                        "ResourceType": "TABLE",
+                        "ExpressionName": "grant_expression",
+                    }
+                },
+                "MaxResults": 100,
+            },
+        )
+
+        current = adapter.load_current_state_for(desired)
+
+        self.assertEqual(
+            {(expression.catalog_id, expression.name) for expression in current.lf_tag_expressions},
+            {("222222222222", "shared"), ("333333333333", "grant_expression")},
+        )
+        self.stubber.assert_no_pending_responses()
+
 
 def _lf_tag_expression_change_plan() -> Plan:
     return Plan.from_dict(

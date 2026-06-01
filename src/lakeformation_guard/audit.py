@@ -89,8 +89,8 @@ def _audit_lf_tag_expressions(desired: DesiredState, current: CurrentState) -> L
     findings: List[AuditFinding] = []
     desired_expressions = _lf_tag_expression_index(desired.lf_tag_expressions)
     current_expressions = _lf_tag_expression_index(current.lf_tag_expressions)
-    for name, desired_expression in sorted(desired_expressions.items()):
-        current_expression = current_expressions.get(name)
+    for key, desired_expression in sorted(desired_expressions.items(), key=lambda item: _expression_sort_key(item[0])):
+        current_expression = current_expressions.get(key)
         if current_expression is None:
             findings.append(
                 AuditFinding(
@@ -98,7 +98,7 @@ def _audit_lf_tag_expressions(desired: DesiredState, current: CurrentState) -> L
                     severity="error",
                     target=desired_expression.identity,
                     message="Desired LF-Tag expression is missing",
-                    details={"name": name, "desired_expression": desired_expression.to_dict()},
+                    details=_expression_details(desired_expression, "desired_expression"),
                 )
             )
             continue
@@ -113,14 +113,15 @@ def _audit_lf_tag_expressions(desired: DesiredState, current: CurrentState) -> L
                     target=desired_expression.identity,
                     message="Current LF-Tag expression body differs from desired state",
                     details={
-                        "name": name,
+                        "name": desired_expression.name,
+                        "catalog_id": desired_expression.catalog_id,
                         "desired": desired_expression.to_dict(),
                         "current": current_expression.to_dict(),
                     },
                 )
             )
-    for name, current_expression in sorted(current_expressions.items()):
-        if name in desired_expressions:
+    for key, current_expression in sorted(current_expressions.items(), key=lambda item: _expression_sort_key(item[0])):
+        if key in desired_expressions:
             continue
         resource = ResourceRef(
             kind="lf_tag_expression",
@@ -135,10 +136,22 @@ def _audit_lf_tag_expressions(desired: DesiredState, current: CurrentState) -> L
                     severity=severity,
                     target=current_expression.identity,
                     message="Current LF-Tag expression is not present in desired state",
-                    details={"name": name, "current": current_expression.to_dict()},
+                    details=_expression_details(current_expression, "current"),
                 )
             )
     return findings
+
+
+def _expression_sort_key(key: Tuple[Any, str]) -> str:
+    return "{}:{}".format(key[0] or "", key[1])
+
+
+def _expression_details(expression: Any, field_name: str) -> Dict[str, Any]:
+    return {
+        "name": expression.name,
+        "catalog_id": expression.catalog_id,
+        field_name: expression.to_dict(),
+    }
 
 
 def _audit_resource_tags(desired: DesiredState, current: CurrentState) -> List[AuditFinding]:

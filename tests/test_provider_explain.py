@@ -117,6 +117,53 @@ class ProviderExplainTests(unittest.TestCase):
         self.assertEqual(report.findings[0].source, "named_lf_tag_policy")
         self.assertIn("sales_tables", report.findings[0].message)
 
+    def test_explain_resolves_named_lf_tag_expression_by_catalog_id(self):
+        current = CurrentState.from_dict(
+            {
+                "lf_tag_expressions": [
+                    {
+                        "name": "shared",
+                        "catalog_id": "111111111111",
+                        "expression": {"domain": ["finance"]},
+                    },
+                    {
+                        "name": "shared",
+                        "catalog_id": "222222222222",
+                        "expression": {"domain": ["sales"]},
+                    },
+                ],
+                "resource_tags": [
+                    {
+                        "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                        "tags": {"domain": ["sales"]},
+                    }
+                ],
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "lf_tag_policy",
+                            "catalog_id": "222222222222",
+                            "resource_type": "TABLE",
+                            "expression_name": "shared",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ],
+            }
+        )
+
+        report = explain(
+            DesiredState.empty(),
+            current,
+            principal="role",
+            resource=ResourceRef(kind="table", database_name="analytics", table_name="orders"),
+            permissions=("SELECT",),
+        )
+
+        self.assertEqual(report.summary()["matched"], 1)
+        self.assertEqual(report.findings[0].details["expression_name"], "shared")
+
     def test_explain_reports_non_matching_lf_tag_policy_conditions(self):
         current = CurrentState.from_dict(
             {

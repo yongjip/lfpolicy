@@ -1,6 +1,6 @@
 import unittest
 
-from lakeformation_guard import CurrentState, DesiredState, Plan, PlanOptions, plan
+from lakeformation_guard import CurrentState, DesiredState, Plan, PlanOptions, audit, plan
 
 
 class PlannerTests(unittest.TestCase):
@@ -153,6 +153,72 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual([change.action for change in change_plan.changes], ["lf_tag.create", "lf_tag_expression.create"])
         self.assertEqual(change_plan.changes[1].aws_api, "create_lf_tag_expression")
         self.assertFalse(change_plan.changes[1].destructive)
+
+    def test_plan_keys_lf_tag_expressions_by_catalog_id(self):
+        desired = DesiredState.from_dict(
+            {
+                "lf_tag_expressions": [
+                    {
+                        "name": "shared",
+                        "catalog_id": "222222222222",
+                        "expression": {"domain": ["sales"]},
+                    }
+                ]
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "lf_tag_expressions": [
+                    {
+                        "name": "shared",
+                        "catalog_id": "111111111111",
+                        "expression": {"domain": ["sales"]},
+                    }
+                ]
+            }
+        )
+
+        change_plan = plan(desired, current, PlanOptions(allow_lf_tag_expression_deletes=True))
+
+        self.assertEqual(
+            [change.action for change in change_plan.changes],
+            ["lf_tag_expression.create", "lf_tag_expression.delete"],
+        )
+        self.assertEqual(change_plan.changes[0].payload["catalog_id"], "222222222222")
+        self.assertEqual(change_plan.changes[1].payload["catalog_id"], "111111111111")
+
+    def test_audit_keys_lf_tag_expressions_by_catalog_id(self):
+        desired = DesiredState.from_dict(
+            {
+                "lf_tag_expressions": [
+                    {
+                        "name": "shared",
+                        "catalog_id": "222222222222",
+                        "expression": {"domain": ["sales"]},
+                    }
+                ]
+            }
+        )
+        current = CurrentState.from_dict(
+            {
+                "lf_tag_expressions": [
+                    {
+                        "name": "shared",
+                        "catalog_id": "111111111111",
+                        "expression": {"domain": ["sales"]},
+                    }
+                ]
+            }
+        )
+
+        findings = audit(desired, current)
+
+        self.assertEqual(
+            [finding.code for finding in findings],
+            ["LF_TAG_EXPRESSION_MISSING", "LF_TAG_EXPRESSION_UNMANAGED"],
+        )
+        self.assertEqual(findings[0].details["catalog_id"], "222222222222")
+        self.assertEqual(findings[1].details["catalog_id"], "111111111111")
 
     def test_plan_includes_destructive_changes_when_allowed(self):
         desired = DesiredState.from_dict(

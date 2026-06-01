@@ -264,7 +264,11 @@ def _lf_tag_policy_relevance(
     details: Dict[str, Any] = {"resource_type": grant_resource.resource_type}
     if grant_resource.expression_name:
         details["expression_name"] = grant_resource.expression_name
-        expression = expression_index.get(grant_resource.expression_name, ())
+        expression = _find_lf_tag_expression(
+            expression_index,
+            grant_resource.catalog_id,
+            grant_resource.expression_name,
+        )
         if not expression:
             return _GrantRelevance(
                 "not_matched",
@@ -403,8 +407,19 @@ def _catalog_compatible(left: Optional[str], right: Optional[str]) -> bool:
     return not left or not right or left == right
 
 
-def _expression_index(state: Union[DesiredState, CurrentState]) -> Dict[str, Tuple[LFTagValue, ...]]:
-    return {expression.name: expression.expression for expression in state.lf_tag_expressions}
+def _expression_index(state: Union[DesiredState, CurrentState]) -> Dict[Tuple[Optional[str], str], Tuple[LFTagValue, ...]]:
+    return {
+        (expression.catalog_id, expression.name): expression.expression
+        for expression in state.lf_tag_expressions
+    }
+
+
+def _find_lf_tag_expression(
+    expression_index: Mapping[Tuple[Optional[str], str], Tuple[LFTagValue, ...]],
+    catalog_id: Optional[str],
+    name: str,
+) -> Tuple[LFTagValue, ...]:
+    return expression_index.get((catalog_id, name), ())
 
 
 def _normalize_permissions(permissions: Iterable[str]) -> Tuple[str, ...]:
