@@ -134,6 +134,8 @@ class ResourceRef:
     database_name: Optional[str] = None
     table_name: Optional[str] = None
     columns: Tuple[str, ...] = field(default_factory=tuple)
+    column_wildcard: bool = False
+    excluded_columns: Tuple[str, ...] = field(default_factory=tuple)
     location: Optional[str] = None
     resource_type: Optional[str] = None
     expression: Tuple[LFTagValue, ...] = field(default_factory=tuple)
@@ -153,6 +155,12 @@ class ResourceRef:
         if self.resource_type is not None:
             object.__setattr__(self, "resource_type", self.resource_type.strip().upper())
         object.__setattr__(self, "columns", tuple(sorted({column.strip() for column in self.columns if column.strip()})))
+        object.__setattr__(
+            self,
+            "excluded_columns",
+            tuple(sorted({column.strip() for column in self.excluded_columns if column.strip()})),
+        )
+        object.__setattr__(self, "column_wildcard", bool(self.column_wildcard or self.excluded_columns))
         object.__setattr__(self, "expression", tuple(sorted(self.expression)))
         self._validate()
 
@@ -163,6 +171,13 @@ class ResourceRef:
         columns = raw.get("columns", ())
         if isinstance(columns, str):
             columns = [columns]
+        column_wildcard = raw.get("column_wildcard", raw.get("ColumnWildcard", False))
+        excluded_columns = raw.get("excluded_columns", raw.get("excluded_column_names", ()))
+        if isinstance(column_wildcard, Mapping):
+            excluded_columns = column_wildcard.get("excluded_columns", column_wildcard.get("ExcludedColumnNames", excluded_columns))
+            column_wildcard = True
+        if isinstance(excluded_columns, str):
+            excluded_columns = [excluded_columns]
         database_name = _resource_name(raw, "database", "database_name")
         expression_name = _resource_name(raw, "expression_name", "ExpressionName")
         filter_name = _resource_name(raw, "filter_name", "filter")
@@ -177,6 +192,8 @@ class ResourceRef:
             database_name=database_name,
             table_name=_resource_name(raw, "table", "table_name"),
             columns=tuple(str(column) for column in columns),
+            column_wildcard=bool(column_wildcard),
+            excluded_columns=tuple(str(column) for column in excluded_columns),
             location=_resource_name(raw, "location", "resource_arn", "arn"),
             resource_type=_resource_name(raw, "resource_type"),
             expression=expression,
@@ -212,8 +229,8 @@ class ResourceRef:
         if self.kind == "table_with_columns":
             if not self.database_name or not self.table_name:
                 raise ValueError("table_with_columns resources require database and table")
-            if not self.columns:
-                raise ValueError("table_with_columns resources require columns")
+            if bool(self.columns) == bool(self.column_wildcard):
+                raise ValueError("table_with_columns resources require exactly one of columns or column_wildcard")
         if self.kind == "data_location" and not self.location:
             raise ValueError("data_location resources require location")
         if self.kind == "data_cells_filter":
@@ -238,6 +255,11 @@ class ResourceRef:
             parts.append("table={}".format(self.table_name))
         if self.columns:
             parts.append("columns={}".format(",".join(self.columns)))
+        if self.column_wildcard:
+            if self.excluded_columns:
+                parts.append("columns=*:exclude={}".format(",".join(self.excluded_columns)))
+            else:
+                parts.append("columns=*")
         if self.location:
             parts.append("location={}".format(self.location))
         if self.resource_type:
@@ -263,6 +285,10 @@ class ResourceRef:
             data["table"] = self.table_name
         if self.columns:
             data["columns"] = list(self.columns)
+        if self.column_wildcard:
+            data["column_wildcard"] = True
+        if self.excluded_columns:
+            data["excluded_columns"] = list(self.excluded_columns)
         if self.location:
             data["location"] = self.location
         if self.resource_type:

@@ -293,22 +293,7 @@ def _direct_resource_relevance(grant_resource: ResourceRef, target: ResourceRef)
         if _same_table(grant_resource, target):
             return _GrantRelevance("matched", "Table-level grant covers the target table.")
     if grant_resource.kind == "table_with_columns" and target.kind == "table_with_columns":
-        if _same_table(grant_resource, target):
-            granted = set(grant_resource.columns)
-            requested = set(target.columns)
-            missing = sorted(requested - granted)
-            if not missing:
-                return _GrantRelevance(
-                    "matched",
-                    "Column-level grant covers all requested columns.",
-                    {"covered_columns": sorted(requested)},
-                )
-            if granted & requested:
-                return _GrantRelevance(
-                    "not_matched",
-                    "Column-level grant covers only some requested columns.",
-                    {"covered_columns": sorted(granted & requested), "missing_columns": missing},
-                )
+        return _table_with_columns_relevance(grant_resource, target)
     if grant_resource.kind == "data_cells_filter" and target.kind in {"table", "table_with_columns", "data_cells_filter"}:
         if _same_table(grant_resource, target):
             if target.kind == "data_cells_filter" and grant_resource.filter_name != target.filter_name:
@@ -331,6 +316,73 @@ def _direct_resource_relevance(grant_resource: ResourceRef, target: ResourceRef)
         return _GrantRelevance(
             "context",
             "Data-location grant is present, but table storage locations are not modeled in lfguard state.",
+        )
+    return None
+
+
+def _table_with_columns_relevance(grant_resource: ResourceRef, target: ResourceRef) -> Optional[_GrantRelevance]:
+    if not _same_table(grant_resource, target):
+        return None
+    if grant_resource.column_wildcard:
+        excluded = set(grant_resource.excluded_columns)
+        details: Dict[str, Any] = {"column_wildcard": True}
+        if excluded:
+            details["excluded_columns"] = sorted(excluded)
+        if target.columns:
+            requested = set(target.columns)
+            missing = sorted(requested & excluded)
+            covered = sorted(requested - excluded)
+            if not missing:
+                details["covered_columns"] = covered
+                return _GrantRelevance(
+                    "matched",
+                    "Column-wildcard grant covers all requested columns.",
+                    details,
+                )
+            details.update({"covered_columns": covered, "missing_columns": missing})
+            return _GrantRelevance(
+                "not_matched",
+                "Column-wildcard grant excludes some requested columns.",
+                details,
+            )
+        if target.column_wildcard:
+            target_excluded = set(target.excluded_columns)
+            missing = sorted(excluded - target_excluded)
+            if not missing:
+                details["requested_column_wildcard"] = True
+                if target_excluded:
+                    details["requested_excluded_columns"] = sorted(target_excluded)
+                return _GrantRelevance(
+                    "matched",
+                    "Column-wildcard grant covers the requested column-wildcard target.",
+                    details,
+                )
+            details["missing_columns"] = missing
+            return _GrantRelevance(
+                "not_matched",
+                "Column-wildcard grant excludes columns included by the requested target.",
+                details,
+            )
+    if target.column_wildcard:
+        return _GrantRelevance(
+            "not_matched",
+            "Explicit column grant cannot prove coverage for a column-wildcard target.",
+            {"covered_columns": list(grant_resource.columns)},
+        )
+    granted = set(grant_resource.columns)
+    requested = set(target.columns)
+    missing = sorted(requested - granted)
+    if not missing:
+        return _GrantRelevance(
+            "matched",
+            "Column-level grant covers all requested columns.",
+            {"covered_columns": sorted(requested)},
+        )
+    if granted & requested:
+        return _GrantRelevance(
+            "not_matched",
+            "Column-level grant covers only some requested columns.",
+            {"covered_columns": sorted(granted & requested), "missing_columns": missing},
         )
     return None
 

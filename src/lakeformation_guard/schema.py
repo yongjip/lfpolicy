@@ -287,13 +287,31 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
         "tableWithColumnsResource": {
             "type": "object",
             "additionalProperties": False,
-            "required": ["kind", "database", "table", "columns"],
+            "required": ["kind", "database", "table"],
+            "anyOf": [
+                {"required": ["columns"]},
+                {"required": ["column_wildcard"]},
+                {"required": ["excluded_columns"]},
+            ],
+            "not": {
+                "anyOf": [
+                    {"required": ["columns", "column_wildcard"]},
+                    {"required": ["columns", "excluded_columns"]},
+                ]
+            },
             "properties": {
                 "kind": {"const": "table_with_columns"},
                 "catalog_id": _STRING_VALUE,
                 "database": _STRING_VALUE,
                 "table": _STRING_VALUE,
+                "column_wildcard": {"type": "boolean"},
                 "columns": {
+                    "type": "array",
+                    "items": _STRING_VALUE,
+                    "minItems": 1,
+                    "uniqueItems": True,
+                },
+                "excluded_columns": {
                     "type": "array",
                     "items": _STRING_VALUE,
                     "minItems": 1,

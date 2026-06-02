@@ -258,6 +258,20 @@ With an explicit catalog:
 }
 ```
 
+For AWS `TableWithColumns` grants that use `ColumnWildcard`, use
+`column_wildcard: true`. Add `excluded_columns` when the grant exposes all
+columns except a denied subset:
+
+```json
+{
+  "kind": "table_with_columns",
+  "database": "analytics",
+  "table": "orders",
+  "column_wildcard": true,
+  "excluded_columns": ["internal_notes"]
+}
+```
+
 ### Data Location
 
 ```json

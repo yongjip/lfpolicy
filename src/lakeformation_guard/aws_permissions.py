@@ -145,6 +145,8 @@ def iam_policy_template(template: str, *, include_glue_read: bool = False) -> Di
                     "lakeformation:ListLFTagExpressions",
                     "lakeformation:GetResourceLFTags",
                     "lakeformation:ListPermissions",
+                    "lakeformation:GetDataCellsFilter",
+                    "lakeformation:ListDataCellsFilter",
                 ),
             )
         )
@@ -157,6 +159,7 @@ def iam_policy_template(template: str, *, include_glue_read: bool = False) -> Di
                     "lakeformation:CreateLFTagExpression",
                     "lakeformation:UpdateLFTag",
                     "lakeformation:AddLFTagsToResource",
+                    "lakeformation:CreateDataCellsFilter",
                     "lakeformation:GrantPermissions",
                 ),
             )
@@ -169,6 +172,8 @@ def iam_policy_template(template: str, *, include_glue_read: bool = False) -> Di
                     "lakeformation:RemoveLFTagsFromResource",
                     "lakeformation:UpdateLFTagExpression",
                     "lakeformation:DeleteLFTagExpression",
+                    "lakeformation:UpdateDataCellsFilter",
+                    "lakeformation:DeleteDataCellsFilter",
                     "lakeformation:RevokePermissions",
                 ),
             )

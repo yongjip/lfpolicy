@@ -320,6 +320,85 @@ class AwsAdapterStubberTests(unittest.TestCase):
         self.assertEqual(current.grants[0].permissions, ("SELECT",))
         self.stubber.assert_no_pending_responses()
 
+    def test_load_current_state_falls_back_when_scoped_list_permissions_is_denied(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id=CATALOG_ID)
+        desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": PRINCIPAL,
+                        "resource": {
+                            "kind": "table",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ]
+            }
+        )
+        resource = {
+            "Table": {
+                "DatabaseName": "analytics",
+                "Name": "orders",
+            }
+        }
+
+        self.stubber.add_response(
+            "get_resource_lf_tags",
+            {},
+            {
+                "CatalogId": CATALOG_ID,
+                "Resource": resource,
+                "ShowAssignedLFTags": True,
+            },
+        )
+        self.stubber.add_client_error(
+            "list_permissions",
+            service_error_code="AccessDeniedException",
+            service_message="Resource does not exist or requester is not authorized",
+            expected_params={
+                "CatalogId": CATALOG_ID,
+                "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                "Resource": resource,
+                "MaxResults": 100,
+            },
+        )
+        self.stubber.add_response(
+            "list_permissions",
+            {
+                "PrincipalResourcePermissions": [
+                    {
+                        "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                        "Resource": resource,
+                        "Permissions": ["SELECT"],
+                        "PermissionsWithGrantOption": [],
+                    },
+                    {
+                        "Principal": {"DataLakePrincipalIdentifier": "other"},
+                        "Resource": resource,
+                        "Permissions": ["SELECT"],
+                        "PermissionsWithGrantOption": [],
+                    },
+                ]
+            },
+            {
+                "CatalogId": CATALOG_ID,
+                "MaxResults": 100,
+            },
+        )
+
+        current = adapter.load_current_state_for(desired)
+
+        self.assertEqual(len(current.grants), 1)
+        self.assertEqual(current.grants[0].principal, PRINCIPAL)
+        self.assertEqual(current.grants[0].resource.to_dict(), {
+            "kind": "table",
+            "database": "analytics",
+            "table": "orders",
+        })
+        self.stubber.assert_no_pending_responses()
+
     def test_load_current_state_keeps_column_lf_tags_separate_from_table_tags(self):
         adapter = AWSLakeFormationAdapter(self.client, catalog_id="111111111111")
         desired = DesiredState.from_dict(
@@ -385,6 +464,67 @@ class AwsAdapterStubberTests(unittest.TestCase):
                         "columns": ["customer_id"],
                     },
                     "tags": {"pii": ["yes"]},
+                },
+            ],
+        )
+        self.stubber.assert_no_pending_responses()
+
+    def test_load_current_state_fetches_all_column_tags_for_column_wildcard_resource(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id=CATALOG_ID)
+        desired = DesiredState.from_dict(
+            {
+                "resource_tags": [
+                    {
+                        "resource": {
+                            "kind": "table_with_columns",
+                            "database": "analytics",
+                            "table": "orders",
+                            "column_wildcard": True,
+                        },
+                        "tags": {"domain": ["sales"]},
+                    }
+                ]
+            }
+        )
+
+        self.stubber.add_response(
+            "get_resource_lf_tags",
+            {
+                "LFTagsOnTable": [{"TagKey": "domain", "TagValues": ["sales"]}],
+                "LFTagsOnColumns": [
+                    {
+                        "Name": "email",
+                        "LFTags": [{"TagKey": "sensitivity", "TagValues": ["restricted"]}],
+                    }
+                ],
+            },
+            {
+                "CatalogId": CATALOG_ID,
+                "Resource": {
+                    "Table": {
+                        "DatabaseName": "analytics",
+                        "Name": "orders",
+                    }
+                },
+                "ShowAssignedLFTags": True,
+            },
+        )
+
+        current = adapter.load_current_state_for(desired)
+
+        self.assertEqual(
+            [assignment.resource.to_dict() for assignment in current.resource_tags],
+            [
+                {
+                    "kind": "table",
+                    "database": "analytics",
+                    "table": "orders",
+                },
+                {
+                    "kind": "table_with_columns",
+                    "database": "analytics",
+                    "table": "orders",
+                    "columns": ["email"],
                 },
             ],
         )
@@ -1135,6 +1275,56 @@ class AwsAdapterStubberTests(unittest.TestCase):
         self.assertTrue(all(result.applied for result in results))
         self.stubber.assert_no_pending_responses()
 
+    def test_apply_uses_column_wildcard_for_table_with_columns_grants(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id=CATALOG_ID)
+        change_plan = Plan.from_dict(
+            {
+                "changes": [
+                    {
+                        "action": "grant.add_permissions",
+                        "target": "principal -> table_with_columns",
+                        "reason": "missing column-wildcard permissions",
+                        "payload": {
+                            "principal": PRINCIPAL,
+                            "resource": {
+                                "kind": "table_with_columns",
+                                "database": "analytics",
+                                "table": "orders",
+                                "column_wildcard": True,
+                                "excluded_columns": ["internal_notes"],
+                            },
+                            "permissions": ["SELECT"],
+                            "grantable_permissions": [],
+                        },
+                    }
+                ]
+            }
+        )
+
+        self.stubber.add_response(
+            "grant_permissions",
+            {},
+            {
+                "CatalogId": CATALOG_ID,
+                "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                "Resource": {
+                    "TableWithColumns": {
+                        "DatabaseName": "analytics",
+                        "Name": "orders",
+                        "ColumnWildcard": {"ExcludedColumnNames": ["internal_notes"]},
+                    }
+                },
+                "Permissions": ["SELECT"],
+                "PermissionsWithGrantOption": [],
+            },
+        )
+
+        results = adapter.apply(change_plan, dry_run=False)
+
+        self.assertEqual(len(results), 1)
+        self.assertTrue(results[0].applied)
+        self.stubber.assert_no_pending_responses()
+
     def test_load_current_state_fetches_lf_tag_expressions_by_catalog_id(self):
         adapter = AWSLakeFormationAdapter(self.client, catalog_id=CATALOG_ID)
         desired = DesiredState.from_dict(
@@ -1315,15 +1505,6 @@ class AwsAdapterStubberTests(unittest.TestCase):
         )
 
         self.stubber.add_response(
-            "get_resource_lf_tags",
-            {},
-            {
-                "CatalogId": "222222222222",
-                "Resource": {"Catalog": {"Id": "222222222222"}},
-                "ShowAssignedLFTags": True,
-            },
-        )
-        self.stubber.add_response(
             "list_permissions",
             {
                 "PrincipalResourcePermissions": [
@@ -1439,15 +1620,6 @@ class AwsAdapterStubberTests(unittest.TestCase):
         }
 
         self.stubber.add_response(
-            "get_resource_lf_tags",
-            {},
-            {
-                "CatalogId": "222222222222",
-                "Resource": resource,
-                "ShowAssignedLFTags": True,
-            },
-        )
-        self.stubber.add_response(
             "list_permissions",
             {
                 "PrincipalResourcePermissions": [
@@ -1524,15 +1696,6 @@ class AwsAdapterStubberTests(unittest.TestCase):
                 "DatabaseName": "analytics",
                 "TableName": "orders",
                 "Name": "orders_public",
-            },
-        )
-        self.stubber.add_response(
-            "get_resource_lf_tags",
-            {},
-            {
-                "CatalogId": "222222222222",
-                "Resource": resource,
-                "ShowAssignedLFTags": True,
             },
         )
         self.stubber.add_response(
@@ -1642,6 +1805,48 @@ class AwsAdapterStubberTests(unittest.TestCase):
                 "table": "orders",
                 "row_filter": "country = 'US'",
                 "excluded_columns": ["notes"],
+            },
+        )
+        self.stubber.assert_no_pending_responses()
+
+    def test_import_grants_preserves_table_with_columns_column_wildcard(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id=CATALOG_ID)
+
+        self.stubber.add_response(
+            "list_permissions",
+            {
+                "PrincipalResourcePermissions": [
+                    {
+                        "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                        "Resource": {
+                            "TableWithColumns": {
+                                "CatalogId": CATALOG_ID,
+                                "DatabaseName": "analytics",
+                                "Name": "orders",
+                                "ColumnWildcard": {},
+                            }
+                        },
+                        "Permissions": ["SELECT"],
+                        "PermissionsWithGrantOption": [],
+                    }
+                ]
+            },
+            {
+                "CatalogId": CATALOG_ID,
+                "MaxResults": 100,
+            },
+        )
+
+        current = adapter.import_state(include=("grants",))
+
+        self.assertEqual(
+            current.grants[0].resource.to_dict(),
+            {
+                "kind": "table_with_columns",
+                "catalog_id": CATALOG_ID,
+                "database": "analytics",
+                "table": "orders",
+                "column_wildcard": True,
             },
         )
         self.stubber.assert_no_pending_responses()

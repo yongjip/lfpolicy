@@ -107,6 +107,56 @@ class ModelTests(unittest.TestCase):
             },
         )
 
+    def test_table_with_columns_resource_supports_column_wildcard(self):
+        resource = ResourceRef.from_dict(
+            {
+                "kind": "table_with_columns",
+                "catalog_id": "111122223333",
+                "database": "analytics",
+                "table": "orders",
+                "column_wildcard": True,
+                "excluded_columns": ["internal_notes"],
+            }
+        )
+
+        self.assertTrue(resource.column_wildcard)
+        self.assertEqual(resource.excluded_columns, ("internal_notes",))
+        self.assertEqual(
+            resource.identity,
+            "table_with_columns:catalog=111122223333:database=analytics:table=orders:columns=*:exclude=internal_notes",
+        )
+        self.assertEqual(
+            resource.to_dict(),
+            {
+                "kind": "table_with_columns",
+                "catalog_id": "111122223333",
+                "database": "analytics",
+                "table": "orders",
+                "column_wildcard": True,
+                "excluded_columns": ["internal_notes"],
+            },
+        )
+
+    def test_table_with_columns_resource_requires_explicit_columns_or_wildcard(self):
+        with self.assertRaisesRegex(ValueError, "exactly one of columns or column_wildcard"):
+            ResourceRef.from_dict(
+                {
+                    "kind": "table_with_columns",
+                    "database": "analytics",
+                    "table": "orders",
+                }
+            )
+        with self.assertRaisesRegex(ValueError, "exactly one of columns or column_wildcard"):
+            ResourceRef.from_dict(
+                {
+                    "kind": "table_with_columns",
+                    "database": "analytics",
+                    "table": "orders",
+                    "columns": ["order_id"],
+                    "column_wildcard": True,
+                }
+            )
+
     def test_resource_name_aliases_stay_kind_specific(self):
         database = ResourceRef.from_dict({"kind": "database", "name": "analytics"})
         expression = ResourceRef.from_dict({"kind": "lf_tag_expression", "name": "sales_public"})

@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 0.6.5
+
+- Models AWS Lake Formation `TableWithColumns.ColumnWildcard` grants in
+  desired/current state, including optional excluded columns, so live import,
+  audit, plan, apply, and explain preserve all-column grants returned by AWS.
+- Uses table-level LF-Tag lookup for column-wildcard resources because AWS
+  rejects `GetResourceLFTags` requests with `TableWithColumns.ColumnWildcard`.
+- Skips non-taggable grant resources during resource-tag import discovery so
+  catalog, data-location, and data cells filter grants do not produce invalid
+  `GetResourceLFTags` calls.
+- Adds a catalog-level `ListPermissions` fallback with client-side filtering
+  when scoped principal/resource permission reads are denied by Lake Formation.
+- Sorts live resource-tag lookup resources by stable identity to avoid
+  scoped/unscoped catalog comparison crashes.
+- Adds data cells filter read and apply actions to generated IAM permission
+  templates and permission preflight checks.
+
 ## 0.6.4
 
 - Adds `lfguard permissions --check` for live IAM preflight checks using STS

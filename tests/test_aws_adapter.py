@@ -192,6 +192,58 @@ class AwsAdapterTests(unittest.TestCase):
         self.assertEqual(to_lf_resource(resource), payload)
         self.assertEqual(from_lf_resource(payload), resource)
 
+    def test_table_with_columns_resource_conversion_preserves_column_wildcard(self):
+        resource = ResourceRef.from_dict(
+            {
+                "kind": "table_with_columns",
+                "catalog_id": "222222222222",
+                "database": "analytics",
+                "table": "orders",
+                "column_wildcard": True,
+                "excluded_columns": ["internal_notes"],
+            }
+        )
+        payload = {
+            "TableWithColumns": {
+                "CatalogId": "222222222222",
+                "DatabaseName": "analytics",
+                "Name": "orders",
+                "ColumnWildcard": {"ExcludedColumnNames": ["internal_notes"]},
+            }
+        }
+
+        self.assertEqual(to_lf_resource(resource), payload)
+        self.assertEqual(from_lf_resource(payload), resource)
+
+    def test_import_grants_accepts_table_with_columns_column_wildcard(self):
+        class Client:
+            def list_permissions(self, **kwargs):
+                return {
+                    "PrincipalResourcePermissions": [
+                        {
+                            "Principal": {"DataLakePrincipalIdentifier": "role"},
+                            "Resource": {
+                                "TableWithColumns": {
+                                    "DatabaseName": "analytics",
+                                    "Name": "orders",
+                                    "ColumnWildcard": {},
+                                }
+                            },
+                            "Permissions": ["SELECT"],
+                            "PermissionsWithGrantOption": [],
+                        }
+                    ]
+                }
+
+        state = AWSLakeFormationAdapter(Client()).import_state(include=("grants",))
+
+        self.assertEqual(state.grants[0].resource.to_dict(), {
+            "kind": "table_with_columns",
+            "database": "analytics",
+            "table": "orders",
+            "column_wildcard": True,
+        })
+
     def test_apply_executes_lf_tag_expression_changes(self):
         change_plan = Plan.from_dict(
             {
@@ -271,6 +323,81 @@ class AwsAdapterTests(unittest.TestCase):
         self.assertEqual(
             [name for name, _ in client.calls],
             ["list_permissions", "get_resource_lf_tags"],
+        )
+
+    def test_import_resource_tags_ignores_non_taggable_grant_resources(self):
+        class Client:
+            def __init__(self):
+                self.calls = []
+
+            def list_permissions(self, **kwargs):
+                self.calls.append(("list_permissions", kwargs))
+                return {
+                    "PrincipalResourcePermissions": [
+                        {
+                            "Principal": {"DataLakePrincipalIdentifier": "role"},
+                            "Resource": {"Catalog": {}},
+                            "Permissions": ["CREATE_DATABASE"],
+                        },
+                        {
+                            "Principal": {"DataLakePrincipalIdentifier": "role"},
+                            "Resource": {"DataLocation": {"ResourceArn": "arn:aws:s3:::lake/"}},
+                            "Permissions": ["DATA_LOCATION_ACCESS"],
+                        },
+                        {
+                            "Principal": {"DataLakePrincipalIdentifier": "role"},
+                            "Resource": {"Database": {"Name": "analytics"}},
+                            "Permissions": ["DESCRIBE"],
+                        },
+                    ]
+                }
+
+            def get_resource_lf_tags(self, **kwargs):
+                self.calls.append(("get_resource_lf_tags", kwargs))
+                return {"LFTagOnDatabase": [{"TagKey": "domain", "TagValues": ["sales"]}]}
+
+        client = Client()
+        state = AWSLakeFormationAdapter(client).import_state(include=("resource-tags",))
+
+        self.assertEqual(len(state.resource_tags), 1)
+        self.assertEqual(
+            [name for name, _ in client.calls],
+            ["list_permissions", "get_resource_lf_tags"],
+        )
+
+    def test_load_resource_tags_sorts_scoped_and_unscoped_resources_stably(self):
+        desired = DesiredState.from_dict(
+            {
+                "resource_tags": [
+                    {
+                        "resource": {
+                            "kind": "table",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "tags": {"domain": ["sales"]},
+                    },
+                    {
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "tags": {"domain": ["sales"]},
+                    },
+                ]
+            }
+        )
+        client = FakeLakeFormation()
+        adapter = AWSLakeFormationAdapter(client)
+
+        current = adapter.load_current_state_for(desired)
+
+        self.assertEqual(len(current.resource_tags), 2)
+        self.assertEqual(
+            [name for name, _ in client.calls],
+            ["get_resource_lf_tags", "get_resource_lf_tags"],
         )
 
 

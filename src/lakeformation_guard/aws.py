@@ -25,6 +25,8 @@ from .state_index import (
     lf_tag_expression_sort_key,
 )
 
+RESOURCE_TAGGABLE_KINDS = {"database", "table", "table_with_columns"}
+
 
 @dataclass(frozen=True)
 class ApplyResult:
@@ -104,7 +106,7 @@ class AWSLakeFormationAdapter:
             resources = {
                 grant.resource
                 for grant in discovered_grants
-                if grant.resource.kind not in {"lf_tag_policy", "lf_tag_expression"}
+                if grant.resource.kind in RESOURCE_TAGGABLE_KINDS
             }
             resource_tags = list(self._load_tags_for_resources(resources))
         return CurrentState(
@@ -200,10 +202,11 @@ class AWSLakeFormationAdapter:
         yield from self._load_tags_for_resources(resources)
 
     def _load_tags_for_resources(self, resources: Iterable[ResourceRef]) -> Iterable[ResourceTagAssignment]:
-        for resource in sorted(resources):
-            if resource.kind == "lf_tag_expression":
+        for resource in sorted(resources, key=lambda item: item.identity):
+            if resource.kind not in RESOURCE_TAGGABLE_KINDS:
                 continue
-            kwargs = self._with_catalog_id(_resource_request_kwargs(resource))
+            request_resource = _resource_for_lf_tag_lookup(resource)
+            kwargs = self._with_catalog_id(_resource_request_kwargs(request_resource))
             try:
                 response = self.lakeformation.get_resource_lf_tags(**kwargs)
             except Exception as exc:
@@ -260,7 +263,7 @@ class AWSLakeFormationAdapter:
                         catalog_id=resource.catalog_id,
                     )
                 )
-        for resource in sorted(table_resources):
+        for resource in sorted(table_resources, key=lambda item: item.identity):
             table = {
                 "DatabaseName": resource.database_name,
                 "Name": resource.table_name,
@@ -290,7 +293,7 @@ class AWSLakeFormationAdapter:
                 "MaxResults": 100,
             }
             kwargs = self._with_catalog_id(kwargs)
-            for item in self._list_permissions(kwargs):
+            for item in self._list_permissions_for_grant(kwargs, desired_grant):
                 principal = item.get("Principal", {}).get("DataLakePrincipalIdentifier", desired_grant.principal)
                 resource = (
                     from_lf_resource(
@@ -303,6 +306,39 @@ class AWSLakeFormationAdapter:
                 grantables = tuple(item.get("PermissionsWithGrantOption", ()))
                 if permissions:
                     yield Grant(principal=principal, resource=resource, permissions=permissions, grantable_permissions=grantables)
+
+    def _list_permissions_for_grant(
+        self,
+        kwargs: Mapping[str, Any],
+        desired_grant: Grant,
+    ) -> Iterable[Mapping[str, Any]]:
+        try:
+            yield from self._list_permissions(kwargs)
+            return
+        except Exception as exc:
+            if not _is_access_denied(exc):
+                raise
+            original_error = exc
+        fallback_requests = (
+            {
+                "catalog_id": desired_grant.resource.catalog_id,
+                "MaxResults": 100,
+            },
+        )
+        for fallback in fallback_requests:
+            try:
+                for item in self._list_permissions(self._with_catalog_id(fallback)):
+                    if _permission_item_matches_grant(
+                        item,
+                        desired_grant,
+                        fallback_catalog_id=desired_grant.resource.catalog_id,
+                    ):
+                        yield item
+                return
+            except Exception as fallback_error:
+                if not _is_access_denied(fallback_error):
+                    raise
+        raise original_error
 
     def _list_permissions(self, kwargs: Mapping[str, Any]) -> Iterable[Mapping[str, Any]]:
         if hasattr(self.lakeformation, "get_paginator"):
@@ -476,11 +512,18 @@ def to_lf_resource(resource: ResourceRef) -> Dict[str, Any]:
             "Name": resource.table_name,
         }, resource)}
     if resource.kind == "table_with_columns":
-        return {"TableWithColumns": _catalog_scoped({
+        table_with_columns = {
             "DatabaseName": resource.database_name,
             "Name": resource.table_name,
-            "ColumnNames": list(resource.columns),
-        }, resource)}
+        }
+        if resource.column_wildcard:
+            wildcard: Dict[str, Any] = {}
+            if resource.excluded_columns:
+                wildcard["ExcludedColumnNames"] = list(resource.excluded_columns)
+            table_with_columns["ColumnWildcard"] = wildcard
+        else:
+            table_with_columns["ColumnNames"] = list(resource.columns)
+        return {"TableWithColumns": _catalog_scoped(table_with_columns, resource)}
     if resource.kind == "data_location":
         return {"DataLocation": _catalog_scoped({"ResourceArn": resource.location}, resource)}
     if resource.kind == "data_cells_filter":
@@ -545,11 +588,17 @@ def from_lf_resource(
         )
     if "TableWithColumns" in raw:
         item = raw["TableWithColumns"]
+        column_wildcard = item.get("ColumnWildcard")
+        excluded_columns = ()
+        if isinstance(column_wildcard, Mapping):
+            excluded_columns = tuple(column_wildcard.get("ExcludedColumnNames", ()))
         return ResourceRef(
             kind="table_with_columns",
             database_name=item.get("DatabaseName"),
             table_name=item.get("Name"),
             columns=tuple(item.get("ColumnNames", ())),
+            column_wildcard=column_wildcard is not None,
+            excluded_columns=excluded_columns,
             catalog_id=item.get("CatalogId") or fallback_catalog_id,
         )
     if "DataLocation" in raw:
@@ -608,6 +657,17 @@ def _resource_request_kwargs(resource: ResourceRef, **kwargs: Any) -> Dict[str, 
     }
     request.update(kwargs)
     return request
+
+
+def _resource_for_lf_tag_lookup(resource: ResourceRef) -> ResourceRef:
+    if resource.kind == "table_with_columns" and resource.column_wildcard:
+        return ResourceRef(
+            kind="table",
+            database_name=resource.database_name,
+            table_name=resource.table_name,
+            catalog_id=resource.catalog_id,
+        )
+    return resource
 
 
 def _lf_tag_pairs(
@@ -751,6 +811,22 @@ def _grant_from_permission_item(
     )
 
 
+def _permission_item_matches_grant(
+    item: Mapping[str, Any],
+    desired_grant: Grant,
+    *,
+    fallback_catalog_id: Optional[str] = None,
+) -> bool:
+    principal = item.get("Principal", {}).get("DataLakePrincipalIdentifier")
+    if principal != desired_grant.principal:
+        return False
+    resource = from_lf_resource(
+        item.get("Resource", {}),
+        fallback_catalog_id=fallback_catalog_id,
+    )
+    return resource == desired_grant.resource
+
+
 def _extract_resource_tag_assignments(
     resource: ResourceRef,
     response: Mapping[str, Any],
@@ -811,6 +887,12 @@ def _is_not_found(exc: Exception) -> bool:
     response = getattr(exc, "response", {})
     code = response.get("Error", {}).get("Code") if isinstance(response, Mapping) else None
     return code in {"EntityNotFoundException", "ResourceNotFoundException", "GlueEncryptionException"}
+
+
+def _is_access_denied(exc: Exception) -> bool:
+    response = getattr(exc, "response", {})
+    code = response.get("Error", {}).get("Code") if isinstance(response, Mapping) else None
+    return code in {"AccessDenied", "AccessDeniedException", "UnauthorizedException"}
 
 
 def _is_operation_not_pageable(exc: Exception) -> bool:

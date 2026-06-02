@@ -53,11 +53,13 @@ Use this for `lfguard snapshot`, or for `lfguard audit` and `lfguard plan` when
       "Effect": "Allow",
       "Action": [
         "lakeformation:GetLFTag",
-        "lakeformation:GetLFTagExpression",
-        "lakeformation:GetResourceLFTags",
         "lakeformation:ListLFTags",
+        "lakeformation:GetLFTagExpression",
         "lakeformation:ListLFTagExpressions",
-        "lakeformation:ListPermissions"
+        "lakeformation:GetResourceLFTags",
+        "lakeformation:ListPermissions",
+        "lakeformation:GetDataCellsFilter",
+        "lakeformation:ListDataCellsFilter"
       ],
       "Resource": "*"
     }
@@ -84,8 +86,8 @@ catalog discovery handled outside `lfguard`, such as:
 ## Additive Apply Role
 
 Use this for reviewed apply workflows that only create LF-Tags, add LF-Tag
-values, create named LF-Tag expressions, add resource tags, or grant
-permissions.
+values, create named LF-Tag expressions, create data cells filters, add
+resource tags, or grant permissions.
 
 The `lfguard permissions` apply templates include the read-only inventory
 statement too, so live `plan` and `apply` can load current state when
@@ -100,6 +102,7 @@ that separate additive and destructive workflows.
       "Effect": "Allow",
       "Action": [
         "lakeformation:CreateLFTag",
+        "lakeformation:CreateDataCellsFilter",
         "lakeformation:CreateLFTagExpression",
         "lakeformation:UpdateLFTag",
         "lakeformation:AddLFTagsToResource",
@@ -114,8 +117,8 @@ that separate additive and destructive workflows.
 ## Destructive Apply Role
 
 Use this only for separately reviewed workflows that intentionally update or
-delete named LF-Tag expressions, remove LF-Tag assignments, or revoke Lake
-Formation permissions.
+delete named LF-Tag expressions or data cells filters, remove LF-Tag
+assignments, or revoke Lake Formation permissions.
 
 ```json
 {
@@ -125,7 +128,9 @@ Formation permissions.
       "Effect": "Allow",
       "Action": [
         "lakeformation:DeleteLFTagExpression",
+        "lakeformation:DeleteDataCellsFilter",
         "lakeformation:RemoveLFTagsFromResource",
+        "lakeformation:UpdateDataCellsFilter",
         "lakeformation:UpdateLFTagExpression",
         "lakeformation:RevokePermissions"
       ],

@@ -763,10 +763,46 @@
     },
     "tableWithColumnsResource": {
       "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "columns"
+          ]
+        },
+        {
+          "required": [
+            "column_wildcard"
+          ]
+        },
+        {
+          "required": [
+            "excluded_columns"
+          ]
+        }
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "columns",
+              "column_wildcard"
+            ]
+          },
+          {
+            "required": [
+              "columns",
+              "excluded_columns"
+            ]
+          }
+        ]
+      },
       "properties": {
         "catalog_id": {
           "minLength": 1,
           "type": "string"
+        },
+        "column_wildcard": {
+          "type": "boolean"
         },
         "columns": {
           "items": {
@@ -781,6 +817,15 @@
           "minLength": 1,
           "type": "string"
         },
+        "excluded_columns": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
         "kind": {
           "const": "table_with_columns"
         },
@@ -792,8 +837,7 @@
       "required": [
         "kind",
         "database",
-        "table",
-        "columns"
+        "table"
       ],
       "type": "object"
     },

@@ -432,6 +432,55 @@ class ProviderExplainTests(unittest.TestCase):
         self.assertEqual(report.effective_lf_tags, {"domain": ("sales",), "sensitivity": ("restricted",)})
         self.assertEqual(report.summary()["matched"], 1)
 
+    def test_explain_column_wildcard_grant_covers_non_excluded_columns(self):
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "table_with_columns",
+                            "database": "analytics",
+                            "table": "orders",
+                            "column_wildcard": True,
+                            "excluded_columns": ["internal_notes"],
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ],
+            }
+        )
+
+        covered_report = explain(
+            DesiredState.empty(),
+            current,
+            principal="role",
+            resource=ResourceRef(
+                kind="table_with_columns",
+                database_name="analytics",
+                table_name="orders",
+                columns=("email",),
+            ),
+            permissions=("SELECT",),
+        )
+        excluded_report = explain(
+            DesiredState.empty(),
+            current,
+            principal="role",
+            resource=ResourceRef(
+                kind="table_with_columns",
+                database_name="analytics",
+                table_name="orders",
+                columns=("internal_notes",),
+            ),
+            permissions=("SELECT",),
+        )
+
+        self.assertEqual(covered_report.summary()["matched"], 1)
+        self.assertEqual(covered_report.findings[0].details["column_wildcard"], True)
+        self.assertEqual(excluded_report.summary()["not_matched"], 1)
+        self.assertEqual(excluded_report.findings[0].details["missing_columns"], ["internal_notes"])
+
     def test_explain_aggregates_effective_tags_across_requested_columns(self):
         current = CurrentState.from_dict(
             {
