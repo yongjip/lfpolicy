@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Adds `lfguard permissions --check` for live IAM preflight checks using STS
+  caller identity and IAM policy simulation against the existing read-only,
+  additive-apply, and destructive-apply templates.
+- Exposes reusable IAM permission template and permission-check helpers for
+  direct library integrations.
+
 ## 0.6.3
 
 - Adds governance workflow documentation for CI evidence, Terraform/CDK

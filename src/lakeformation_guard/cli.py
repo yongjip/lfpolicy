@@ -15,6 +15,12 @@ from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
 from ._version import __version__
 from .audit import AUDIT_SCHEMA_VERSION, AuditFinding, audit
 from .aws import AWSLakeFormationAdapter
+from .aws_permissions import (
+    AWSIAMPermissionChecker,
+    IAMPermissionCheckReport,
+    iam_policy_actions,
+    iam_policy_template,
+)
 from .explain import ExplainReport, explain as explain_access
 from .io import StateFormatError, dumps_json, dumps_yaml, load_current, load_desired
 from .lint import LintFinding, lint_desired
@@ -217,7 +223,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Fail when the named optional extra is not installed. Repeat for multiple extras.",
     )
 
-    permissions_parser = subparsers.add_parser("permissions", help="Emit starter IAM policies for live lfguard workflows.")
+    permissions_parser = subparsers.add_parser(
+        "permissions",
+        help="Emit or check starter IAM policies for live lfguard workflows.",
+    )
     permissions_parser.add_argument(
         "--template",
         choices=("read-only", "additive-apply", "destructive-apply"),
@@ -228,6 +237,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-glue-read",
         action="store_true",
         help="Include common Glue Data Catalog read permissions.",
+    )
+    permissions_parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Use AWS IAM simulation to check whether the selected template is allowed for the principal.",
+    )
+    permissions_parser.add_argument("--profile", help="AWS profile for --check.")
+    permissions_parser.add_argument("--region", help="AWS region for --check.")
+    permissions_parser.add_argument(
+        "--principal-arn",
+        help="IAM role/user ARN to simulate. Defaults to the current caller, with assumed-role ARNs normalized.",
     )
     _add_output_arg(permissions_parser, markdown=True)
     _add_report_output_file_arg(permissions_parser)
@@ -634,6 +654,20 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
 
 def _cmd_permissions(args: argparse.Namespace) -> int:
     policy = _iam_policy_template(args.template, include_glue_read=args.include_glue_read)
+    if args.check:
+        checker = AWSIAMPermissionChecker.from_boto3(profile_name=args.profile, region_name=args.region)
+        report = checker.check(
+            iam_policy_actions(policy),
+            template=args.template,
+            include_glue_read=args.include_glue_read,
+            principal_arn=args.principal_arn,
+        )
+        _emit_output(
+            _render_permissions_check(report, args.output),
+            args.output_file,
+            label="permissions check",
+        )
+        return 0 if report.allowed else 1
     _emit_output(
         _render_iam_policy(policy, args.output, template=args.template),
         args.output_file,
@@ -1382,68 +1416,7 @@ def _render_doctor(report: dict, output: str) -> str:
 
 
 def _iam_policy_template(template: str, *, include_glue_read: bool = False) -> dict:
-    statements = []
-    if template in {"read-only", "additive-apply", "destructive-apply"}:
-        statements.append(
-            _iam_statement(
-                "ReadLakeFormationState",
-                (
-                    "lakeformation:GetLFTag",
-                    "lakeformation:ListLFTags",
-                    "lakeformation:GetLFTagExpression",
-                    "lakeformation:ListLFTagExpressions",
-                    "lakeformation:GetResourceLFTags",
-                    "lakeformation:ListPermissions",
-                ),
-            )
-        )
-    if template in {"additive-apply", "destructive-apply"}:
-        statements.append(
-            _iam_statement(
-                "ApplyAdditiveLakeFormationChanges",
-                (
-                    "lakeformation:CreateLFTag",
-                    "lakeformation:CreateLFTagExpression",
-                    "lakeformation:UpdateLFTag",
-                    "lakeformation:AddLFTagsToResource",
-                    "lakeformation:GrantPermissions",
-                ),
-            )
-        )
-    if template == "destructive-apply":
-        statements.append(
-            _iam_statement(
-                "ApplyDestructiveLakeFormationChanges",
-                (
-                    "lakeformation:RemoveLFTagsFromResource",
-                    "lakeformation:UpdateLFTagExpression",
-                    "lakeformation:DeleteLFTagExpression",
-                    "lakeformation:RevokePermissions",
-                ),
-            )
-        )
-    if include_glue_read:
-        statements.append(
-            _iam_statement(
-                "ReadGlueCatalogMetadata",
-                (
-                    "glue:GetDatabase",
-                    "glue:GetDatabases",
-                    "glue:GetTable",
-                    "glue:GetTables",
-                ),
-            )
-        )
-    return {"Version": "2012-10-17", "Statement": statements}
-
-
-def _iam_statement(sid: str, actions: Iterable[str]) -> dict:
-    return {
-        "Sid": sid,
-        "Effect": "Allow",
-        "Action": list(actions),
-        "Resource": "*",
-    }
+    return iam_policy_template(template, include_glue_read=include_glue_read)
 
 
 def _render_iam_policy(policy: dict, output: str, *, template: str) -> str:
@@ -1462,6 +1435,49 @@ def _render_iam_policy(policy: dict, output: str, *, template: str) -> str:
             ]
         )
     return policy_json
+
+
+def _render_permissions_check(report: IAMPermissionCheckReport, output: str) -> str:
+    payload = report.to_dict()
+    if output == "json":
+        return dumps_json(payload)
+    if output == "markdown":
+        lines = [
+            "### lfguard permissions check: {}".format(report.template),
+            "",
+            "- Result: **{}**".format("pass" if report.allowed else "fail"),
+            "- Principal: `{}`".format(report.principal_arn),
+        ]
+        if report.caller_arn:
+            lines.append("- Caller: `{}`".format(report.caller_arn))
+        lines.extend(
+            [
+                "- Allowed actions: `{allowed}/{total}`".format(**payload["summary"]),
+                "",
+                "| Action | Decision |",
+                "| --- | --- |",
+            ]
+        )
+        for action in report.actions:
+            lines.append("| {} | {} |".format(_markdown_cell(action.action), _markdown_cell(action.decision)))
+        lines.append("")
+        return "\n".join(lines) + "\n"
+
+    lines = [
+        "Permissions check: {}".format("pass" if report.allowed else "fail"),
+        "Template: {}".format(report.template),
+        "Principal: {}".format(report.principal_arn),
+    ]
+    if report.caller_arn:
+        lines.append("Caller: {}".format(report.caller_arn))
+    lines.append("Allowed actions: {allowed}/{total}".format(**payload["summary"]))
+    if report.denied_actions:
+        lines.append("Denied actions:")
+        for action in report.denied_actions:
+            lines.append("- {}".format(action))
+    else:
+        lines.append("All required actions are allowed.")
+    return "\n".join(lines) + "\n"
 
 
 _COMPLETION_COMMANDS = (
@@ -1506,7 +1522,17 @@ _COMPLETION_OPTIONS = {
     ),
     "schema": ("--output-file", "--help"),
     "doctor": ("--output", "--output-file", "--require", "--help"),
-    "permissions": ("--template", "--include-glue-read", "--output", "--output-file", "--help"),
+    "permissions": (
+        "--template",
+        "--include-glue-read",
+        "--check",
+        "--profile",
+        "--region",
+        "--principal-arn",
+        "--output",
+        "--output-file",
+        "--help",
+    ),
     "completion": ("--shell", "--output-file", "--help"),
     "check": (
         "--desired",

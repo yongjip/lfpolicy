@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from lakeformation_guard import CurrentState, DesiredState, __version__, audit, lint_desired
 from lakeformation_guard.aws import ApplyResult
+from lakeformation_guard.aws_permissions import IAMActionCheck, IAMPermissionCheckReport
 from lakeformation_guard.cli import main
 
 
@@ -1419,6 +1420,86 @@ class AuditCliTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn("lakeformation:RemoveLFTagsFromResource", actions)
         self.assertIn("lakeformation:RevokePermissions", actions)
+
+    def test_cli_permissions_check_outputs_json_and_returns_success_when_allowed(self):
+        fake_checker = _FakePermissionChecker(
+            IAMPermissionCheckReport(
+                template="read-only",
+                include_glue_read=False,
+                principal_arn="arn:aws:iam::111122223333:role/LfguardReadOnly",
+                caller_arn="arn:aws:sts::111122223333:assumed-role/LfguardReadOnly/session",
+                actions=(
+                    IAMActionCheck("lakeformation:GetLFTag", "allowed", True),
+                    IAMActionCheck("lakeformation:ListPermissions", "allowed", True),
+                ),
+            )
+        )
+
+        stdout = io.StringIO()
+        with patch("lakeformation_guard.cli.AWSIAMPermissionChecker.from_boto3", return_value=fake_checker) as factory:
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "permissions",
+                        "--check",
+                        "--template",
+                        "read-only",
+                        "--profile",
+                        "prod",
+                        "--region",
+                        "us-east-1",
+                        "--output",
+                        "json",
+                    ]
+                )
+
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(exit_code, 0)
+        factory.assert_called_once_with(profile_name="prod", region_name="us-east-1")
+        self.assertEqual(fake_checker.principal_arn, None)
+        self.assertEqual(payload["schema_version"], "lfguard.permissions-check.v1")
+        self.assertTrue(payload["allowed"])
+        self.assertEqual(payload["summary"], {"total": 2, "allowed": 2, "denied": 0})
+        self.assertEqual(payload["principal_arn"], "arn:aws:iam::111122223333:role/LfguardReadOnly")
+
+    def test_cli_permissions_check_returns_failure_when_action_is_denied(self):
+        fake_checker = _FakePermissionChecker(
+            IAMPermissionCheckReport(
+                template="additive-apply",
+                include_glue_read=True,
+                principal_arn="arn:aws:iam::111122223333:role/LfguardApply",
+                caller_arn=None,
+                actions=(
+                    IAMActionCheck("lakeformation:GetLFTag", "allowed", True),
+                    IAMActionCheck("lakeformation:GrantPermissions", "implicitDeny", False),
+                    IAMActionCheck("glue:GetTable", "explicitDeny", False),
+                ),
+            )
+        )
+
+        stdout = io.StringIO()
+        with patch("lakeformation_guard.cli.AWSIAMPermissionChecker.from_boto3", return_value=fake_checker):
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "permissions",
+                        "--check",
+                        "--template",
+                        "additive-apply",
+                        "--include-glue-read",
+                        "--principal-arn",
+                        "arn:aws:iam::111122223333:role/LfguardApply",
+                        "--output",
+                        "markdown",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(fake_checker.principal_arn, "arn:aws:iam::111122223333:role/LfguardApply")
+        self.assertIn("### lfguard permissions check: additive-apply", stdout.getvalue())
+        self.assertIn("Result: **fail**", stdout.getvalue())
+        self.assertIn("lakeformation:GrantPermissions", stdout.getvalue())
+        self.assertIn("glue:GetTable", stdout.getvalue())
 
     def test_cli_completion_outputs_bash_script_by_default(self):
         stdout = io.StringIO()
@@ -3420,6 +3501,22 @@ def _policy_actions(policy):
         for statement in policy["Statement"]
         for action in statement["Action"]
     }
+
+
+class _FakePermissionChecker:
+    def __init__(self, report):
+        self.report = report
+        self.actions = None
+        self.template = None
+        self.include_glue_read = None
+        self.principal_arn = None
+
+    def check(self, actions, *, template, include_glue_read=False, principal_arn=None):
+        self.actions = tuple(actions)
+        self.template = template
+        self.include_glue_read = include_glue_read
+        self.principal_arn = principal_arn
+        return self.report
 
 
 def _python_policy_source(object_name="policy", as_factory=False):

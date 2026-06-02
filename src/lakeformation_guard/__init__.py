@@ -2,6 +2,14 @@
 
 from .audit import AuditFinding, audit
 from ._version import __version__
+from .aws_permissions import (
+    AWSIAMPermissionChecker,
+    IAMActionCheck,
+    IAMPermissionCheckReport,
+    iam_policy_actions,
+    iam_policy_template,
+    policy_source_arn_from_caller,
+)
 from .explain import ExplainFinding, ExplainReport, explain
 from .lint import LintFinding, lint_desired
 from .models import (
@@ -55,6 +63,7 @@ from .schema import state_json_schema
 
 __all__ = [
     "AuditFinding",
+    "AWSIAMPermissionChecker",
     "CachedCurrentStateProvider",
     "Change",
     "CurrentState",
@@ -66,6 +75,8 @@ __all__ = [
     "Grant",
     "GuardrailState",
     "GuardrailConfig",
+    "IAMActionCheck",
+    "IAMPermissionCheckReport",
     "IgnoreConfig",
     "LFTagDefinition",
     "LFTagExpressionDefinition",
@@ -98,9 +109,12 @@ __all__ = [
     "desired_state_fingerprint",
     "editor",
     "explain",
+    "iam_policy_actions",
+    "iam_policy_template",
     "load_policy",
     "lint_desired",
     "plan",
+    "policy_source_arn_from_caller",
     "producer",
     "provider_context_fingerprint",
     "reader",

@@ -281,13 +281,16 @@ optional extra is missing. Repeat `--require` to check multiple extras.
 
 ## `permissions`
 
-Generate starter IAM policies for live `snapshot`, `audit`, `plan`, and
-`apply` workflows:
+Generate starter IAM policies, or check whether the role about to run a live
+workflow has the selected permissions:
 
 ```bash
 lfguard permissions --template read-only --output-file iam/lfguard-read-only.json
 lfguard permissions --template additive-apply --include-glue-read
 lfguard permissions --template destructive-apply --output markdown
+lfguard permissions --check --template read-only --profile prod --output json
+lfguard permissions --check --template additive-apply \
+  --principal-arn arn:aws:iam::111122223333:role/LfguardApply
 ```
 
 Useful options:
@@ -296,9 +299,24 @@ Useful options:
   policy template. `additive-apply` omits revoke and tag-removal actions;
   `destructive-apply` includes them for separately reviewed workflows.
 - `--include-glue-read`: add common Glue Data Catalog read actions.
+- `--check`: call AWS STS and IAM policy simulation to verify the selected
+  template against the current caller or `--principal-arn`.
+- `--principal-arn ARN`: IAM role/user ARN to simulate. When omitted, `lfguard`
+  uses `sts:GetCallerIdentity` and normalizes an assumed-role ARN to the
+  underlying IAM role ARN.
+- `--profile PROFILE`, `--region REGION`: AWS profile and region for
+  `--check`.
 - `--output text|json|markdown`: choose raw JSON or a Markdown report. Text and
-  JSON both emit copyable IAM policy JSON.
+  JSON both emit copyable IAM policy JSON unless `--check` is set, in which
+  case they emit permission-check evidence.
 - `--output-file PATH`: write the policy to a file instead of stdout.
+
+`--check` exits `0` when every required action is allowed and `1` when any
+required action is denied or missing. The JSON report uses
+`schema_version: "lfguard.permissions-check.v1"` and includes the simulated
+principal, caller ARN when discovered, per-action IAM decisions, and denied
+actions. The caller running `--check` must be allowed to call
+`iam:SimulatePrincipalPolicy` for the simulated principal.
 
 ## `completion`
 

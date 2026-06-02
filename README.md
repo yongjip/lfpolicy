@@ -490,7 +490,9 @@ stage/prod, regions, and catalogs.
 
 Use an IAM principal with the minimum Lake Formation permissions required for the
 actions you intend to run. The package does not bypass AWS authorization and does
-not turn destructive changes on by default.
+not turn destructive changes on by default. Use `lfguard permissions` to
+generate starter IAM policies and `lfguard permissions --check` to preflight the
+role before live inventory or apply workflows.
 
 ## Release and Trust
 
@@ -554,7 +556,7 @@ release notes under [`docs/release-notes/`](docs/release-notes/).
   and Code Scanning workflows using GitHub OIDC, job summaries, SARIF, and
   uploaded report artifacts.
 - [`docs/aws-permissions.md`](docs/aws-permissions.md): suggested minimum IAM
-  permissions for read-only and apply roles.
+  permissions and preflight checks for read-only and apply roles.
 - [`docs/testing.md`](docs/testing.md): default tests, botocore Stubber
   contract tests, Moto emulator tests, and opt-in live AWS contract tests.
 - [`examples/README.md`](examples/README.md): offline files, commands,
