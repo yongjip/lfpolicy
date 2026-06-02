@@ -22,6 +22,9 @@
   and data-location context.
 - Strengthens AWS adapter Stubber coverage for import pagination, not-found
   current-state boundaries, and malformed permission items returned by AWS.
+- Expands the permission-request example and docs with requester/approver
+  metadata, request-scoped evidence paths, reviewed plan IDs, and selective
+  apply commands for approved changes.
 
 ## 0.6.3
 

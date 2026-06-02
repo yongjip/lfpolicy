@@ -100,6 +100,13 @@ lfguard generate examples/permission-requests.py --output-file /tmp/lfguard-requ
 lfguard check --desired /tmp/lfguard-requests.json --fail-on-findings
 ```
 
+The request records include ticket, requester, owner, approver, review date,
+target table, requested permissions, and evidence path metadata. After
+generating desired state, use [`../docs/permission-request-bundles.md`](../docs/permission-request-bundles.md)
+for the review workflow: write request-specific `explain` and `plan` artifacts,
+approve exact plan-local change IDs, and apply only those IDs with
+`lfguard apply --plan ... --only change_003 --max-changes 1 --max-destructive 0 --execute`.
+
 ## Review Exceptions
 
 Use `policy-exceptions.json` to see how intentional risky grants are scoped
