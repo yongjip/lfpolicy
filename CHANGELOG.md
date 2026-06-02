@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.6.4
+
 - Adds `lfguard permissions --check` for live IAM preflight checks using STS
   caller identity and IAM policy simulation against the existing read-only,
   additive-apply, and destructive-apply templates.

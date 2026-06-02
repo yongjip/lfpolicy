@@ -501,7 +501,7 @@ role before live inventory or apply workflows.
 The repository includes GitHub Actions for CI and PyPI Trusted Publishing. See
 [`docs/publishing.md`](docs/publishing.md) for the release path and the exact
 PyPI publisher settings. The latest release notes are in
-[`docs/release-notes/v0.6.3.md`](docs/release-notes/v0.6.3.md), with prior
+[`docs/release-notes/v0.6.4.md`](docs/release-notes/v0.6.4.md), with prior
 release notes under [`docs/release-notes/`](docs/release-notes/).
 
 ## More docs
