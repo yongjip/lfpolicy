@@ -9,6 +9,7 @@ from lakeformation_guard.models import DesiredState
 from lakeformation_guard.policy import (
     LakePolicy,
     PermissionTemplate,
+    PolicyValidationError,
     TagAssignmentScope,
     admin,
     data_location_access,
@@ -170,6 +171,41 @@ class PolicyAuthoringTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "undefined permission group"):
             policy.validate()
+
+    def test_validate_findings_include_codes_paths_and_suggestions(self):
+        policy = LakePolicy()
+        policy.tag_key("domain", values=["sales"], assignable_to=[TagAssignmentScope.DATABASE])
+        policy.group("dataconsumer", reader().where(domain="finance", missing="sales"))
+        policy.tag_table("sales_curated", "orders", domain="sales")
+        policy.bind_role("arn:aws:iam::111122223333:role/Analyst", "missing_group")
+
+        findings = policy.validate_findings()
+
+        self.assertEqual(
+            [finding.code for finding in findings],
+            [
+                "POLICY_GROUP_UNDEFINED_TAG_VALUE",
+                "POLICY_GROUP_UNDEFINED_TAG_KEY",
+                "POLICY_RESOURCE_TAG_SCOPE_UNSUPPORTED",
+                "POLICY_UNDEFINED_PERMISSION_GROUP",
+            ],
+        )
+        self.assertEqual(findings[0].path, "groups.dataconsumer.filters.domain")
+        self.assertIn("policy.tag_key('domain'", findings[0].suggestion)
+        self.assertEqual(findings[1].path, "groups.dataconsumer.filters.missing")
+        self.assertEqual(findings[2].path, "resource_tags.table:database=sales_curated:table=orders.domain")
+        self.assertEqual(findings[3].path, "bindings[1].groups.missing_group")
+
+    def test_validate_raises_structured_policy_validation_error(self):
+        policy = LakePolicy()
+        policy.group("dataconsumer", reader())
+
+        with self.assertRaises(PolicyValidationError) as context:
+            policy.validate()
+
+        self.assertEqual(context.exception.findings[0].code, "POLICY_GROUP_FILTER_REQUIRED")
+        self.assertIn("groups.dataconsumer.filters", str(context.exception))
+        self.assertIn("suggestion:", str(context.exception))
 
     def test_validate_rejects_undefined_tag_value(self):
         policy = LakePolicy()

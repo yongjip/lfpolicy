@@ -79,6 +79,11 @@ requests repeat.
 5. Delete the temporary import only after the generated policy covers the owned
    surface.
 
+Use [`../examples/policy-from-import.py`](../examples/policy-from-import.py) as
+a small conversion pattern. It keeps an imported desired-state reference in the
+source file while the actual generated policy is modeled with `LakePolicy`
+declarations.
+
 Commands:
 
 ```bash

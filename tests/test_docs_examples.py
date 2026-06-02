@@ -203,6 +203,20 @@ class DocumentationExampleTests(unittest.TestCase):
         self.assertIn("DATA-1042", policy_source)
         self.assertIn("review_by", policy_source)
 
+    def test_policy_from_import_example_compiles_to_clean_desired_state(self):
+        root = Path(__file__).resolve().parents[1]
+        policy_path = root / "examples" / "policy-from-import.py"
+
+        policy = load_policy(policy_path)
+        desired = policy.to_desired_state()
+        findings = lint_desired(desired)
+
+        self.assertFalse(findings)
+        self.assertEqual(len(desired.lf_tags), 2)
+        self.assertEqual(len(desired.resource_tags), 3)
+        self.assertEqual(len(desired.grants), 5)
+        self.assertIn("IMPORTED_DESIRED_REFERENCE", policy_path.read_text(encoding="utf-8"))
+
     def test_lake_formation_guide_covers_operating_model(self):
         root = Path(__file__).resolve().parents[1]
         guide_text = (root / "docs" / "lake-formation-guide.md").read_text(encoding="utf-8")

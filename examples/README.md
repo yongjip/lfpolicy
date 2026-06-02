@@ -8,6 +8,8 @@ These files let you try `lfguard` without AWS credentials:
   access with reason, expiry, and approval metadata.
 - `policy.py`: a Python-native permission group policy that can generate
   desired state.
+- `policy-from-import.py`: a migration example that keeps an imported desired
+  state reference beside the equivalent Python policy model.
 - `policy-bundles.py`: a Python-native policy using generic permission bundles
   such as `reader()`, `producer()`, `steward()`, `data_location_access()`, and
   `admin()`.
@@ -71,6 +73,13 @@ To see the newer generic bundle names:
 ```bash
 lfguard generate examples/policy-bundles.py --output-file /tmp/lfguard-bundles.json --force
 lfguard check --desired /tmp/lfguard-bundles.json --fail-on-findings
+```
+
+To see how a reviewed import scaffold can become `policy.py`:
+
+```bash
+lfguard generate examples/policy-from-import.py --output-file /tmp/lfguard-migrated.json --force
+lfguard check --desired /tmp/lfguard-migrated.json --fail-on-findings
 ```
 
 To see access requests represented as policy data, without adding an approval UI

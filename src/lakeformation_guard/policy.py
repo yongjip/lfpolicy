@@ -67,6 +67,8 @@ __all__ = [
     "PermissionGroup",
     "PermissionIntent",
     "PermissionTemplate",
+    "PolicyValidationError",
+    "PolicyValidationFinding",
     "RoleBinding",
     "TagAssignmentScope",
     "TagKey",
@@ -80,6 +82,34 @@ __all__ = [
     "steward",
     "table_creator",
 ]
+
+
+@dataclass(frozen=True)
+class PolicyValidationFinding:
+    """Actionable validation finding for Python-native policy authoring."""
+
+    code: str
+    path: str
+    message: str
+    suggestion: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        payload = {
+            "code": self.code,
+            "path": self.path,
+            "message": self.message,
+        }
+        if self.suggestion:
+            payload["suggestion"] = self.suggestion
+        return payload
+
+
+class PolicyValidationError(ValueError):
+    """Raised when a LakePolicy contains one or more validation findings."""
+
+    def __init__(self, findings: Iterable[PolicyValidationFinding]) -> None:
+        self.findings = tuple(findings)
+        super().__init__(_render_policy_validation_error(self.findings))
 
 
 @dataclass(frozen=True)
@@ -359,24 +389,43 @@ class LakePolicy:
     def validate(self) -> None:
         """Validate references, tag values, and column-narrowing safety rules."""
 
+        findings = self.validate_findings()
+        if findings:
+            raise PolicyValidationError(findings)
+
+    def validate_findings(self) -> Tuple[PolicyValidationFinding, ...]:
+        """Return structured policy authoring findings without raising."""
+
+        findings = []
         for group in self.groups:
-            self._validate_group(group)
+            findings.extend(self._group_validation_findings(group))
 
         for resource, tags in sorted(
             self._resource_tag_values.items(),
             key=lambda item: item[0].identity,
         ):
-            self._validate_resource_tags(resource, tags)
+            findings.extend(self._resource_tag_validation_findings(resource, tags))
 
-        for binding in self.bindings:
+        for binding_index, binding in enumerate(self.bindings, start=1):
             for group_name in binding.groups:
                 if group_name not in self._groups:
-                    raise ValueError(
-                        "role binding for {!r} references undefined permission group {!r}".format(
-                            binding.principal,
-                            group_name,
+                    findings.append(
+                        PolicyValidationFinding(
+                            code="POLICY_UNDEFINED_PERMISSION_GROUP",
+                            path="bindings[{}].groups.{}".format(binding_index, group_name),
+                            message=(
+                                "role binding for {!r} references undefined permission group {!r}".format(
+                                    binding.principal,
+                                    group_name,
+                                )
+                            ),
+                            suggestion=(
+                                "Define policy.group({!r}, ...) before bind_role(), "
+                                "or remove {!r} from this binding."
+                            ).format(group_name, group_name),
                         )
                     )
+        return tuple(findings)
 
     def to_desired_state(self) -> DesiredState:
         """Compile the high-level policy into normal lfguard desired state."""
@@ -401,11 +450,15 @@ class LakePolicy:
             finding for finding in lint_desired(desired) if finding.severity == "error"
         ]
         if error_findings:
-            rendered = "; ".join(
-                "{}: {}".format(finding.code, finding.message)
+            raise PolicyValidationError(
+                PolicyValidationFinding(
+                    code="POLICY_GENERATED_DESIRED_LINT_ERROR",
+                    path="generated_desired.{}".format(finding.id),
+                    message="{}: {}".format(finding.code, finding.message),
+                    suggestion="Fix the Python policy so generated desired state passes lfguard lint.",
+                )
                 for finding in error_findings
             )
-            raise ValueError("generated desired state failed lint: {}".format(rendered))
         return desired
 
     def write_desired(self, path: Union[str, Path]) -> None:
@@ -455,127 +508,206 @@ class LakePolicy:
             tags={key: frozenset((value,)) for key, value in sorted(existing.items())},
         )
 
-    def _validate_resource_tags(self, resource: ResourceRef, tags: Mapping[str, str]) -> None:
+    def _resource_tag_validation_findings(
+        self,
+        resource: ResourceRef,
+        tags: Mapping[str, str],
+    ) -> Tuple[PolicyValidationFinding, ...]:
+        findings = []
         assignment_scope = self._resource_tag_scopes[resource]
         for tag_key, value in tags.items():
             definition = self._tag_key_definition(tag_key, resource.catalog_id)
             if definition is None:
-                raise ValueError(
-                    "resource {} references undefined tag key {!r}".format(
-                        resource.identity,
-                        tag_key,
+                findings.append(
+                    PolicyValidationFinding(
+                        code="POLICY_RESOURCE_UNDEFINED_TAG_KEY",
+                        path="resource_tags.{}.{}".format(resource.identity, tag_key),
+                        message="resource {} references undefined tag key {!r}".format(
+                            resource.identity,
+                            tag_key,
+                        ),
+                        suggestion="Define policy.tag_key({!r}, ...) before tagging this resource.".format(tag_key),
                     )
                 )
+                continue
             if assignment_scope not in definition.assignable_to:
-                raise ValueError(
-                    (
-                        "resource {} assigns tag key {!r} at {} scope, but that "
-                        "tag is assignable only to {}"
-                    ).format(
-                        resource.identity,
-                        tag_key,
-                        assignment_scope.value,
-                        ", ".join(scope.value for scope in definition.assignable_to),
+                findings.append(
+                    PolicyValidationFinding(
+                        code="POLICY_RESOURCE_TAG_SCOPE_UNSUPPORTED",
+                        path="resource_tags.{}.{}".format(resource.identity, tag_key),
+                        message=(
+                            "resource {} assigns tag key {!r} at {} scope, but that "
+                            "tag is assignable only to {}"
+                        ).format(
+                            resource.identity,
+                            tag_key,
+                            assignment_scope.value,
+                            ", ".join(scope.value for scope in definition.assignable_to),
+                        ),
+                        suggestion="Add TagAssignmentScope.{} to the tag_key(..., assignable_to=...) declaration or move the tag assignment to a supported resource level.".format(
+                            assignment_scope.name
+                        ),
                     )
                 )
             if value not in definition.values:
-                raise ValueError(
-                    "resource {} assigns undefined value {!r} for tag key {!r}".format(
-                        resource.identity,
-                        value,
-                        tag_key,
+                findings.append(
+                    PolicyValidationFinding(
+                        code="POLICY_RESOURCE_UNDEFINED_TAG_VALUE",
+                        path="resource_tags.{}.{}".format(resource.identity, tag_key),
+                        message="resource {} assigns undefined value {!r} for tag key {!r}".format(
+                            resource.identity,
+                            value,
+                            tag_key,
+                        ),
+                        suggestion="Add {!r} to policy.tag_key({!r}, values=[...]) or correct the resource tag value.".format(
+                            value,
+                            tag_key,
+                        ),
                     )
                 )
+        return tuple(findings)
 
-    def _validate_group(self, group: PermissionGroup) -> None:
+    def _group_validation_findings(self, group: PermissionGroup) -> Tuple[PolicyValidationFinding, ...]:
+        findings = []
+        path_prefix = "groups.{}".format(group.name)
         if group.intent.permission_template == PermissionTemplate.DATABASE_CREATOR:
             if group.intent.filters:
-                raise ValueError(
-                    "database_creator permission group {!r} cannot use LF-Tag filters".format(
-                        group.name
+                findings.append(
+                    PolicyValidationFinding(
+                        code="POLICY_DIRECT_GROUP_FILTERS_UNSUPPORTED",
+                        path="{}.filters".format(path_prefix),
+                        message="database_creator permission group {!r} cannot use LF-Tag filters".format(
+                            group.name
+                        ),
+                        suggestion="Remove .where(...) from database_creator(), or use reader()/producer() for LF-Tag filtered access.",
                     )
                 )
-            return
+            return tuple(findings)
         if group.intent.permission_template in {
             PermissionTemplate.STEWARD,
             PermissionTemplate.ADMIN,
             PermissionTemplate.DATA_LOCATION_ACCESS,
         }:
             if group.intent.filters:
-                raise ValueError(
-                    "{} permission group {!r} cannot use LF-Tag filters".format(
-                        group.intent.permission_template.value,
-                        group.name,
+                findings.append(
+                    PolicyValidationFinding(
+                        code="POLICY_DIRECT_GROUP_FILTERS_UNSUPPORTED",
+                        path="{}.filters".format(path_prefix),
+                        message="{} permission group {!r} cannot use LF-Tag filters".format(
+                            group.intent.permission_template.value,
+                            group.name,
+                        ),
+                        suggestion="Remove .where(...) from this direct bundle; direct bundles are scoped by their resource argument.",
                     )
                 )
             if group.intent.resource is None:
-                raise ValueError(
-                    "{} permission group {!r} requires a direct resource".format(
-                        group.intent.permission_template.value,
-                        group.name,
+                findings.append(
+                    PolicyValidationFinding(
+                        code="POLICY_DIRECT_GROUP_RESOURCE_REQUIRED",
+                        path="{}.resource".format(path_prefix),
+                        message="{} permission group {!r} requires a direct resource".format(
+                            group.intent.permission_template.value,
+                            group.name,
+                        ),
+                        suggestion="Use steward(name), admin(), or data_location_access(location) so the bundle supplies a resource.",
                     )
                 )
             if not group.intent.permissions:
-                raise ValueError(
-                    "{} permission group {!r} requires permissions".format(
-                        group.intent.permission_template.value,
-                        group.name,
+                findings.append(
+                    PolicyValidationFinding(
+                        code="POLICY_DIRECT_GROUP_PERMISSIONS_REQUIRED",
+                        path="{}.permissions".format(path_prefix),
+                        message="{} permission group {!r} requires permissions".format(
+                            group.intent.permission_template.value,
+                            group.name,
+                        ),
+                        suggestion="Use the package-provided direct bundle helper instead of constructing PermissionIntent manually.",
                     )
                 )
-            return
+            return tuple(findings)
 
         if not group.intent.filters:
-            raise ValueError(
-                "permission group {!r} must define at least one tag filter".format(
-                    group.name
+            findings.append(
+                PolicyValidationFinding(
+                    code="POLICY_GROUP_FILTER_REQUIRED",
+                    path="{}.filters".format(path_prefix),
+                    message="permission group {!r} must define at least one tag filter".format(
+                        group.name
+                    ),
+                    suggestion="Add .where(tag_key='value') to the template, or use a direct bundle such as data_location_access().",
                 )
             )
+            return tuple(findings)
 
         for tag_key, values in group.intent.filters.items():
             definition = self._tag_key_definition(tag_key, group.intent.catalog_id)
             if definition is None:
-                raise ValueError(
-                    "permission group {!r} references undefined tag key {!r}".format(
-                        group.name,
-                        tag_key,
+                findings.append(
+                    PolicyValidationFinding(
+                        code="POLICY_GROUP_UNDEFINED_TAG_KEY",
+                        path="{}.filters.{}".format(path_prefix, tag_key),
+                        message="permission group {!r} references undefined tag key {!r}".format(
+                            group.name,
+                            tag_key,
+                        ),
+                        suggestion="Define policy.tag_key({!r}, ...) before using it in this group filter.".format(tag_key),
                     )
                 )
+                continue
             if group.intent.permission_template in {
                 PermissionTemplate.EDITOR,
                 PermissionTemplate.PRODUCER,
                 PermissionTemplate.TABLE_CREATOR,
             }:
                 if definition.can_narrow_columns:
-                    raise ValueError(
-                        (
-                            "{} permission group {!r} uses tag key {!r}, but that "
-                            "tag can be assigned to columns; {} filters must not "
-                            "be able to narrow columns"
-                        ).format(
-                            group.intent.permission_template.value,
-                            group.name,
-                            tag_key,
-                            group.intent.permission_template.value,
+                    findings.append(
+                        PolicyValidationFinding(
+                            code="POLICY_MUTATING_GROUP_COLUMN_NARROWING_TAG",
+                            path="{}.filters.{}".format(path_prefix, tag_key),
+                            message=(
+                                "{} permission group {!r} uses tag key {!r}, but that "
+                                "tag can be assigned to columns; {} filters must not "
+                                "be able to narrow columns"
+                            ).format(
+                                group.intent.permission_template.value,
+                                group.name,
+                                tag_key,
+                                group.intent.permission_template.value,
+                            ),
+                            suggestion="Use reader() for column-filtered access, or remove TagAssignmentScope.COLUMN from this tag key.",
                         )
                     )
             undefined = sorted(
                 value for value in values if value != "*" and value not in definition.values
             )
             if undefined:
-                raise ValueError(
-                    "permission group {!r} uses undefined values for tag key {!r}: {}".format(
-                        group.name,
-                        tag_key,
-                        ", ".join(undefined),
+                findings.append(
+                    PolicyValidationFinding(
+                        code="POLICY_GROUP_UNDEFINED_TAG_VALUE",
+                        path="{}.filters.{}".format(path_prefix, tag_key),
+                        message="permission group {!r} uses undefined values for tag key {!r}: {}".format(
+                            group.name,
+                            tag_key,
+                            ", ".join(undefined),
+                        ),
+                        suggestion="Add the value(s) to policy.tag_key({!r}, values=[...]) or correct this group filter.".format(tag_key),
                     )
                 )
 
-        if not self._database_filter_items(group):
-            raise ValueError(
-                "permission group {!r} needs at least one tag filter that can "
-                "be assigned to databases so lfguard can grant database "
-                "DESCRIBE safely".format(group.name)
+        if not findings and not self._database_filter_items(group):
+            findings.append(
+                PolicyValidationFinding(
+                    code="POLICY_DATABASE_FILTER_REQUIRED",
+                    path="{}.filters".format(path_prefix),
+                    message=(
+                        "permission group {!r} needs at least one tag filter that can "
+                        "be assigned to databases so lfguard can grant database "
+                        "DESCRIBE safely"
+                    ).format(group.name),
+                    suggestion="Add a database-assignable tag key such as domain to the group filter.",
+                )
             )
+        return tuple(findings)
 
     def _grants_for_group(self, principal: str, group: PermissionGroup) -> Tuple[Grant, ...]:
         template = group.intent.permission_template
@@ -780,6 +912,17 @@ def load_policy(path: Union[str, Path], *, object_name: str = "policy") -> LakeP
             )
         )
     return value
+
+
+def _render_policy_validation_error(findings: Tuple[PolicyValidationFinding, ...]) -> str:
+    if not findings:
+        return "policy validation failed"
+    lines = ["policy validation failed with {} finding(s):".format(len(findings))]
+    for finding in findings:
+        lines.append("- {} at {}: {}".format(finding.code, finding.path, finding.message))
+        if finding.suggestion:
+            lines.append("  suggestion: {}".format(finding.suggestion))
+    return "\n".join(lines)
 
 
 def _expression_items(filters: Mapping[str, Tuple[str, ...]]) -> Tuple[Any, ...]:

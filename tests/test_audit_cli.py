@@ -769,6 +769,30 @@ class AuditCliTests(unittest.TestCase):
             self.assertIn("missing environment", error_text)
             self.assertNotIn("Traceback", error_text)
 
+    def test_cli_generate_reports_policy_validation_paths_without_traceback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            policy_path = Path(tmp) / "policy.py"
+            policy_path.write_text(
+                """from lakeformation_guard.policy import LakePolicy, TagAssignmentScope, reader
+
+policy = LakePolicy()
+policy.tag_key("domain", values=["sales"], assignable_to=[TagAssignmentScope.DATABASE])
+policy.group("dataconsumer", reader().where(domain="finance"))
+""",
+                encoding="utf-8",
+            )
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                exit_code = main(["generate", str(policy_path)])
+
+            error_text = stderr.getvalue()
+            self.assertEqual(exit_code, 2)
+            self.assertIn("POLICY_GROUP_UNDEFINED_TAG_VALUE", error_text)
+            self.assertIn("groups.dataconsumer.filters.domain", error_text)
+            self.assertIn("suggestion:", error_text)
+            self.assertNotIn("Traceback", error_text)
+
     def test_cli_init_refuses_to_overwrite_without_force(self):
         with tempfile.TemporaryDirectory() as tmp:
             output_path = Path(tmp) / "desired.json"

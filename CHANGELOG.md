@@ -7,6 +7,11 @@
   additive-apply, and destructive-apply templates.
 - Exposes reusable IAM permission template and permission-check helpers for
   direct library integrations.
+- Adds structured Python policy validation findings with stable codes, field
+  paths, suggestions, and `PolicyValidationError` for clearer `lfguard generate`
+  failures.
+- Adds `examples/policy-from-import.py` plus authoring and adoption docs for
+  converting reviewed import scaffolds into maintainable `policy.py` sources.
 
 ## 0.6.3
 
