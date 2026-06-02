@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.6.3
+
+- Adds governance workflow documentation for CI evidence, Terraform/CDK
+  coexistence, import adoption, exception lifecycle, and permission request
+  bundles.
+- Adds a runnable `examples/permission-requests.py` policy that models approved
+  access requests as policy data without adding approval workflow UI to core.
+- Links the new operating-model docs from README, examples, adoption,
+  positioning, framework, GitHub Actions, and roadmap pages.
+
 ## 0.6.2
 
 - Adds `CachedCurrentStateProvider.for_aws(...)` and
