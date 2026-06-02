@@ -1699,6 +1699,177 @@ class AwsAdapterStubberTests(unittest.TestCase):
         )
         self.stubber.assert_no_pending_responses()
 
+    def test_import_lf_tags_and_expressions_handles_manual_pagination(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id=CATALOG_ID)
+
+        self.stubber.add_response(
+            "list_lf_tags",
+            {
+                "LFTags": [
+                    {
+                        "CatalogId": CATALOG_ID,
+                        "TagKey": "domain",
+                        "TagValues": ["sales"],
+                    }
+                ],
+                "NextToken": "tags-page-2",
+            },
+            {
+                "CatalogId": CATALOG_ID,
+                "MaxResults": 100,
+            },
+        )
+        self.stubber.add_response(
+            "list_lf_tags",
+            {
+                "LFTags": [
+                    {
+                        "CatalogId": CATALOG_ID,
+                        "TagKey": "sensitivity",
+                        "TagValues": ["internal"],
+                    }
+                ]
+            },
+            {
+                "CatalogId": CATALOG_ID,
+                "MaxResults": 100,
+                "NextToken": "tags-page-2",
+            },
+        )
+        self.stubber.add_response(
+            "list_lf_tag_expressions",
+            {
+                "LFTagExpressions": [
+                    {
+                        "CatalogId": CATALOG_ID,
+                        "Name": "sales_tables",
+                        "Description": "Sales tables",
+                        "Expression": [{"TagKey": "domain", "TagValues": ["sales"]}],
+                    }
+                ],
+                "NextToken": "expressions-page-2",
+            },
+            {
+                "CatalogId": CATALOG_ID,
+                "MaxResults": 100,
+            },
+        )
+        self.stubber.add_response(
+            "list_lf_tag_expressions",
+            {
+                "LFTagExpressions": [
+                    {
+                        "CatalogId": CATALOG_ID,
+                        "Name": "internal_tables",
+                        "Expression": [{"TagKey": "sensitivity", "TagValues": ["internal"]}],
+                    }
+                ]
+            },
+            {
+                "CatalogId": CATALOG_ID,
+                "MaxResults": 100,
+                "NextToken": "expressions-page-2",
+            },
+        )
+
+        current = adapter.import_state(include=("lf-tags", "lf-tag-expressions"))
+
+        self.assertEqual(
+            [(tag.catalog_id, tag.key, tag.values) for tag in current.lf_tags],
+            [
+                (CATALOG_ID, "domain", ("sales",)),
+                (CATALOG_ID, "sensitivity", ("internal",)),
+            ],
+        )
+        self.assertEqual(
+            [(expression.catalog_id, expression.name) for expression in current.lf_tag_expressions],
+            [(CATALOG_ID, "sales_tables"), (CATALOG_ID, "internal_tables")],
+        )
+        self.stubber.assert_no_pending_responses()
+
+    def test_load_current_state_treats_missing_lf_tag_expression_and_data_cells_filter_as_absent(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id=CATALOG_ID)
+        desired = DesiredState.from_dict(
+            {
+                "lf_tag_expressions": {
+                    "sales_tables": {"expression": {"domain": ["sales"]}}
+                },
+                "data_cells_filters": [
+                    {
+                        "name": "orders_public",
+                        "catalog_id": CATALOG_ID,
+                        "database": "analytics",
+                        "table": "orders",
+                        "all_rows": True,
+                    }
+                ],
+            }
+        )
+
+        self.stubber.add_client_error(
+            "get_lf_tag_expression",
+            service_error_code="EntityNotFoundException",
+            expected_params={"CatalogId": CATALOG_ID, "Name": "sales_tables"},
+        )
+        self.stubber.add_client_error(
+            "get_data_cells_filter",
+            service_error_code="EntityNotFoundException",
+            expected_params={
+                "TableCatalogId": CATALOG_ID,
+                "DatabaseName": "analytics",
+                "TableName": "orders",
+                "Name": "orders_public",
+            },
+        )
+
+        current = adapter.load_current_state_for(desired)
+
+        self.assertEqual(current.lf_tag_expressions, ())
+        self.assertEqual(current.data_cells_filters, ())
+        self.stubber.assert_no_pending_responses()
+
+    def test_import_grants_skips_permission_items_without_principal_resource_or_permissions(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id=CATALOG_ID)
+
+        self.stubber.add_response(
+            "list_permissions",
+            {
+                "PrincipalResourcePermissions": [
+                    {
+                        "Resource": {"Database": {"CatalogId": CATALOG_ID, "Name": "analytics"}},
+                        "Permissions": ["DESCRIBE"],
+                    },
+                    {
+                        "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                        "Resource": {},
+                        "Permissions": ["DESCRIBE"],
+                    },
+                    {
+                        "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                        "Resource": {"Database": {"CatalogId": CATALOG_ID, "Name": "analytics"}},
+                        "Permissions": [],
+                    },
+                    {
+                        "Principal": {"DataLakePrincipalIdentifier": PRINCIPAL},
+                        "Resource": {"Database": {"CatalogId": CATALOG_ID, "Name": "analytics"}},
+                        "Permissions": ["DESCRIBE"],
+                        "PermissionsWithGrantOption": [],
+                    },
+                ]
+            },
+            {
+                "CatalogId": CATALOG_ID,
+                "MaxResults": 100,
+            },
+        )
+
+        current = adapter.import_state(include=("grants",))
+
+        self.assertEqual(len(current.grants), 1)
+        self.assertEqual(current.grants[0].principal, PRINCIPAL)
+        self.assertEqual(current.grants[0].resource.catalog_id, CATALOG_ID)
+        self.stubber.assert_no_pending_responses()
+
 
 def _lf_tag_expression_change_plan() -> Plan:
     return Plan.from_dict(

@@ -20,6 +20,8 @@
 - Fixes `lfguard explain` effective LF-Tag evidence for column-level same-key
   overrides and adds real-world explain coverage for mixed direct/LF-Tag grants
   and data-location context.
+- Strengthens AWS adapter Stubber coverage for import pagination, not-found
+  current-state boundaries, and malformed permission items returned by AWS.
 
 ## 0.6.3
 
