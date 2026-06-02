@@ -17,6 +17,9 @@
 - Adds `lfguard import --review-notes` to write a Markdown adoption checklist,
   imported-surface summary, suggested commands, and bounded-discovery warnings
   beside imported desired-state scaffolds.
+- Fixes `lfguard explain` effective LF-Tag evidence for column-level same-key
+  overrides and adds real-world explain coverage for mixed direct/LF-Tag grants
+  and data-location context.
 
 ## 0.6.3
 

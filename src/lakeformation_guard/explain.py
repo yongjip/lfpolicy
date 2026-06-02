@@ -437,16 +437,53 @@ def _effective_lf_tag_scopes(
     current: CurrentState,
     target: ResourceRef,
 ) -> Dict[Optional[str], Dict[str, Tuple[str, ...]]]:
+    if target.kind == "table_with_columns":
+        return _effective_column_lf_tag_scopes(current, target)
+    return _effective_inherited_lf_tag_scopes(current, target)
+
+
+def _effective_inherited_lf_tag_scopes(
+    current: CurrentState,
+    target: ResourceRef,
+) -> Dict[Optional[str], Dict[str, Tuple[str, ...]]]:
     tags_by_catalog: Dict[Optional[str], Dict[str, Tuple[str, ...]]] = {}
-    for scope in ("database", "table", "column"):
+    for scope in ("database", "table"):
         for assignment in current.resource_tags:
             if _tag_assignment_applies(assignment.resource, target, scope):
                 tags = tags_by_catalog.setdefault(assignment.resource.catalog_id, {})
                 for key, values in assignment.tags.items():
-                    if scope == "column" and key in tags:
-                        tags[key] = tuple(sorted(set(tags[key]) | set(values)))
-                    else:
-                        tags[key] = tuple(sorted(values))
+                    tags[key] = tuple(sorted(values))
+    return tags_by_catalog
+
+
+def _effective_column_lf_tag_scopes(
+    current: CurrentState,
+    target: ResourceRef,
+) -> Dict[Optional[str], Dict[str, Tuple[str, ...]]]:
+    inherited_by_catalog = _effective_inherited_lf_tag_scopes(current, target)
+    column_assignments = [
+        assignment
+        for assignment in current.resource_tags
+        if _tag_assignment_applies(assignment.resource, target, "column")
+    ]
+    catalog_ids = set(inherited_by_catalog)
+    catalog_ids.update(assignment.resource.catalog_id for assignment in column_assignments)
+    tags_by_catalog: Dict[Optional[str], Dict[str, Tuple[str, ...]]] = {}
+    for catalog_id in sorted(catalog_ids, key=lambda item: item or ""):
+        aggregate: Dict[str, set] = {}
+        for column in target.columns:
+            column_tags = dict(inherited_by_catalog.get(catalog_id, {}))
+            for assignment in column_assignments:
+                if assignment.resource.catalog_id != catalog_id or column not in assignment.resource.columns:
+                    continue
+                for key, values in assignment.tags.items():
+                    column_tags[key] = tuple(sorted(values))
+            for key, values in column_tags.items():
+                aggregate.setdefault(key, set()).update(values)
+        if aggregate:
+            tags_by_catalog[catalog_id] = {
+                key: tuple(sorted(values)) for key, values in sorted(aggregate.items())
+            }
     return tags_by_catalog
 
 

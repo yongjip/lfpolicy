@@ -317,6 +317,169 @@ class ProviderExplainTests(unittest.TestCase):
         self.assertEqual(report.findings[0].source, "direct_grant")
         self.assertEqual(report.findings[0].id, "finding_001")
 
+    def test_explain_column_tag_overrides_inherited_same_key_for_selected_column(self):
+        current = CurrentState.from_dict(
+            {
+                "resource_tags": [
+                    {
+                        "resource": {"kind": "database", "database": "analytics"},
+                        "tags": {"domain": ["sales"]},
+                    },
+                    {
+                        "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                        "tags": {"sensitivity": ["internal"]},
+                    },
+                    {
+                        "resource": {
+                            "kind": "table_with_columns",
+                            "database": "analytics",
+                            "table": "orders",
+                            "columns": ["email"],
+                        },
+                        "tags": {"sensitivity": ["restricted"]},
+                    },
+                ],
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                        "permissions": ["SELECT"],
+                    },
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "lf_tag_policy",
+                            "resource_type": "TABLE",
+                            "expression": {"domain": ["sales"], "sensitivity": ["internal"]},
+                        },
+                        "permissions": ["SELECT"],
+                    },
+                ],
+            }
+        )
+
+        report = explain(
+            DesiredState.empty(),
+            current,
+            principal="role",
+            resource=ResourceRef(
+                kind="table_with_columns",
+                database_name="analytics",
+                table_name="orders",
+                columns=("email",),
+            ),
+            permissions=("SELECT",),
+        )
+
+        self.assertEqual(report.effective_lf_tags, {"domain": ("sales",), "sensitivity": ("restricted",)})
+        self.assertEqual(report.summary()["matched"], 1)
+        self.assertEqual(report.summary()["not_matched"], 1)
+        findings_by_source = {finding.source: finding for finding in report.findings}
+        self.assertEqual(set(findings_by_source), {"direct_grant", "lf_tag_policy"})
+        self.assertEqual(findings_by_source["direct_grant"].status, "matched")
+        self.assertEqual(findings_by_source["lf_tag_policy"].status, "not_matched")
+        self.assertEqual(
+            findings_by_source["lf_tag_policy"].details["mismatched_values"],
+            [{"key": "sensitivity", "expected": ["internal"], "actual": ["restricted"]}],
+        )
+        self.assertTrue(any("Column LF-Tags" in note for note in report.notes))
+
+    def test_explain_column_tag_adds_different_key_to_inherited_tags(self):
+        current = CurrentState.from_dict(
+            {
+                "resource_tags": [
+                    {
+                        "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                        "tags": {"domain": ["sales"]},
+                    },
+                    {
+                        "resource": {
+                            "kind": "table_with_columns",
+                            "database": "analytics",
+                            "table": "orders",
+                            "columns": ["email"],
+                        },
+                        "tags": {"sensitivity": ["restricted"]},
+                    },
+                ],
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "lf_tag_policy",
+                            "resource_type": "TABLE",
+                            "expression": {"domain": ["sales"], "sensitivity": ["restricted"]},
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ],
+            }
+        )
+
+        report = explain(
+            DesiredState.empty(),
+            current,
+            principal="role",
+            resource=ResourceRef(
+                kind="table_with_columns",
+                database_name="analytics",
+                table_name="orders",
+                columns=("email",),
+            ),
+            permissions=("SELECT",),
+        )
+
+        self.assertEqual(report.effective_lf_tags, {"domain": ("sales",), "sensitivity": ("restricted",)})
+        self.assertEqual(report.summary()["matched"], 1)
+
+    def test_explain_aggregates_effective_tags_across_requested_columns(self):
+        current = CurrentState.from_dict(
+            {
+                "resource_tags": [
+                    {
+                        "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                        "tags": {"sensitivity": ["internal"]},
+                    },
+                    {
+                        "resource": {
+                            "kind": "table_with_columns",
+                            "database": "analytics",
+                            "table": "orders",
+                            "columns": ["email"],
+                        },
+                        "tags": {"sensitivity": ["restricted"]},
+                    },
+                ],
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "lf_tag_policy",
+                            "resource_type": "TABLE",
+                            "expression": {"sensitivity": ["internal", "restricted"]},
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ],
+            }
+        )
+
+        report = explain(
+            DesiredState.empty(),
+            current,
+            principal="role",
+            resource=ResourceRef(
+                kind="table_with_columns",
+                database_name="analytics",
+                table_name="orders",
+                columns=("amount", "email"),
+            ),
+            permissions=("SELECT",),
+        )
+
+        self.assertEqual(report.effective_lf_tags, {"sensitivity": ("internal", "restricted")})
+        self.assertEqual(report.summary()["matched"], 1)
+
     def test_explain_reports_data_cells_filter_grant_for_target_table(self):
         current = CurrentState.from_dict(
             {
@@ -535,6 +698,33 @@ class ProviderExplainTests(unittest.TestCase):
 
         self.assertEqual(report.summary()["context"], 1)
         self.assertEqual(report.findings[0].resource.catalog_id, "111111111111")
+
+    def test_explain_reports_data_location_context_for_table_target(self):
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "role",
+                        "resource": {
+                            "kind": "data_location",
+                            "location": "arn:aws:s3:::analytics-lake/raw/",
+                        },
+                        "permissions": ["DATA_LOCATION_ACCESS"],
+                    }
+                ]
+            }
+        )
+
+        report = explain(
+            DesiredState.empty(),
+            current,
+            principal="role",
+            resource=ResourceRef(kind="table", database_name="analytics", table_name="orders"),
+        )
+
+        self.assertEqual(report.summary()["context"], 1)
+        self.assertEqual(report.findings[0].source, "data_location_grant")
+        self.assertIn("table storage locations are not modeled", report.findings[0].message)
 
     def test_explain_uses_target_catalog_for_effective_lf_tags(self):
         current = CurrentState.from_dict(
