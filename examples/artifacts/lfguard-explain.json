@@ -1,0 +1,93 @@
+{
+  "data_cells_filter": null,
+  "effective_lf_tags": {
+    "domain": [
+      "sales"
+    ],
+    "sensitivity": [
+      "internal"
+    ]
+  },
+  "effective_lf_tags_by_catalog": [
+    {
+      "catalog_id": null,
+      "lf_tags": {
+        "domain": [
+          "sales"
+        ],
+        "sensitivity": [
+          "internal"
+        ]
+      }
+    }
+  ],
+  "findings": [
+    {
+      "details": {
+        "effective_lf_tags": {
+          "domain": [
+            "sales"
+          ],
+          "sensitivity": [
+            "internal"
+          ]
+        },
+        "expression": {
+          "domain": [
+            "sales"
+          ],
+          "sensitivity": [
+            "internal",
+            "public"
+          ]
+        },
+        "matched": true,
+        "mismatched_values": [],
+        "missing_keys": [],
+        "requested_permissions": [
+          "SELECT"
+        ],
+        "resource_type": "TABLE"
+      },
+      "grantable_permissions": [],
+      "id": "finding_001",
+      "message": "Inline LF-Tag policy expression matches the target's effective LF-Tags.",
+      "permissions": [
+        "DESCRIBE",
+        "SELECT"
+      ],
+      "resource": {
+        "expression": {
+          "domain": [
+            "sales"
+          ],
+          "sensitivity": [
+            "internal",
+            "public"
+          ]
+        },
+        "kind": "lf_tag_policy",
+        "resource_type": "TABLE"
+      },
+      "source": "lf_tag_policy",
+      "status": "matched"
+    }
+  ],
+  "notes": [],
+  "principal": "arn:aws:iam::111122223333:role/Analyst",
+  "requested_permissions": [
+    "SELECT"
+  ],
+  "resource": {
+    "database": "analytics",
+    "kind": "table",
+    "table": "orders"
+  },
+  "schema_version": "lfguard.explain.v1",
+  "summary": {
+    "context": 0,
+    "matched": 1,
+    "missing": 0,
+    "not_matched": 0
+  }
+}

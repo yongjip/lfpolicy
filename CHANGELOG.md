@@ -12,6 +12,8 @@
   failures.
 - Adds `examples/policy-from-import.py` plus authoring and adoption docs for
   converting reviewed import scaffolds into maintainable `policy.py` sources.
+- Adds checked-in example evidence artifacts for audit JSON, plan JSON, explain
+  JSON, and apply dry-run Markdown reports.
 
 ## 0.6.3
 

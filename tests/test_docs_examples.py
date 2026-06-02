@@ -217,6 +217,23 @@ class DocumentationExampleTests(unittest.TestCase):
         self.assertEqual(len(desired.grants), 5)
         self.assertIn("IMPORTED_DESIRED_REFERENCE", policy_path.read_text(encoding="utf-8"))
 
+    def test_evidence_artifact_fixtures_are_parseable_and_use_stable_schemas(self):
+        root = Path(__file__).resolve().parents[1]
+        artifacts = root / "examples" / "artifacts"
+
+        audit = json.loads((artifacts / "lfguard-audit.json").read_text(encoding="utf-8"))
+        plan = json.loads((artifacts / "lfguard-plan.json").read_text(encoding="utf-8"))
+        explain = json.loads((artifacts / "lfguard-explain.json").read_text(encoding="utf-8"))
+        apply_dry_run = (artifacts / "lfguard-apply-dry-run.md").read_text(encoding="utf-8")
+
+        self.assertEqual(audit["schema_version"], "lfguard.audit.v1")
+        self.assertEqual(plan["schema_version"], "lfguard.plan.v1")
+        self.assertEqual(explain["schema_version"], "lfguard.explain.v1")
+        self.assertEqual([change["id"] for change in plan["changes"]], ["change_001", "change_002", "change_003"])
+        self.assertEqual(explain["summary"]["matched"], 1)
+        self.assertIn("Dry run: no changes applied.", apply_dry_run)
+        self.assertIn("change_003", apply_dry_run)
+
     def test_lake_formation_guide_covers_operating_model(self):
         root = Path(__file__).resolve().parents[1]
         guide_text = (root / "docs" / "lake-formation-guide.md").read_text(encoding="utf-8")

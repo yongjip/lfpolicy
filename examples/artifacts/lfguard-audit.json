@@ -1,0 +1,93 @@
+{
+  "findings": [
+    {
+      "code": "LF_TAG_VALUES_MISSING",
+      "details": {
+        "catalog_id": null,
+        "missing_values": [
+          "internal",
+          "restricted"
+        ],
+        "tag_key": "sensitivity"
+      },
+      "id": "finding_001",
+      "message": "Desired LF-Tag values are missing",
+      "principal": null,
+      "resource": null,
+      "severity": "error",
+      "target": "lf_tag:sensitivity"
+    },
+    {
+      "code": "RESOURCE_TAG_VALUES_MISSING",
+      "details": {
+        "missing_values": [
+          "internal"
+        ],
+        "resource": {
+          "database": "analytics",
+          "kind": "table",
+          "table": "orders"
+        },
+        "tag_key": "sensitivity"
+      },
+      "id": "finding_002",
+      "message": "Resource is missing desired LF-Tag values",
+      "principal": null,
+      "resource": {
+        "database": "analytics",
+        "kind": "table",
+        "table": "orders"
+      },
+      "severity": "error",
+      "target": "table:database=analytics:table=orders"
+    },
+    {
+      "code": "GRANT_MISSING",
+      "details": {
+        "missing_grantable_permissions": [],
+        "missing_permissions": [
+          "DESCRIBE",
+          "SELECT"
+        ],
+        "principal": "arn:aws:iam::111122223333:role/Analyst",
+        "resource": {
+          "expression": {
+            "domain": [
+              "sales"
+            ],
+            "sensitivity": [
+              "internal",
+              "public"
+            ]
+          },
+          "kind": "lf_tag_policy",
+          "resource_type": "TABLE"
+        }
+      },
+      "id": "finding_003",
+      "message": "Principal grant is missing",
+      "principal": "arn:aws:iam::111122223333:role/Analyst",
+      "resource": {
+        "expression": {
+          "domain": [
+            "sales"
+          ],
+          "sensitivity": [
+            "internal",
+            "public"
+          ]
+        },
+        "kind": "lf_tag_policy",
+        "resource_type": "TABLE"
+      },
+      "severity": "error",
+      "target": "arn:aws:iam::111122223333:role/Analyst -> lf_tag_policy:resource_type=TABLE:expression=domain=sales,sensitivity=internal|public"
+    }
+  ],
+  "schema_version": "lfguard.audit.v1",
+  "summary": {
+    "errors": 3,
+    "total": 3,
+    "warnings": 0
+  }
+}

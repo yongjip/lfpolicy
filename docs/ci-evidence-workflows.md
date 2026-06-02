@@ -22,6 +22,9 @@ For a normal permission pull request, keep these artifacts:
 Store JSON for machines and Markdown for reviewers. SARIF is useful when the
 repository already uses GitHub Code Scanning.
 
+For concrete report shapes without running commands first, inspect the checked
+in fixtures under [`../examples/artifacts/`](../examples/artifacts/).
+
 ## Pull Request Gate
 
 Use the pull request gate for local policy quality. Avoid AWS credentials on
