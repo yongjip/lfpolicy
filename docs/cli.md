@@ -594,12 +594,15 @@ Import live AWS state into a starter desired-state file:
 lfguard import \
   --catalog-id 123456789012 \
   --include lf-tags,lf-tag-expressions,data-cells-filters,resource-tags,grants \
-  --output policy/imported-desired.json
+  --output policy/imported-desired.json \
+  --review-notes policy/import-review.md
 ```
 
 `import` is for adoption scaffolding, not automatic synchronization. Review the
 generated file, remove unmanaged legacy access that should stay outside
-`lfguard`, then commit the desired state you intend to own.
+`lfguard`, then commit the desired state you intend to own. Use
+`--review-notes` to write a Markdown checklist and bounded-discovery warnings
+beside the scaffold.
 
 Useful options:
 
@@ -609,6 +612,9 @@ Useful options:
 - `--output PATH`: write the starter desired-state file. This is required.
 - `--format json|yaml`: force the output format. When omitted, `.yaml` and
   `.yml` paths produce YAML; other paths produce JSON.
+- `--review-notes PATH`: write Markdown import review notes with imported
+  surface counts, review checklist items, suggested next commands, and warnings
+  about bounded resource-tag and data-cells-filter discovery.
 - `--force`: overwrite an existing output file.
 
 Resource-tag import is intentionally bounded. `lfguard` reads LF-Tag

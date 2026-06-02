@@ -15,7 +15,8 @@ python -m pip install "lfguard[aws]"
 lfguard import \
   --catalog-id 111122223333 \
   --include lf-tags,lf-tag-expressions,data-cells-filters,resource-tags,grants \
-  --output policy/imported-desired.json
+  --output policy/imported-desired.json \
+  --review-notes policy/import-review.md
 
 lfguard check --desired policy/imported-desired.json --fail-on-findings
 lfguard summary --desired policy/imported-desired.json --output markdown
@@ -27,6 +28,8 @@ Expected review questions:
 - Which legacy grants should stay unmanaged?
 - Which LF-Tag keys and values need cleanup before strict gates are enabled?
 - Which broad grants need scoped exceptions with owners and expiry?
+- Did the bounded resource-tag and data-cells-filter discovery notes leave any
+  tables, filters, or catalog resources that need separate review?
 
 ## Recipe 2: Gradual Ownership
 

@@ -14,6 +14,9 @@
   converting reviewed import scaffolds into maintainable `policy.py` sources.
 - Adds checked-in example evidence artifacts for audit JSON, plan JSON, explain
   JSON, and apply dry-run Markdown reports.
+- Adds `lfguard import --review-notes` to write a Markdown adoption checklist,
+  imported-surface summary, suggested commands, and bounded-discovery warnings
+  beside imported desired-state scaffolds.
 
 ## 0.6.3
 

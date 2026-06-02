@@ -375,7 +375,9 @@ lfguard generate policy.py --output-file policy/desired.json
 lfguard generate policy.py --output-file policy/desired.json --check
 lfguard sample --output-dir lfguard-demo
 lfguard bootstrap --output-dir lfguard-policy
-lfguard import --catalog-id 123456789012 --output policy/imported-desired.json
+lfguard import --catalog-id 123456789012 \
+  --output policy/imported-desired.json \
+  --review-notes policy/import-review.md
 lfguard explain \
   --desired desired.json \
   --current-snapshot current.json \

@@ -2904,6 +2904,97 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             self.assertEqual(payload["lf_tag_expressions"]["sales_tables"]["expression"], {"domain": ["sales"]})
             self.assertIn("Wrote imported desired state", stdout.getvalue())
 
+    def test_cli_import_can_write_review_notes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            output_path = tmp_path / "policy" / "imported-desired.json"
+            notes_path = tmp_path / "policy" / "import-review.md"
+            imported = CurrentState.from_dict(
+                {
+                    "lf_tags": {"domain": ["sales"]},
+                    "data_cells_filters": [
+                        {
+                            "name": "orders_public",
+                            "database": "analytics",
+                            "table": "orders",
+                            "row_filter": "country = 'US'",
+                            "columns": ["order_id", "status"],
+                        }
+                    ],
+                    "resource_tags": [
+                        {
+                            "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                            "tags": {"domain": ["sales"]},
+                        }
+                    ],
+                    "grants": [
+                        {
+                            "principal": "arn:aws:iam::111122223333:role/Analyst",
+                            "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                            "permissions": ["SELECT"],
+                        }
+                    ],
+                }
+            )
+
+            stdout = io.StringIO()
+            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter") as adapter_class:
+                adapter_class.from_boto3.return_value.import_state.return_value = imported
+                with contextlib.redirect_stdout(stdout):
+                    exit_code = main(
+                        [
+                            "import",
+                            "--catalog-id",
+                            "123456789012",
+                            "--include",
+                            "data-cells-filters,resource-tags,grants",
+                            "--output",
+                            str(output_path),
+                            "--review-notes",
+                            str(notes_path),
+                        ]
+                    )
+
+            notes = notes_path.read_text(encoding="utf-8")
+            self.assertEqual(exit_code, 0)
+            self.assertTrue(output_path.exists())
+            self.assertIn("Wrote import review notes", stdout.getvalue())
+            self.assertIn("# lfguard Import Review Notes", notes)
+            self.assertIn("Desired scaffold: `{}`".format(output_path), notes)
+            self.assertIn("Catalog ID: `123456789012`", notes)
+            self.assertIn("Included sections: `data-cells-filters, resource-tags, grants`", notes)
+            self.assertIn("Data cells filters: 1", notes)
+            self.assertIn("Resource tag assignments: 1", notes)
+            self.assertIn("Grants: 1", notes)
+            self.assertIn("Resource-tag import reads LF-Tag assignments only for resources discovered", notes)
+            self.assertIn("Data-cells-filter import lists filters only for tables discovered", notes)
+            self.assertIn("lfguard check --desired", notes)
+
+    def test_cli_import_review_notes_refuses_to_overwrite_without_force(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            output_path = tmp_path / "desired.json"
+            notes_path = tmp_path / "review.md"
+            notes_path.write_text("existing", encoding="utf-8")
+
+            stderr = io.StringIO()
+            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter") as adapter_class:
+                with contextlib.redirect_stderr(stderr):
+                    exit_code = main(
+                        [
+                            "import",
+                            "--output",
+                            str(output_path),
+                            "--review-notes",
+                            str(notes_path),
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 2)
+            self.assertIn("already exists", stderr.getvalue())
+            self.assertEqual(notes_path.read_text(encoding="utf-8"), "existing")
+            adapter_class.from_boto3.assert_not_called()
+
     def test_lint_config_overrides_severity_and_can_ignore_rule(self):
         desired = DesiredState.from_dict(
             {

@@ -377,6 +377,10 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("json", "yaml"),
         help="Imported desired-state output format. Defaults to the output extension, or json.",
     )
+    import_parser.add_argument(
+        "--review-notes",
+        help="Write Markdown adoption review notes for the imported scaffold.",
+    )
     import_parser.add_argument("--force", action="store_true", help="Overwrite the output file if it already exists.")
 
     apply_parser = subparsers.add_parser("apply", help="Dry-run or execute a Lake Formation change plan.")
@@ -753,10 +757,26 @@ def _cmd_import(args: argparse.Namespace) -> int:
     output_path = Path(args.output)
     if output_path.exists() and not args.force:
         raise RuntimeError("{} already exists; pass --force to overwrite it".format(output_path))
-    imported = _aws_adapter(args).import_state(include=_parse_import_include(args.include))
+    review_notes_path = Path(args.review_notes) if args.review_notes else None
+    if review_notes_path and review_notes_path.exists() and not args.force:
+        raise RuntimeError("{} already exists; pass --force to overwrite it".format(review_notes_path))
+    include = _parse_import_include(args.include)
+    imported = _aws_adapter(args).import_state(include=include)
     output_format = _resolve_init_format(args.format, str(output_path))
     _write_text_file(output_path, _dump_state_data(imported.to_dict(), output_format), "imported desired state")
     print("Wrote imported desired state to {}.".format(output_path))
+    if review_notes_path:
+        _write_text_file(
+            review_notes_path,
+            _render_import_review_notes(
+                imported,
+                output_path=output_path,
+                include=include,
+                catalog_id=args.catalog_id,
+            ),
+            "import review notes",
+        )
+        print("Wrote import review notes to {}.".format(review_notes_path))
     return 0
 
 
@@ -1142,6 +1162,81 @@ def _parse_import_include(raw: str) -> Tuple[str, ...]:
     if not includes:
         raise RuntimeError("--include requires at least one section")
     return includes
+
+
+def _render_import_review_notes(
+    imported: CurrentState,
+    *,
+    output_path: Path,
+    include: Tuple[str, ...],
+    catalog_id: Optional[str],
+) -> str:
+    profile = _state_profile(imported)
+    lines = [
+        "# lfguard Import Review Notes",
+        "",
+        "This file documents a reviewed import scaffold. `lfguard import` is not synchronization; the generated desired state becomes policy only after the team decides what `lfguard` owns.",
+        "",
+        "## Import Context",
+        "",
+        "- Desired scaffold: `{}`".format(output_path),
+        "- Catalog ID: `{}`".format(catalog_id or "not set"),
+        "- Included sections: `{}`".format(", ".join(include)),
+        "",
+        "## Imported Surface",
+        "",
+        "- LF-Tag definitions: {}".format(profile["lf_tags"]),
+        "- Named LF-Tag expressions: {}".format(profile["lf_tag_expressions"]),
+        "- Data cells filters: {}".format(profile["data_cells_filters"]),
+        "- Resource tag assignments: {}".format(profile["resource_tags"]),
+        "- Grants: {}".format(profile["grants"]),
+    ]
+    if profile["grant_principals"]:
+        lines.extend(["- Principals: `{}`".format("`, `".join(profile["grant_principals"]))])
+    if profile["grant_resource_kinds"]:
+        lines.extend(
+            [
+                "- Grant resource kinds: `{}`".format(
+                    "`, `".join("{}={}".format(kind, count) for kind, count in profile["grant_resource_kinds"].items())
+                )
+            ]
+        )
+    if profile["permissions"]:
+        lines.extend(["- Permissions: `{}`".format("`, `".join(profile["permissions"]))])
+
+    lines.extend(
+        [
+            "",
+            "## Bounded Discovery Notes",
+            "",
+            "- Resource-tag import reads LF-Tag assignments only for resources discovered from Lake Formation grants. It does not crawl the whole Glue Data Catalog.",
+            "- Data-cells-filter import lists filters only for tables discovered through imported grants. It is not a full catalog-wide filter inventory.",
+            "- Grants imported here may include legacy or unmanaged access. Remove entries that should stay outside this repository, or model them with ownership and ignore rules before enforcing drift gates.",
+            "",
+            "## Review Checklist",
+            "",
+            "- [ ] Decide which principals, resource patterns, LF-Tags, and filters this repository owns.",
+            "- [ ] Remove unmanaged legacy grants that should not become desired policy.",
+            "- [ ] Add `ownership` and `ignore` rules before adopting mixed managed/unmanaged accounts.",
+            "- [ ] Add scoped exceptions with owner, reason, expiry, and approval metadata for intentional risky grants.",
+            "- [ ] Convert repeated permission patterns to `policy.py` when request volume makes raw JSON hard to maintain.",
+            "- [ ] Run `lfguard check`, `summary`, `audit`, and `plan` before using apply.",
+            "",
+            "## Suggested Commands",
+            "",
+            "```bash",
+            "lfguard check --desired {} --fail-on-findings".format(output_path),
+            "lfguard summary --desired {} --output markdown".format(output_path),
+            "lfguard plan \\",
+            "  --desired {} \\".format(output_path),
+            "  --current-snapshot snapshots/current.json \\",
+            "  --output json \\",
+            "  --output-file artifacts/lfguard-plan.json",
+            "```",
+            "",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def _state_summary(state: GuardrailState) -> dict:
@@ -1615,7 +1710,17 @@ _COMPLETION_OPTIONS = {
         "--help",
     ),
     "snapshot": ("--desired", "--profile", "--region", "--catalog-id", "--output-file", "--help"),
-    "import": ("--profile", "--region", "--catalog-id", "--include", "--output", "--format", "--force", "--help"),
+    "import": (
+        "--profile",
+        "--region",
+        "--catalog-id",
+        "--include",
+        "--output",
+        "--format",
+        "--review-notes",
+        "--force",
+        "--help",
+    ),
     "apply": (
         "--desired",
         "--current-snapshot",
