@@ -51,6 +51,8 @@ desired-state file so drift checks stay focused and reviewable.
 - Keeps the Python API dependency-light while isolating boto3 in the AWS adapter.
 - Produces text, JSON, Markdown, and SARIF output suitable for pull request
   comments, release checks, code scanning, and platform automation.
+- Leaves stable CI evidence for audits, permission requests, and exception
+  reviews without requiring console screenshots.
 
 ## Core workflow
 
@@ -93,6 +95,8 @@ and should carry approval evidence.
   changes.
 - Keep data access policy as code without writing direct boto3 orchestration for
   every grant and tag assignment.
+- Coexist with Terraform, CloudFormation, or CDK by letting infrastructure tools
+  own resources while `lfguard` owns reviewed Lake Formation policy.
 
 ## Lake Formation operating model
 
@@ -502,8 +506,19 @@ release notes under [`docs/release-notes/`](docs/release-notes/).
   codes.
 - [`docs/recipes.md`](docs/recipes.md): audit-only, CI, and controlled apply
   workflows.
+- [`docs/ci-evidence-workflows.md`](docs/ci-evidence-workflows.md): artifact
+  sets and gates for pull requests, drift checks, plans, explains, and dry-run
+  apply evidence.
 - [`docs/adoption-checklist.md`](docs/adoption-checklist.md): step-by-step
   rollout from offline demo to CI and controlled apply.
+- [`docs/import-adoption-recipes.md`](docs/import-adoption-recipes.md):
+  practical import, ownership, data cells filter, and environment promotion
+  recipes.
+- [`docs/exception-lifecycle.md`](docs/exception-lifecycle.md): request,
+  review, CI, expiry, and removal workflow for risky access exceptions.
+- [`docs/permission-request-bundles.md`](docs/permission-request-bundles.md):
+  modeling repeated access requests as policy data without building approval UI
+  into core.
 - [`docs/lake-formation-guide.md`](docs/lake-formation-guide.md): Lake
   Formation mental model, LF-Tag best practices, hybrid access notes, and
   antipatterns.
@@ -523,6 +538,8 @@ release notes under [`docs/release-notes/`](docs/release-notes/).
   destructive-change flags, apply behavior, and production patterns.
 - [`docs/positioning.md`](docs/positioning.md): where `lfguard` fits next to
   Terraform, CloudFormation, CDK, raw boto3, and console workflows.
+- [`docs/terraform-cdk-coexistence.md`](docs/terraform-cdk-coexistence.md):
+  detailed ownership split and pipeline pattern for IaC-managed environments.
 - [`docs/state-format.md`](docs/state-format.md): desired/current state file
   shape with examples for each supported resource kind.
 - [`docs/schema.json`](docs/schema.json): JSON Schema for desired/current state

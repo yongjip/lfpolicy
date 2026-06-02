@@ -11,6 +11,8 @@ These files let you try `lfguard` without AWS credentials:
 - `policy-bundles.py`: a Python-native policy using generic permission bundles
   such as `reader()`, `producer()`, `steward()`, `data_location_access()`, and
   `admin()`.
+- `permission-requests.py`: a Python-native policy that models approved access
+  requests as data and compiles them to ordinary desired state.
 - `current-snapshot.json`: a deliberately incomplete current-state snapshot.
 - `github-actions/lakeformation-drift.yml`: a copyable GitHub Actions workflow
   for scheduled or manually dispatched drift checks against live AWS state. It
@@ -69,6 +71,14 @@ To see the newer generic bundle names:
 ```bash
 lfguard generate examples/policy-bundles.py --output-file /tmp/lfguard-bundles.json --force
 lfguard check --desired /tmp/lfguard-bundles.json --fail-on-findings
+```
+
+To see access requests represented as policy data, without adding an approval UI
+to `lfguard` core:
+
+```bash
+lfguard generate examples/permission-requests.py --output-file /tmp/lfguard-requests.json --force
+lfguard check --desired /tmp/lfguard-requests.json --fail-on-findings
 ```
 
 ## Review Exceptions
@@ -182,6 +192,9 @@ Use [`github-actions/lakeformation-code-scanning.yml`](github-actions/lakeformat
 when your repository can upload SARIF to GitHub Code Scanning. It uploads
 separate `lfguard-lint` and `lfguard-audit` categories before enforcing the
 check and drift gates.
+
+For the evidence model behind these workflows, see
+[`../docs/ci-evidence-workflows.md`](../docs/ci-evidence-workflows.md).
 
 ## Copy a Pre-Commit Hook
 

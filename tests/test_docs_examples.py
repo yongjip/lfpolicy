@@ -181,6 +181,28 @@ class DocumentationExampleTests(unittest.TestCase):
         permissions = {permission for grant in desired.grants for permission in grant.permissions}
         self.assertIn("GRANT_WITH_LF_TAG_EXPRESSION", permissions)
 
+    def test_permission_request_example_compiles_to_clean_desired_state(self):
+        root = Path(__file__).resolve().parents[1]
+        policy_path = root / "examples" / "permission-requests.py"
+
+        policy = load_policy(policy_path)
+        desired = policy.to_desired_state()
+        findings = lint_desired(desired)
+
+        self.assertFalse(findings)
+        self.assertEqual(len(desired.grants), 6)
+        self.assertEqual(
+            {grant.principal for grant in desired.grants},
+            {
+                "arn:aws:iam::111122223333:role/FinanceAnalyst",
+                "arn:aws:iam::111122223333:role/FinanceProducer",
+                "arn:aws:iam::111122223333:role/FinanceSteward",
+            },
+        )
+        policy_source = policy_path.read_text(encoding="utf-8")
+        self.assertIn("DATA-1042", policy_source)
+        self.assertIn("review_by", policy_source)
+
     def test_lake_formation_guide_covers_operating_model(self):
         root = Path(__file__).resolve().parents[1]
         guide_text = (root / "docs" / "lake-formation-guide.md").read_text(encoding="utf-8")

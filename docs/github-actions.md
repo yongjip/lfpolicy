@@ -139,3 +139,7 @@ workflow. It:
 - uploads both SARIF files before enforcing the final check and drift gates.
 
 This keeps findings visible in the Security tab even when the final gate fails.
+
+For a fuller evidence model, including plan JSON, explain JSON, saved plans,
+dry-run apply reports, and artifact retention guidance, see
+[`ci-evidence-workflows.md`](ci-evidence-workflows.md).

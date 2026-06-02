@@ -101,3 +101,17 @@ JSON reports are intended as API-friendly evidence:
 
 Store these reports as CI artifacts or feed them into approval systems. Treat
 schema-version changes as integration events.
+
+## Operating Guides
+
+- [`ci-evidence-workflows.md`](ci-evidence-workflows.md): CI artifact sets,
+  drift gates, plan review, explain evidence, and apply dry-run evidence.
+- [`terraform-cdk-coexistence.md`](terraform-cdk-coexistence.md): ownership
+  boundaries between infrastructure tools and `lfguard`.
+- [`import-adoption-recipes.md`](import-adoption-recipes.md): practical import,
+  ownership, data cells filter, and promotion recipes.
+- [`exception-lifecycle.md`](exception-lifecycle.md): request, approval, expiry,
+  and removal lifecycle for scoped exceptions.
+- [`permission-request-bundles.md`](permission-request-bundles.md): request data
+  patterns that compile to normal desired state without adding workflow UI to
+  core.

@@ -21,23 +21,20 @@ The first release focuses on the core guardrail loop:
 
 Recent releases added adoption controls, named LF-Tag expressions, import
 scaffolding, stable plan JSON, selective apply, safety budgets, a small
-current-state provider interface, and effective-access explanations.
+current-state provider interface, effective-access explanations, cache-backed
+live workflows, and data cells filter modeling.
 
 ## Near-Term Priorities
 
 The most useful next improvements are:
 
-- Adoption controls for real accounts: configurable lint severities, ownership
-  boundaries, ignore rules, and import scaffolds that make existing Lake
-  Formation environments reviewable before they are governed.
-- First-class named LF-Tag expression support, including desired/current state,
-  grants by `expression_name`, drift reporting, and conservative
-  create/update/delete planning.
 - Harden the Python-native permission group authoring layer with more
   real-world examples, clearer validation messages, and migration guidance from
   hand-written desired state.
-- More real-world examples for LF-Tag policy grants, table-with-columns grants,
-  and data location permissions.
+- More real-world examples for CI evidence, import adoption, exception
+  lifecycle, Terraform/CDK coexistence, permission request bundles, LF-Tag
+  policy grants, table-with-columns grants, data cells filters, and data
+  location permissions.
 - Broader `explain` coverage from real account snapshots, especially around
   column-level tags, data filters, and data-location-to-table evidence.
 - Better validation messages that point directly at the problematic field in a

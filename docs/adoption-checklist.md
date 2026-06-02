@@ -33,6 +33,9 @@ lfguard import \
 
 Review the output, add `ownership` and `ignore` rules for unmanaged legacy
 surface area, then move the curated result into `policy/desired.json`.
+See [`import-adoption-recipes.md`](import-adoption-recipes.md) for concrete
+import review, gradual ownership, data cells filter, and environment promotion
+recipes.
 
 Before mapping real access policy, read
 [`lake-formation-guide.md`](lake-formation-guide.md) and confirm the team
@@ -209,5 +212,7 @@ Before production use, confirm:
 - Destructive flags are not enabled in routine additive workflows.
 
 For operational examples, see [`recipes.md`](recipes.md),
-[`safety-model.md`](safety-model.md), and
+[`safety-model.md`](safety-model.md),
+[`ci-evidence-workflows.md`](ci-evidence-workflows.md),
+[`exception-lifecycle.md`](exception-lifecycle.md), and
 [`github-actions.md`](github-actions.md).

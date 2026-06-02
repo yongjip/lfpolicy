@@ -31,6 +31,8 @@ its own audit and approval workflow. A common pattern is:
 
 See [`lake-formation-guide.md`](lake-formation-guide.md) for the Lake Formation
 concepts, best practices, and antipatterns that inform this split.
+See [`terraform-cdk-coexistence.md`](terraform-cdk-coexistence.md) for a
+detailed ownership matrix and pipeline pattern.
 
 ## Use raw boto3 when
 

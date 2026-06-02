@@ -1,0 +1,137 @@
+# CI Evidence Workflows
+
+Use `lfguard` CI output as evidence that a Lake Formation policy change was
+reviewed, compared with current state, and safe to apply. The goal is not only
+to fail a job. The goal is to leave artifacts that another reviewer or approval
+system can inspect without opening the AWS console.
+
+## Evidence Bundle
+
+For a normal permission pull request, keep these artifacts:
+
+| Artifact | Command | Why it matters |
+| --- | --- | --- |
+| Generated desired state | `lfguard generate policy.py --output-file policy/desired.json --check` | Proves reviewed Python policy and committed desired JSON are in sync. |
+| Policy summary | `lfguard summary --desired policy/desired.json --output markdown` | Gives reviewers a compact principal/resource/permission inventory. |
+| Check report | `lfguard check --desired policy/desired.json --current-snapshot snapshots/prod-current.json --output markdown` | Proves files parse and lint before drift gates run. |
+| Audit JSON | `lfguard audit ... --output json` | Stable machine-readable drift evidence for dashboards or approval systems. |
+| Plan JSON | `lfguard plan ... --output json` | Stable change evidence with deterministic change IDs and destructive flags. |
+| Explain JSON | `lfguard explain ... --output json` | Shows why a sensitive principal has, or does not have, access. |
+| Apply dry run | `lfguard apply ... --output markdown` | Shows what live apply would do before `--execute` is allowed. |
+
+Store JSON for machines and Markdown for reviewers. SARIF is useful when the
+repository already uses GitHub Code Scanning.
+
+## Pull Request Gate
+
+Use the pull request gate for local policy quality. Avoid AWS credentials on
+untrusted pull requests.
+
+```bash
+mkdir -p artifacts
+
+lfguard generate policy.py --output-file policy/desired.json --check
+
+lfguard summary \
+  --desired policy/desired.json \
+  --output markdown \
+  --output-file artifacts/lfguard-summary.md \
+  --github-summary
+
+lfguard check \
+  --desired policy/desired.json \
+  --fail-on-findings \
+  --output markdown \
+  --output-file artifacts/lfguard-check.md \
+  --github-summary
+```
+
+This gate proves the desired policy is internally valid. It does not prove AWS
+state matches.
+
+## Protected Drift Gate
+
+Run live drift checks on a schedule, on manual dispatch, or after merge to a
+protected branch where GitHub OIDC or another CI identity can assume a read-only
+AWS role.
+
+```bash
+mkdir -p artifacts snapshots
+
+lfguard snapshot \
+  --desired policy/desired.json \
+  --profile prod \
+  --region us-east-1 \
+  --catalog-id 111122223333 \
+  --output-file snapshots/prod-current.json
+
+lfguard audit \
+  --desired policy/desired.json \
+  --current-snapshot snapshots/prod-current.json \
+  --output json \
+  --output-file artifacts/lfguard-audit.json \
+  --fail-on-findings
+```
+
+Use `--current-snapshot` for evidence. A snapshot is immutable and reviewable;
+`--current-cache` is an optimization for repeated live reads, not an approval
+artifact.
+
+## Plan Review Gate
+
+Use plan output when the reviewer needs to approve exact changes:
+
+```bash
+lfguard plan \
+  --desired policy/desired.json \
+  --current-snapshot snapshots/prod-current.json \
+  --output json \
+  --output-file artifacts/lfguard-plan.json \
+  --fail-on-changes
+```
+
+For controlled rollout, save the plan and apply only reviewed IDs:
+
+```bash
+lfguard apply \
+  --plan artifacts/lfguard-plan.json \
+  --only change_001,change_002 \
+  --max-changes 2 \
+  --max-destructive 0 \
+  --execute
+```
+
+This keeps the apply step tied to the reviewed plan instead of recomputing a
+different change set later.
+
+## Explain Evidence
+
+For sensitive tables, filters, or break-glass roles, attach an explain report to
+the change:
+
+```bash
+lfguard explain \
+  --desired policy/desired.json \
+  --current-snapshot snapshots/prod-current.json \
+  --principal arn:aws:iam::111122223333:role/FinanceAnalyst \
+  --database finance_curated \
+  --table invoices \
+  --permissions SELECT \
+  --output json \
+  --output-file artifacts/explain-finance-analyst-invoices.json
+```
+
+Use `--data-cells-filter FILTER` when the reviewed access is row or column
+filtered.
+
+## Artifact Handling
+
+- Upload artifacts with `if: always()` so failed gates still leave evidence.
+- Keep retention long enough for the approval and incident-review window.
+- Do not store broad full-account inventory when a scoped snapshot answers the
+  review question.
+- Keep destructive plans separate from routine additive plans.
+
+See [`github-actions.md`](github-actions.md) and
+[`report-formats.md`](report-formats.md) for copyable GitHub workflows and JSON
+report shapes.
