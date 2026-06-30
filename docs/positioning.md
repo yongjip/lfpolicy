@@ -2,14 +2,16 @@
 
 `lfguard` is built for Lake Formation policy guardrails, not general AWS
 infrastructure provisioning. It is most useful when LF-Tag policy should be
-reviewed as code, checked for drift, and applied conservatively.
+reviewed as code, checked for drift, explained, and attached to approval or
+audit records before any optional apply step.
 
 ## Use lfguard when
 
-- You want pull-request review for LF-Tags, resource tag assignments, and Lake
-  Formation grants.
+- You want pull-request, Jira, service approval, or audit evidence for LF-Tags,
+  resource tag assignments, and Lake Formation grants.
 - You need CI jobs that fail on drift or non-empty change plans.
-- You want a plan before applying permissions to production.
+- You want one review bundle containing lint, audit, plan, and planned grant
+  evidence.
 - You need a small Python API around Lake Formation policy decisions without
   writing one-off boto3 orchestration.
 - You want destructive changes, such as permission revokes, to require explicit
@@ -26,8 +28,10 @@ its own audit and approval workflow. A common pattern is:
 
 1. Provision infrastructure and IAM principals with your infrastructure tool.
 2. Store desired LF-Tag policy in the application or platform repository.
-3. Run `lfguard audit` or `lfguard plan --fail-on-changes` in CI.
-4. Run `lfguard apply` first as a dry run, then with `--execute` after review.
+3. Run `lfguard review` in CI to produce machine-readable JSON plus Markdown
+   evidence.
+4. Run `lfguard apply` first as a dry run, then with `--execute` only after
+   the review bundle is approved.
 
 See [`lake-formation-guide.md`](lake-formation-guide.md) for the Lake Formation
 concepts, best practices, and antipatterns that inform this split.

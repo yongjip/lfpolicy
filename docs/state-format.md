@@ -464,7 +464,7 @@ when the kind itself should also be constrained.
 Use `exceptions` for intentional governance exceptions that should be reviewable
 without globally weakening a lint rule. Exceptions are scoped to one principal
 pattern, may also constrain a resource pattern and permissions, and must include
-a reason, expiry date, and either `approved_by` or `owner`.
+a reason, ticket, owner, approver, and expiry date.
 
 ```json
 {
@@ -481,6 +481,8 @@ a reason, expiry date, and either `approved_by` or `owner`.
         "allow_named_resource_grants"
       ],
       "reason": "break-glass database administration",
+      "ticket": "SEC-123",
+      "owner": "data-platform",
       "expires_at": "2099-12-31",
       "approved_by": "data-governance"
     }
@@ -499,7 +501,8 @@ Supported rules are:
 - `allow_column_filter_mutation`
 
 Expired exceptions do not suppress lint findings and are reported as
-`POLICY_EXCEPTION_EXPIRED`. Undefined LF-Tags, undefined named LF-Tag
+`POLICY_EXCEPTION_EXPIRED`. Exceptions expiring within 14 days are reported as
+`POLICY_EXCEPTION_EXPIRING_SOON`. Undefined LF-Tags, undefined named LF-Tag
 expressions, duplicate identities, and malformed state remain hard errors rather
 than exception-controlled policy choices.
 

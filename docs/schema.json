@@ -546,18 +546,6 @@
     },
     "policyException": {
       "additionalProperties": false,
-      "anyOf": [
-        {
-          "required": [
-            "approved_by"
-          ]
-        },
-        {
-          "required": [
-            "owner"
-          ]
-        }
-      ],
       "properties": {
         "approved_by": {
           "minLength": 1,
@@ -613,13 +601,20 @@
               "uniqueItems": true
             }
           ]
+        },
+        "ticket": {
+          "minLength": 1,
+          "type": "string"
         }
       },
       "required": [
         "principal",
         "rules",
         "reason",
-        "expires_at"
+        "ticket",
+        "expires_at",
+        "approved_by",
+        "owner"
       ],
       "type": "object"
     },

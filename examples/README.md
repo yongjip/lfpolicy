@@ -5,7 +5,7 @@ These files let you try `lfguard` without AWS credentials:
 - `desired.json`: a desired Lake Formation LF-Tag and grant policy.
 - `desired.yaml`: the same desired policy in YAML.
 - `policy-exceptions.json`: a narrow example of exception-controlled risky
-  access with reason, expiry, and approval metadata.
+  access with reason, ticket, owner, approver, and expiry metadata.
 - `policy.py`: a Python-native permission group policy that can generate
   desired state.
 - `policy-from-import.py`: a migration example that keeps an imported desired

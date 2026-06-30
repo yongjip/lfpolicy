@@ -5,6 +5,97 @@ support reports accept `--output text`, `--output json`, `--output markdown`,
 or `--output sarif` where appropriate, and `--output-file PATH` writes the same
 report without printing to stdout.
 
+## Review Bundles
+
+Use review bundles when a service, LLM agent, pull request, Jira ticket, or audit
+log needs one durable evidence directory.
+
+```bash
+lfguard review \
+  --desired desired.json \
+  --current-snapshot current.json \
+  --output-dir review/
+```
+
+The command writes:
+
+```text
+review/
+  manifest.json
+  summary.md
+  summary.json
+  lint.json
+  audit.json
+  plan.json
+  explain.json
+```
+
+`manifest.json` is the bundle index:
+
+```json
+{
+  "schema_version": "lfguard.review.manifest.v1",
+  "lfguard_version": "0.7.0",
+  "status": "review_required",
+  "inputs": {
+    "desired": {
+      "source": "desired_state",
+      "path": "desired.json",
+      "sha256": "..."
+    },
+    "current": {
+      "source": "current_snapshot",
+      "path": "current.json",
+      "sha256": "..."
+    }
+  },
+  "outputs": ["summary.md", "summary.json", "lint.json", "audit.json", "plan.json", "explain.json"]
+}
+```
+
+`summary.json` uses `schema_version: "lfguard.review.summary.v1"` and reports
+`passed`, `review_required`, or `blocked`. A bundle is blocked when lint errors
+or destructive planned changes are present. Audit findings and safe planned
+changes require review without blocking by default.
+
+`explain.json` in a review bundle uses
+`schema_version: "lfguard.review.explain.v1"` and contains planned grant-change
+evidence, not full effective-access decisions:
+
+```json
+{
+  "schema_version": "lfguard.review.explain.v1",
+  "description": "Planned grant-change evidence for review bundles. Use lfguard explain-batch for effective-access decisions.",
+  "summary": {
+    "planned_grant_changes": 1
+  },
+  "grant_changes": [
+    {
+      "change_id": "change_002",
+      "action": "grant.add_permissions",
+      "risk": "safe",
+      "principal": "arn:aws:iam::111122223333:role/Analyst",
+      "resource": {
+        "kind": "lf_tag_policy",
+        "resource_type": "TABLE",
+        "expression": {"domain": ["sales"]}
+      },
+      "requested_permissions": ["SELECT"],
+      "grantable_permissions": [],
+      "before": null,
+      "after": {
+        "principal": "arn:aws:iam::111122223333:role/Analyst",
+        "permissions": ["SELECT"]
+      },
+      "reason": "Principal is missing desired Lake Formation permissions"
+    }
+  ]
+}
+```
+
+Use `lfguard explain-batch` when the question is whether specific principals can
+currently access specific resources.
+
 ## Audit Reports
 
 Use audit reports when you want to detect drift without proposing or applying
@@ -107,6 +198,7 @@ JSON lint reports contain the same severity summary shape as audit reports:
 
 ```json
 {
+  "schema_version": "lfguard.lint.v1",
   "summary": {
     "total": 1,
     "errors": 1,

@@ -438,7 +438,9 @@ class ModelTests(unittest.TestCase):
                         "rules": ["allow_broad_permissions"],
                         "reason": "break-glass admin access",
                         "expires_at": "2099-12-31",
+                        "ticket": "SEC-123",
                         "approved_by": "data-governance",
+                        "owner": "data-platform",
                     }
                 ]
             }
@@ -456,19 +458,43 @@ class ModelTests(unittest.TestCase):
                 "rules": ["allow_broad_permissions"],
                 "reason": "break-glass admin access",
                 "expires_at": "2099-12-31",
+                "ticket": "SEC-123",
                 "approved_by": "data-governance",
+                "owner": "data-platform",
                 "resource": {"kind": "database", "catalog_id": "111111111111", "database": "analytics"},
                 "permissions": ["ALL"],
             },
         )
 
     def test_policy_exception_requires_approval_metadata_and_expiry(self):
-        with self.assertRaisesRegex(ValueError, "approved_by or owner"):
+        with self.assertRaisesRegex(ValueError, "owner"):
             PolicyException(
                 principal="role",
                 rules=("allow_broad_permissions",),
                 reason="temporary",
                 expires_at="2099-12-31",
+                ticket="SEC-123",
+                approved_by="data-governance",
+            )
+
+        with self.assertRaisesRegex(ValueError, "approved_by"):
+            PolicyException(
+                principal="role",
+                rules=("allow_broad_permissions",),
+                reason="temporary",
+                expires_at="2099-12-31",
+                ticket="SEC-123",
+                owner="data-platform",
+            )
+
+        with self.assertRaisesRegex(ValueError, "ticket"):
+            PolicyException(
+                principal="role",
+                rules=("allow_broad_permissions",),
+                reason="temporary",
+                expires_at="2099-12-31",
+                approved_by="data-governance",
+                owner="data-platform",
             )
 
         with self.assertRaisesRegex(ValueError, "YYYY-MM-DD"):
@@ -477,7 +503,9 @@ class ModelTests(unittest.TestCase):
                 rules=("allow_broad_permissions",),
                 reason="temporary",
                 expires_at="tomorrow",
+                ticket="SEC-123",
                 approved_by="data-governance",
+                owner="data-platform",
             )
 
 

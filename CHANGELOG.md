@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.7.0
+
+- Adds `lfguard review` for approval bundles with manifest, summary, lint,
+  audit, plan, and planned grant-change evidence artifacts.
+- Adds `lfguard explain-batch` for batch operational access decisions from a
+  reviewed current-state snapshot.
+- Breaking: policy exceptions now require `ticket`, `owner`, `approved_by`,
+  `reason`, and `expires_at` metadata.
+
 ## 0.6.5
 
 - Models AWS Lake Formation `TableWithColumns.ColumnWildcard` grants in

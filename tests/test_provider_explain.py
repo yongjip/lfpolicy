@@ -1469,6 +1469,95 @@ class ProviderExplainTests(unittest.TestCase):
             self.assertEqual(payload["findings"][0]["id"], "finding_001")
             from_boto3.assert_not_called()
 
+    def test_cli_explain_batch_outputs_json_decisions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            current_path = tmp_path / "current.json"
+            requests_path = tmp_path / "requests.json"
+            current_path.write_text(
+                json.dumps(
+                    {
+                        "grants": [
+                            {
+                                "principal": "role",
+                                "resource": {"kind": "table", "database": "analytics", "table": "orders"},
+                                "permissions": ["SELECT"],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            requests_path.write_text(
+                json.dumps(
+                    {
+                        "requests": [
+                            {
+                                "id": "allowed",
+                                "principal": "role",
+                                "database": "analytics",
+                                "table": "orders",
+                                "permissions": ["SELECT"],
+                            },
+                            {
+                                "id": "denied",
+                                "principal": "other-role",
+                                "database": "analytics",
+                                "table": "orders",
+                                "permissions": ["SELECT"],
+                            },
+                            {
+                                "id": "missing-permission",
+                                "principal": "role",
+                                "database": "analytics",
+                                "table": "orders",
+                                "permissions": ["DESCRIBE"],
+                            },
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "explain-batch",
+                        "--requests",
+                        str(requests_path),
+                        "--current-snapshot",
+                        str(current_path),
+                        "--output",
+                        "json",
+                    ]
+                )
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(payload["schema_version"], "lfguard.explain_batch.v1")
+            self.assertEqual(payload["summary"], {"total": 3, "allowed": 1, "denied": 2})
+            self.assertEqual(
+                [(result["id"], result["decision"]) for result in payload["results"]],
+                [("allowed", "allowed"), ("denied", "denied"), ("missing-permission", "denied")],
+            )
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                fail_exit_code = main(
+                    [
+                        "explain-batch",
+                        "--requests",
+                        str(requests_path),
+                        "--current-snapshot",
+                        str(current_path),
+                        "--output",
+                        "json",
+                        "--fail-on-denied",
+                    ]
+                )
+
+            self.assertEqual(fail_exit_code, 1)
+
     def test_cli_explain_targets_data_cells_filter_from_snapshot(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

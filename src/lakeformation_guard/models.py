@@ -823,6 +823,7 @@ class PolicyException:
     rules: Tuple[str, ...]
     reason: str
     expires_at: str
+    ticket: str = ""
     approved_by: Optional[str] = None
     owner: Optional[str] = None
     resource: Optional[ResourcePattern] = None
@@ -841,10 +842,17 @@ class PolicyException:
 
         approved_by = _optional_str(self.approved_by)
         owner = _optional_str(self.owner)
-        if not approved_by and not owner:
-            raise ValueError("exceptions[] requires approved_by or owner")
+        if not owner:
+            raise ValueError("exceptions[].owner must not be empty")
+        if not approved_by:
+            raise ValueError("exceptions[].approved_by must not be empty")
         object.__setattr__(self, "approved_by", approved_by)
         object.__setattr__(self, "owner", owner)
+
+        ticket = _optional_str(self.ticket)
+        if not ticket:
+            raise ValueError("exceptions[].ticket must not be empty")
+        object.__setattr__(self, "ticket", ticket)
 
         expires_at = _optional_str(self.expires_at)
         if not expires_at:
@@ -877,6 +885,7 @@ class PolicyException:
             rules=_values_from_raw(raw.get("rules", ()), field_name="exceptions[].rules"),
             reason=str(raw.get("reason", "")),
             expires_at=str(raw.get("expires_at", "")),
+            ticket=str(raw.get("ticket", "")),
             approved_by=_resource_name(raw, "approved_by"),
             owner=_resource_name(raw, "owner"),
             resource=resource,
@@ -894,17 +903,19 @@ class PolicyException:
     def is_expired(self, today: Optional[date] = None) -> bool:
         return self.expires_on < (today or date.today())
 
+    def days_until_expiry(self, today: Optional[date] = None) -> int:
+        return (self.expires_on - (today or date.today())).days
+
     def to_dict(self) -> Dict[str, Any]:
         data: Dict[str, Any] = {
             "principal": self.principal,
             "rules": list(self.rules),
             "reason": self.reason,
             "expires_at": self.expires_at,
+            "ticket": self.ticket,
         }
-        if self.approved_by:
-            data["approved_by"] = self.approved_by
-        if self.owner:
-            data["owner"] = self.owner
+        data["approved_by"] = self.approved_by
+        data["owner"] = self.owner
         if self.resource:
             data["resource"] = self.resource.to_dict()
         if self.permissions:

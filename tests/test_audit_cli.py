@@ -1,9 +1,11 @@
 import contextlib
+import hashlib
 import io
 import json
 import os
 import tempfile
 import unittest
+from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -11,6 +13,12 @@ from lakeformation_guard import CurrentState, DesiredState, __version__, audit, 
 from lakeformation_guard.aws import ApplyResult
 from lakeformation_guard.aws_permissions import IAMActionCheck, IAMPermissionCheckReport
 from lakeformation_guard.cli import main
+
+
+def _sha256(path):
+    digest = hashlib.sha256()
+    digest.update(path.read_bytes())
+    return digest.hexdigest()
 
 
 class AuditCliTests(unittest.TestCase):
@@ -131,6 +139,264 @@ class AuditCliTests(unittest.TestCase):
                 ["lf_tag.create", "grant.add_permissions"],
             )
             self.assertEqual([change["id"] for change in payload["changes"]], ["change_001", "change_002"])
+
+    def test_cli_review_writes_bundle_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            desired_path = tmp_path / "desired.json"
+            current_path = tmp_path / "current.json"
+            review_dir = tmp_path / "review"
+            desired_path.write_text(
+                json.dumps(
+                    {
+                        "lf_tags": {"sensitivity": ["internal"]},
+                        "grants": [
+                            {
+                                "principal": "role",
+                                "resource": {
+                                    "kind": "lf_tag_policy",
+                                    "resource_type": "TABLE",
+                                    "expression": {"sensitivity": ["internal"]},
+                                },
+                                "permissions": ["SELECT"],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            current_path.write_text(json.dumps({"lf_tags": {}, "grants": []}), encoding="utf-8")
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "review",
+                        "--desired",
+                        str(desired_path),
+                        "--current-snapshot",
+                        str(current_path),
+                        "--output-dir",
+                        str(review_dir),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("Wrote lfguard review bundle", stdout.getvalue())
+            self.assertEqual(
+                sorted(path.name for path in review_dir.iterdir()),
+                [
+                    "audit.json",
+                    "explain.json",
+                    "lint.json",
+                    "manifest.json",
+                    "plan.json",
+                    "summary.json",
+                    "summary.md",
+                ],
+            )
+            manifest = json.loads((review_dir / "manifest.json").read_text(encoding="utf-8"))
+            summary = json.loads((review_dir / "summary.json").read_text(encoding="utf-8"))
+            lint_payload = json.loads((review_dir / "lint.json").read_text(encoding="utf-8"))
+            explain_payload = json.loads((review_dir / "explain.json").read_text(encoding="utf-8"))
+
+            self.assertEqual(manifest["schema_version"], "lfguard.review.manifest.v1")
+            self.assertEqual(manifest["inputs"]["desired"]["sha256"], _sha256(desired_path))
+            self.assertEqual(manifest["inputs"]["current"]["source"], "current_snapshot")
+            self.assertEqual(manifest["inputs"]["current"]["sha256"], _sha256(current_path))
+            self.assertEqual(summary["schema_version"], "lfguard.review.summary.v1")
+            self.assertEqual(summary["status"], "review_required")
+            self.assertEqual(lint_payload["schema_version"], "lfguard.lint.v1")
+            self.assertEqual(explain_payload["schema_version"], "lfguard.review.explain.v1")
+            self.assertEqual(explain_payload["summary"], {"planned_grant_changes": 1})
+            self.assertIn("Planned grant-change evidence", explain_payload["description"])
+            self.assertEqual(
+                [(change["change_id"], change["action"], change["risk"]) for change in explain_payload["grant_changes"]],
+                [("change_002", "grant.add_permissions", "safe")],
+            )
+            self.assertEqual(explain_payload["grant_changes"][0]["requested_permissions"], ["SELECT"])
+
+    def test_cli_review_status_passed_for_clean_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            desired_path = tmp_path / "desired.json"
+            current_path = tmp_path / "current.json"
+            review_dir = tmp_path / "review"
+            state = {"lf_tags": {"sensitivity": ["internal"]}, "grants": []}
+            desired_path.write_text(json.dumps(state), encoding="utf-8")
+            current_path.write_text(json.dumps(state), encoding="utf-8")
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                exit_code = main(
+                    [
+                        "review",
+                        "--desired",
+                        str(desired_path),
+                        "--current-snapshot",
+                        str(current_path),
+                        "--output-dir",
+                        str(review_dir),
+                    ]
+                )
+
+            summary = json.loads((review_dir / "summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(summary["status"], "passed")
+
+    def test_cli_review_status_blocked_for_lint_errors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            desired_path = tmp_path / "desired.json"
+            current_path = tmp_path / "current.json"
+            review_dir = tmp_path / "review"
+            state = {
+                "grants": [
+                    {
+                        "principal": "IAM_ALLOWED_PRINCIPALS",
+                        "resource": {"kind": "database", "database": "analytics"},
+                        "permissions": ["ALL"],
+                    }
+                ]
+            }
+            desired_path.write_text(json.dumps(state), encoding="utf-8")
+            current_path.write_text(json.dumps(state), encoding="utf-8")
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                exit_code = main(
+                    [
+                        "review",
+                        "--desired",
+                        str(desired_path),
+                        "--current-snapshot",
+                        str(current_path),
+                        "--output-dir",
+                        str(review_dir),
+                        "--fail-on-blocked",
+                    ]
+                )
+
+            summary = json.loads((review_dir / "summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(exit_code, 1)
+            self.assertEqual(summary["status"], "blocked")
+
+    def test_cli_review_status_blocked_for_destructive_plan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            desired_path = tmp_path / "desired.json"
+            current_path = tmp_path / "current.json"
+            review_dir = tmp_path / "review"
+            desired_path.write_text(json.dumps({"lf_tags": {"sensitivity": ["internal"]}, "grants": []}), encoding="utf-8")
+            current_path.write_text(
+                json.dumps(
+                    {
+                        "lf_tags": {"sensitivity": ["internal"]},
+                        "grants": [
+                            {
+                                "principal": "role",
+                                "resource": {"kind": "lf_tag_policy", "resource_type": "TABLE", "expression": {"sensitivity": ["internal"]}},
+                                "permissions": ["SELECT"],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                exit_code = main(
+                    [
+                        "review",
+                        "--desired",
+                        str(desired_path),
+                        "--current-snapshot",
+                        str(current_path),
+                        "--output-dir",
+                        str(review_dir),
+                        "--allow-permission-revokes",
+                        "--fail-on-blocked",
+                    ]
+                )
+
+            summary = json.loads((review_dir / "summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(exit_code, 1)
+            self.assertEqual(summary["status"], "blocked")
+            self.assertEqual(summary["summary"]["plan"]["destructive"], 1)
+
+    def test_cli_review_manifest_records_current_cache_provenance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            desired_path = tmp_path / "desired.json"
+            cache_path = tmp_path / "current-cache.json"
+            review_dir = tmp_path / "review"
+            desired_path.write_text(json.dumps({"lf_tags": {"sensitivity": ["internal"]}, "grants": []}), encoding="utf-8")
+            current = CurrentState.from_dict({"lf_tags": {"sensitivity": ["internal"]}, "grants": []})
+
+            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter") as adapter_class:
+                adapter_class.from_boto3.return_value.load_current_state_for.return_value = current
+                with contextlib.redirect_stdout(io.StringIO()):
+                    exit_code = main(
+                        [
+                            "review",
+                            "--desired",
+                            str(desired_path),
+                            "--current-cache",
+                            str(cache_path),
+                            "--profile",
+                            "prod",
+                            "--region",
+                            "us-east-1",
+                            "--catalog-id",
+                            "111122223333",
+                            "--output-dir",
+                            str(review_dir),
+                        ]
+                    )
+
+            manifest = json.loads((review_dir / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(manifest["inputs"]["current"]["source"], "current_cache")
+            self.assertEqual(manifest["inputs"]["current"]["path"], str(cache_path))
+            self.assertEqual(manifest["inputs"]["current"]["sha256"], _sha256(cache_path))
+            self.assertEqual(manifest["inputs"]["current"]["profile"], "prod")
+
+    def test_cli_review_manifest_records_live_current_provenance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            desired_path = tmp_path / "desired.json"
+            review_dir = tmp_path / "review"
+            desired_path.write_text(json.dumps({"lf_tags": {"sensitivity": ["internal"]}, "grants": []}), encoding="utf-8")
+            current = CurrentState.from_dict({"lf_tags": {"sensitivity": ["internal"]}, "grants": []})
+
+            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter") as adapter_class:
+                adapter_class.from_boto3.return_value.load_current_state_for.return_value = current
+                with contextlib.redirect_stdout(io.StringIO()):
+                    exit_code = main(
+                        [
+                            "review",
+                            "--desired",
+                            str(desired_path),
+                            "--profile",
+                            "prod",
+                            "--region",
+                            "us-east-1",
+                            "--catalog-id",
+                            "111122223333",
+                            "--output-dir",
+                            str(review_dir),
+                        ]
+                    )
+
+            manifest = json.loads((review_dir / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(
+                manifest["inputs"]["current"],
+                {
+                    "source": "aws_live",
+                    "profile": "prod",
+                    "region": "us-east-1",
+                    "catalog_id": "111122223333",
+                },
+            )
 
     def test_cli_plan_outputs_markdown(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2030,7 +2296,9 @@ policy.group("dataconsumer", reader().where(domain="finance"))
                         "rules": ["allow_broad_permissions", "allow_named_resource_grants"],
                         "reason": "break-glass database administration",
                         "expires_at": "2099-12-31",
+                        "ticket": "SEC-123",
                         "approved_by": "data-governance",
+                        "owner": "data-platform",
                     }
                 ],
             }
@@ -2062,6 +2330,8 @@ policy.group("dataconsumer", reader().where(domain="finance"))
                         "rules": ["allow_broad_permissions", "allow_named_resource_grants"],
                         "reason": "old temporary access",
                         "expires_at": "2000-01-01",
+                        "ticket": "SEC-456",
+                        "approved_by": "data-governance",
                         "owner": "data-platform",
                     }
                 ],
@@ -2078,6 +2348,30 @@ policy.group("dataconsumer", reader().where(domain="finance"))
                 "NAMED_RESOURCE_GRANT_REVIEW",
             ],
         )
+
+    def test_lint_warns_when_policy_exception_is_expiring_soon(self):
+        expires_at = (date.today() + timedelta(days=7)).isoformat()
+        desired = DesiredState.from_dict(
+            {
+                "lf_tags": {"domain": ["sales"]},
+                "exceptions": [
+                    {
+                        "principal": "arn:aws:iam::111122223333:role/DataAdmin",
+                        "rules": ["allow_broad_permissions"],
+                        "reason": "temporary migration exception",
+                        "ticket": "SEC-789",
+                        "expires_at": expires_at,
+                        "approved_by": "data-governance",
+                        "owner": "data-platform",
+                    }
+                ],
+            }
+        )
+
+        findings = lint_desired(desired)
+
+        self.assertEqual([finding.code for finding in findings], ["POLICY_EXCEPTION_EXPIRING_SOON"])
+        self.assertEqual(findings[0].details["days_until_expiry"], 7)
 
     def test_lint_desired_api_blocks_partial_column_permission_conflicts(self):
         desired = DesiredState.from_dict(

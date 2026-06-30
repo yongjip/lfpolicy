@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import platform
 import sys
 from collections import Counter
+from datetime import datetime, timezone
 from importlib import metadata, util
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
@@ -50,6 +52,13 @@ from .state_index import (
 )
 
 
+LINT_SCHEMA_VERSION = "lfguard.lint.v1"
+REVIEW_MANIFEST_SCHEMA_VERSION = "lfguard.review.manifest.v1"
+REVIEW_SUMMARY_SCHEMA_VERSION = "lfguard.review.summary.v1"
+REVIEW_EXPLAIN_SCHEMA_VERSION = "lfguard.review.explain.v1"
+EXPLAIN_BATCH_SCHEMA_VERSION = "lfguard.explain_batch.v1"
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -77,8 +86,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return _cmd_check(args)
         if args.command == "plan":
             return _cmd_plan(args)
+        if args.command == "review":
+            return _cmd_review(args)
         if args.command == "explain":
             return _cmd_explain(args)
+        if args.command == "explain-batch":
+            return _cmd_explain_batch(args)
         if args.command == "audit":
             return _cmd_audit(args)
         if args.command == "lint":
@@ -325,6 +338,18 @@ def build_parser() -> argparse.ArgumentParser:
     _add_plan_option_args(plan_parser)
     plan_parser.add_argument("--fail-on-changes", action="store_true", help="Exit with status 1 when the plan contains any change.")
 
+    review_parser = subparsers.add_parser(
+        "review",
+        help="Write a review bundle with lint, audit, plan, planned grant evidence, and summaries.",
+    )
+    _add_state_args(review_parser)
+    _add_aws_args(review_parser)
+    _add_current_cache_args(review_parser)
+    _add_plan_option_args(review_parser)
+    review_parser.add_argument("--output-dir", required=True, help="Directory to write review bundle files into.")
+    review_parser.add_argument("--force", action="store_true", help="Overwrite existing review bundle files.")
+    review_parser.add_argument("--fail-on-blocked", action="store_true", help="Exit with status 1 when the review status is blocked.")
+
     explain_parser = subparsers.add_parser(
         "explain",
         help="Explain why a principal has or lacks access to a resource.",
@@ -358,6 +383,22 @@ def build_parser() -> argparse.ArgumentParser:
     _add_output_arg(explain_parser, markdown=True)
     _add_report_output_file_arg(explain_parser)
     _add_github_summary_arg(explain_parser)
+
+    explain_batch_parser = subparsers.add_parser(
+        "explain-batch",
+        help="Explain multiple access requests from one current-state snapshot.",
+    )
+    explain_batch_parser.add_argument("--requests", required=True, help="JSON file containing access requests.")
+    explain_batch_parser.add_argument("--desired", help="Optional desired state JSON/YAML file for missing desired-grant evidence.")
+    explain_batch_parser.add_argument(
+        "--current-snapshot",
+        help="Current state JSON/YAML snapshot. When omitted, live AWS state is loaded with boto3.",
+    )
+    _add_aws_args(explain_batch_parser)
+    _add_current_cache_args(explain_batch_parser)
+    _add_output_arg(explain_batch_parser, markdown=True)
+    _add_report_output_file_arg(explain_batch_parser)
+    explain_batch_parser.add_argument("--fail-on-denied", action="store_true", help="Exit with status 1 when any request is denied.")
 
     snapshot_parser = subparsers.add_parser("snapshot", help="Export live AWS state for a desired policy scope.")
     snapshot_parser.add_argument("--desired", required=True, help="Desired state JSON/YAML file that defines the snapshot scope.")
@@ -433,6 +474,27 @@ def _cmd_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_review(args: argparse.Namespace) -> int:
+    desired = load_desired(args.desired)
+    current = _load_current(args, desired)
+    lint_findings = lint_desired(desired)
+    audit_findings = audit(desired, current)
+    change_plan = plan(desired, current, _plan_options(args))
+    bundle = _build_review_bundle(
+        args,
+        desired=desired,
+        current=current,
+        lint_findings=lint_findings,
+        audit_findings=audit_findings,
+        change_plan=change_plan,
+    )
+    _write_review_bundle(Path(args.output_dir), bundle, force=args.force)
+    print("Wrote lfguard review bundle to {}.".format(Path(args.output_dir)))
+    if args.fail_on_blocked and bundle["summary"]["status"] == "blocked":
+        return 1
+    return 0
+
+
 def _cmd_explain(args: argparse.Namespace) -> int:
     desired = load_desired(args.desired)
     resource = _explain_resource(args)
@@ -448,6 +510,20 @@ def _cmd_explain(args: argparse.Namespace) -> int:
     if args.github_summary:
         _append_github_summary(_render_explain_markdown(report))
     _emit_output(_render_explain(report, args.output), args.output_file, label="explain report")
+    return 0
+
+
+def _cmd_explain_batch(args: argparse.Namespace) -> int:
+    requests = _load_access_requests(args.requests)
+    desired = load_desired(args.desired) if args.desired else DesiredState.empty()
+    provider_scope = desired
+    for request in requests:
+        provider_scope = _desired_with_explain_scope(provider_scope, request["principal"], request["resource"])
+    current = _current_state_provider(args).load_current_state_for(provider_scope)
+    payload = _explain_batch_report(desired, current, requests)
+    _emit_output(_render_explain_batch(payload, args.output), args.output_file, label="explain-batch report")
+    if args.fail_on_denied and payload["summary"]["denied"]:
+        return 1
     return 0
 
 
@@ -815,6 +891,236 @@ def _cmd_apply(args: argparse.Namespace) -> int:
     return 0
 
 
+def _build_review_bundle(
+    args: argparse.Namespace,
+    *,
+    desired: DesiredState,
+    current: CurrentState,
+    lint_findings: Tuple[LintFinding, ...],
+    audit_findings: Tuple[AuditFinding, ...],
+    change_plan: Plan,
+) -> dict:
+    lint_payload = _lint_report_payload(lint_findings)
+    audit_payload = _audit_report_payload(audit_findings)
+    plan_payload = change_plan.to_dict()
+    explain_payload = _review_explain_payload(change_plan)
+    summary_payload = _review_summary_payload(lint_payload, audit_payload, plan_payload, explain_payload)
+    manifest_payload = _review_manifest_payload(
+        args,
+        desired=desired,
+        current=current,
+        summary=summary_payload,
+    )
+    return {
+        "manifest": manifest_payload,
+        "summary": summary_payload,
+        "files": {
+            "manifest.json": dumps_json(manifest_payload),
+            "summary.json": dumps_json(summary_payload),
+            "summary.md": _render_review_summary_markdown(summary_payload),
+            "lint.json": dumps_json(lint_payload),
+            "audit.json": dumps_json(audit_payload),
+            "plan.json": dumps_json(plan_payload),
+            "explain.json": dumps_json(explain_payload),
+        },
+    }
+
+
+def _write_review_bundle(output_dir: Path, bundle: Mapping[str, Any], *, force: bool) -> None:
+    files = bundle["files"]
+    existing = [output_dir / name for name in files if (output_dir / name).exists()]
+    if existing and not force:
+        raise RuntimeError(
+            "{} already exists; pass --force to overwrite review bundle files".format(
+                ", ".join(str(path) for path in existing)
+            )
+        )
+    for name, text in files.items():
+        _write_text_file(output_dir / name, text, "review bundle file")
+
+
+def _review_manifest_payload(
+    args: argparse.Namespace,
+    *,
+    desired: DesiredState,
+    current: CurrentState,
+    summary: Mapping[str, Any],
+) -> dict:
+    inputs = {
+        "desired": _review_input_file(args.desired, "desired_state"),
+        "current": _review_current_input(args),
+    }
+    return {
+        "schema_version": REVIEW_MANIFEST_SCHEMA_VERSION,
+        "lfguard_version": __version__,
+        "created_at": _utc_now_iso(),
+        "status": summary["status"],
+        "inputs": inputs,
+        "input_summary": {
+            "desired": _state_summary(desired),
+            "current": _state_summary(current),
+        },
+        "plan_options": _plan_options_payload(args),
+        "outputs": [
+            "summary.md",
+            "summary.json",
+            "lint.json",
+            "audit.json",
+            "plan.json",
+            "explain.json",
+        ],
+    }
+
+
+def _review_input_file(path: str, source: str) -> dict:
+    return {
+        "source": source,
+        "path": path,
+        "sha256": _file_sha256(Path(path)),
+    }
+
+
+def _review_current_input(args: argparse.Namespace) -> dict:
+    if args.current_snapshot:
+        return _review_input_file(args.current_snapshot, "current_snapshot")
+    if args.current_cache:
+        data = {
+            "source": "current_cache",
+            "path": args.current_cache,
+            "profile": args.profile,
+            "region": args.region,
+            "catalog_id": args.catalog_id,
+        }
+        cache_path = Path(args.current_cache)
+        if cache_path.exists():
+            data["sha256"] = _file_sha256(cache_path)
+        return data
+    return {
+        "source": "aws_live",
+        "profile": args.profile,
+        "region": args.region,
+        "catalog_id": args.catalog_id,
+    }
+
+
+def _file_sha256(path: Path) -> str:
+    try:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+    except OSError as exc:
+        raise RuntimeError("Could not hash {}: {}".format(path, exc)) from exc
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _plan_options_payload(args: argparse.Namespace) -> dict:
+    return {
+        "allow_lf_tag_value_removals": bool(args.allow_lf_tag_value_removals),
+        "allow_lf_tag_expression_updates": bool(args.allow_lf_tag_expression_updates),
+        "allow_lf_tag_expression_deletes": bool(args.allow_lf_tag_expression_deletes),
+        "allow_data_cells_filter_updates": bool(args.allow_data_cells_filter_updates),
+        "allow_data_cells_filter_deletes": bool(args.allow_data_cells_filter_deletes),
+        "allow_resource_tag_removals": bool(args.allow_resource_tag_removals),
+        "allow_permission_revokes": bool(args.allow_permission_revokes),
+    }
+
+
+def _review_summary_payload(
+    lint_payload: Mapping[str, Any],
+    audit_payload: Mapping[str, Any],
+    plan_payload: Mapping[str, Any],
+    explain_payload: Mapping[str, Any],
+) -> dict:
+    lint_summary = lint_payload["summary"]
+    audit_summary = audit_payload["summary"]
+    plan_summary = plan_payload["summary"]
+    status = _review_status(lint_summary, audit_summary, plan_summary)
+    return {
+        "schema_version": REVIEW_SUMMARY_SCHEMA_VERSION,
+        "status": status,
+        "summary": {
+            "lint": lint_summary,
+            "audit": audit_summary,
+            "plan": plan_summary,
+            "explain": explain_payload["summary"],
+        },
+        "artifacts": {
+            "lint": "lint.json",
+            "audit": "audit.json",
+            "plan": "plan.json",
+            "explain": "explain.json",
+        },
+    }
+
+
+def _review_status(
+    lint_summary: Mapping[str, int],
+    audit_summary: Mapping[str, int],
+    plan_summary: Mapping[str, int],
+) -> str:
+    if lint_summary["errors"] or plan_summary["destructive"]:
+        return "blocked"
+    if lint_summary["warnings"] or audit_summary["total"] or plan_summary["total"]:
+        return "review_required"
+    return "passed"
+
+
+def _review_explain_payload(change_plan: Plan) -> dict:
+    grant_changes = []
+    for change in change_plan.changes:
+        if not change.action.startswith("grant."):
+            continue
+        grant_changes.append(
+            {
+                "change_id": change.id,
+                "action": change.action,
+                "target": change.target,
+                "reason": change.reason,
+                "risk": change.risk,
+                "principal": change.principal,
+                "resource": change.resource,
+                "requested_permissions": list(change.payload.get("permissions", ())),
+                "grantable_permissions": list(change.payload.get("grantable_permissions", ())),
+                "before": change.to_dict().get("before"),
+                "after": change.to_dict().get("after"),
+            }
+        )
+    return {
+        "schema_version": REVIEW_EXPLAIN_SCHEMA_VERSION,
+        "description": "Planned grant-change evidence for review bundles. Use lfguard explain-batch for effective-access decisions.",
+        "summary": {
+            "planned_grant_changes": len(grant_changes),
+        },
+        "grant_changes": grant_changes,
+    }
+
+
+def _render_review_summary_markdown(payload: Mapping[str, Any]) -> str:
+    summary = payload["summary"]
+    lines = [
+        "# lfguard review",
+        "",
+        "- Status: `{}`".format(payload["status"]),
+        "- Lint findings: {total} total, {errors} error(s), {warnings} warning(s)".format(**summary["lint"]),
+        "- Audit findings: {total} total, {errors} error(s), {warnings} warning(s)".format(**summary["audit"]),
+        "- Plan changes: {total} total, {safe} safe, {destructive} destructive".format(**summary["plan"]),
+        "- Planned grant changes: {planned_grant_changes}".format(**summary["explain"]),
+        "",
+        "## Artifacts",
+        "",
+        "| Artifact | File |",
+        "| --- | --- |",
+    ]
+    for name, path in payload["artifacts"].items():
+        lines.append("| {} | `{}` |".format(_markdown_cell(name), _markdown_cell(path)))
+    return "\n".join(lines) + "\n"
+
+
 def _add_state_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--desired", required=True, help="Desired state JSON/YAML file.")
     parser.add_argument(
@@ -985,6 +1291,182 @@ def _desired_with_explain_scope(desired: DesiredState, principal: str, resource:
         grants=tuple(grants),
         config=desired.config,
     )
+
+
+def _load_access_requests(path: str) -> Tuple[dict, ...]:
+    request_path = Path(path)
+    try:
+        data = json.loads(request_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise StateFormatError("Could not read {}: {}".format(request_path, exc)) from exc
+    except ValueError as exc:
+        raise StateFormatError("Could not parse {}: {}".format(request_path, exc)) from exc
+    if isinstance(data, Mapping):
+        raw_requests = data.get("requests")
+    else:
+        raw_requests = data
+    if not isinstance(raw_requests, Iterable) or isinstance(raw_requests, (str, bytes, Mapping)):
+        raise StateFormatError("{} must contain a requests array".format(request_path))
+    requests = []
+    for index, raw in enumerate(raw_requests, start=1):
+        if not isinstance(raw, Mapping):
+            raise StateFormatError("requests[] must contain objects")
+        request = _access_request_from_raw(raw, index)
+        requests.append(request)
+    if not requests:
+        raise StateFormatError("{} must contain at least one request".format(request_path))
+    return tuple(requests)
+
+
+def _access_request_from_raw(raw: Mapping[str, Any], index: int) -> dict:
+    principal = str(raw.get("principal", "")).strip()
+    if not principal:
+        raise StateFormatError("requests[{}].principal must not be empty".format(index - 1))
+    resource = _access_request_resource(raw, index)
+    return {
+        "id": str(raw.get("id") or "request_{:03d}".format(index)),
+        "principal": principal,
+        "resource": resource,
+        "permissions": _access_request_permissions(raw.get("permissions", ())),
+    }
+
+
+def _access_request_resource(raw: Mapping[str, Any], index: int) -> ResourceRef:
+    if raw.get("resource") is not None:
+        resource_raw = raw["resource"]
+        if not isinstance(resource_raw, Mapping):
+            raise StateFormatError("requests[{}].resource must be an object".format(index - 1))
+        resource_data = dict(resource_raw)
+        if raw.get("catalog_id") and "catalog_id" not in resource_data and "catalog" not in resource_data:
+            resource_data["catalog_id"] = raw["catalog_id"]
+        return ResourceRef.from_dict(resource_data)
+    request_args = argparse.Namespace(
+        location=raw.get("location"),
+        database=raw.get("database"),
+        table=raw.get("table"),
+        columns=_access_request_columns(raw.get("columns")),
+        data_cells_filter=raw.get("data_cells_filter") or raw.get("filter") or raw.get("filter_name"),
+        catalog_id=raw.get("catalog_id"),
+    )
+    try:
+        return _explain_resource(request_args)
+    except RuntimeError as exc:
+        raise StateFormatError("requests[{}]: {}".format(index - 1, exc)) from exc
+
+
+def _access_request_columns(raw: Any) -> Optional[str]:
+    if raw in (None, "", (), []):
+        return None
+    if isinstance(raw, str):
+        return raw
+    if isinstance(raw, Mapping):
+        raise StateFormatError("requests[].columns must be a string or array")
+    if isinstance(raw, Iterable):
+        return ",".join(str(value) for value in raw)
+    raise StateFormatError("requests[].columns must be a string or array")
+
+
+def _access_request_permissions(raw: Any) -> Tuple[str, ...]:
+    if raw in (None, "", (), []):
+        return ()
+    if isinstance(raw, str):
+        return _parse_csv_option(raw, "requests[].permissions")
+    if isinstance(raw, Mapping):
+        raise StateFormatError("requests[].permissions must be a string or array")
+    if isinstance(raw, Iterable):
+        return tuple(str(value).strip().upper() for value in raw if str(value).strip())
+    raise StateFormatError("requests[].permissions must be a string or array")
+
+
+def _explain_batch_report(desired: DesiredState, current: CurrentState, requests: Tuple[dict, ...]) -> dict:
+    results = []
+    for request in requests:
+        report = explain_access(
+            desired,
+            current,
+            principal=request["principal"],
+            resource=request["resource"],
+            permissions=request["permissions"],
+        )
+        decision = _explain_decision(report)
+        results.append(
+            {
+                "id": request["id"],
+                "decision": decision,
+                "principal": request["principal"],
+                "resource": request["resource"].to_dict(),
+                "requested_permissions": list(request["permissions"]),
+                "explain": report.to_dict(),
+            }
+        )
+    return {
+        "schema_version": EXPLAIN_BATCH_SCHEMA_VERSION,
+        "summary": {
+            "total": len(results),
+            "allowed": sum(1 for result in results if result["decision"] == "allowed"),
+            "denied": sum(1 for result in results if result["decision"] == "denied"),
+        },
+        "results": results,
+    }
+
+
+def _explain_decision(report: ExplainReport) -> str:
+    if report.summary()["matched"]:
+        return "allowed"
+    return "denied"
+
+
+def _render_explain_batch(payload: Mapping[str, Any], output: str) -> str:
+    if output == "json":
+        return dumps_json(payload)
+    if output == "markdown":
+        return _render_explain_batch_markdown(payload)
+    summary = payload["summary"]
+    lines = [
+        "Explain batch: {total} request(s), {allowed} allowed, {denied} denied.".format(**summary)
+    ]
+    for result in payload["results"]:
+        resource = ResourceRef.from_dict(result["resource"]).identity
+        permissions = ", ".join(result["requested_permissions"]) or "any"
+        lines.append(
+            "- [{decision}] {id} {principal} -> {resource} ({permissions})".format(
+                decision=result["decision"],
+                id=result["id"],
+                principal=result["principal"],
+                resource=resource,
+                permissions=permissions,
+            )
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _render_explain_batch_markdown(payload: Mapping[str, Any]) -> str:
+    summary = payload["summary"]
+    lines = [
+        "### lfguard explain-batch",
+        "",
+        "- Total requests: {total}".format(**summary),
+        "- Allowed: {allowed}".format(**summary),
+        "- Denied: {denied}".format(**summary),
+        "",
+        "| ID | Decision | Principal | Resource | Permissions | Matched Findings |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for result in payload["results"]:
+        explain = result["explain"]
+        resource = ResourceRef.from_dict(result["resource"]).identity
+        permissions = ", ".join(result["requested_permissions"]) or "any"
+        lines.append(
+            "| {id} | {decision} | {principal} | {resource} | {permissions} | {matched} |".format(
+                id=_markdown_cell(result["id"]),
+                decision=_markdown_cell(result["decision"]),
+                principal=_markdown_cell(result["principal"]),
+                resource=_markdown_cell(resource),
+                permissions=_markdown_cell(permissions),
+                matched=explain["summary"]["matched"],
+            )
+        )
+    return "\n".join(lines) + "\n"
 
 
 def _explain_resource_scope(resource: ResourceRef) -> Tuple[ResourceRef, ...]:
@@ -1590,7 +2072,9 @@ _COMPLETION_COMMANDS = (
     "summary",
     "audit",
     "plan",
+    "review",
     "explain",
+    "explain-batch",
     "snapshot",
     "import",
     "apply",
@@ -1688,6 +2172,27 @@ _COMPLETION_OPTIONS = {
         "--fail-on-changes",
         "--help",
     ),
+    "review": (
+        "--desired",
+        "--current-snapshot",
+        "--profile",
+        "--region",
+        "--catalog-id",
+        "--current-cache",
+        "--refresh-current-cache",
+        "--current-cache-max-age",
+        "--allow-lf-tag-value-removals",
+        "--allow-lf-tag-expression-updates",
+        "--allow-lf-tag-expression-deletes",
+        "--allow-data-cells-filter-updates",
+        "--allow-data-cells-filter-deletes",
+        "--allow-resource-tag-removals",
+        "--allow-permission-revokes",
+        "--output-dir",
+        "--force",
+        "--fail-on-blocked",
+        "--help",
+    ),
     "explain": (
         "--desired",
         "--current-snapshot",
@@ -1707,6 +2212,21 @@ _COMPLETION_OPTIONS = {
         "--output",
         "--output-file",
         "--github-summary",
+        "--help",
+    ),
+    "explain-batch": (
+        "--requests",
+        "--desired",
+        "--current-snapshot",
+        "--profile",
+        "--region",
+        "--catalog-id",
+        "--current-cache",
+        "--refresh-current-cache",
+        "--current-cache-max-age",
+        "--output",
+        "--output-file",
+        "--fail-on-denied",
         "--help",
     ),
     "snapshot": ("--desired", "--profile", "--region", "--catalog-id", "--output-file", "--help"),
@@ -1960,12 +2480,7 @@ def _render_lint_findings(findings: Iterable[LintFinding], output: str, *, sarif
     findings = tuple(findings)
     summary = _lint_finding_summary(findings)
     if output == "json":
-        return dumps_json(
-            {
-                "summary": summary,
-                "findings": [finding.to_dict() for finding in findings],
-            }
-        )
+        return dumps_json(_lint_report_payload(findings))
     if output == "markdown":
         return _render_lint_findings_markdown(findings)
     if output == "sarif":
@@ -2102,6 +2617,15 @@ def _lint_finding_summary(findings: Iterable[LintFinding]) -> dict:
         "total": len(findings),
         "errors": sum(1 for finding in findings if finding.severity == "error"),
         "warnings": sum(1 for finding in findings if finding.severity == "warning"),
+    }
+
+
+def _lint_report_payload(findings: Iterable[LintFinding]) -> dict:
+    findings = tuple(findings)
+    return {
+        "schema_version": LINT_SCHEMA_VERSION,
+        "summary": _lint_finding_summary(findings),
+        "findings": [finding.to_dict() for finding in findings],
     }
 
 
@@ -2388,6 +2912,11 @@ jobs:
       - name: Audit and plan drift
         run: |
           set +e
+
+          lfguard review \\
+            --desired {desired_path} \\
+            --current-snapshot snapshots/current.json \\
+            --output-dir artifacts/review
 
           lfguard audit \\
             --desired {desired_path} \\
@@ -2943,6 +3472,11 @@ jobs:
         run: |
           mkdir -p artifacts
 
+          lfguard review \\
+            --desired {desired_path} \\
+            --current-snapshot {current_path} \\
+            --output-dir artifacts/review
+
           lfguard check \\
             --desired {desired_path} \\
             --current-snapshot {current_path} \\
@@ -3022,6 +3556,15 @@ deliberately incomplete current-state snapshot. It is safe to use without AWS
 credentials.
 
 {both_note}{yaml_note}{ci_note}
+## Write A Review Bundle
+
+```bash
+lfguard review \\
+  --desired {desired_name} \\
+  --current-snapshot {current_name} \\
+  --output-dir review
+```
+
 ## Check State Files
 
 ```bash
@@ -3328,13 +3871,7 @@ def _render_findings(findings: Iterable[AuditFinding], output: str, *, sarif_uri
     findings = tuple(findings)
     summary = _finding_summary(findings)
     if output == "json":
-        return dumps_json(
-            {
-                "schema_version": AUDIT_SCHEMA_VERSION,
-                "summary": summary,
-                "findings": [finding.to_dict() for finding in findings],
-            }
-        )
+        return dumps_json(_audit_report_payload(findings))
     if output == "sarif":
         return dumps_json(_findings_to_sarif(findings, sarif_uri=sarif_uri))
     if output == "markdown":
@@ -3459,6 +3996,15 @@ def _finding_summary(findings: Iterable[AuditFinding]) -> dict:
         "total": len(findings),
         "errors": sum(1 for finding in findings if finding.severity == "error"),
         "warnings": sum(1 for finding in findings if finding.severity == "warning"),
+    }
+
+
+def _audit_report_payload(findings: Iterable[AuditFinding]) -> dict:
+    findings = tuple(findings)
+    return {
+        "schema_version": AUDIT_SCHEMA_VERSION,
+        "summary": _finding_summary(findings),
+        "findings": [finding.to_dict() for finding in findings],
     }
 
 

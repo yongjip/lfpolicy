@@ -8,9 +8,10 @@ Use `lfguard --help` or `lfguard <command> --help` for argparse-generated help.
 
 Start with the core workflow:
 
-1. `check` validates and lints desired policy before AWS access.
-2. `audit` reports drift between desired and current state.
-3. `plan` shows the conservative change set for review.
+1. `review` writes the approval bundle: lint, audit, plan, planned grant
+   evidence, and summaries.
+2. `explain-batch` answers operational access questions from a snapshot.
+3. `check`, `audit`, and `plan` run focused validation, drift, or change checks.
 4. `apply` dry-runs by default and executes only with `--execute`.
 
 Everything else is supporting workflow. Use `sample`, `init`, `generate`,
@@ -25,8 +26,10 @@ setup or review friction. They are not the reason to adopt the package.
 | `check` | Validate and lint local policy files in one CI-friendly command. | No |
 | `audit` | Report drift between desired and current state. | Only when `--current-snapshot` is omitted |
 | `plan` | Produce a conservative change plan. | Only when `--current-snapshot` is omitted |
+| `review` | Write lint, audit, plan, planned grant evidence, and summaries to one directory. | Only when `--current-snapshot` is omitted |
 | `apply` | Dry-run or execute a Lake Formation change plan. | Yes when live state is loaded or `--execute` is used |
 | `explain` | Explain current access for one principal and resource. | Only when `--current-snapshot` is omitted |
+| `explain-batch` | Explain multiple access requests from one current-state snapshot. | Only when `--current-snapshot` is omitted |
 | `init` | Generate a starter desired-state policy file. | No |
 | `generate` | Generate desired state from a Python policy file. | No |
 | `bootstrap` | Create a starter policy repository layout with CI and pre-commit files. | No |
@@ -47,7 +50,8 @@ State-aware commands use these options:
 
 - `--desired PATH`: desired state JSON/YAML file.
 - `--current-snapshot PATH`: current state JSON/YAML file. When omitted,
-  `audit`, `plan`, `explain`, and `apply` load live AWS state through `boto3`.
+  `audit`, `plan`, `review`, `explain`, `explain-batch`, and `apply` load live
+  AWS state through `boto3`.
 - `--current-cache PATH`: read or write a JSON current-state cache when live AWS
   state would otherwise be loaded. Cache hits avoid constructing the AWS
   adapter; cache misses, stale entries, desired-state scope mismatches, and AWS
@@ -61,11 +65,11 @@ State-aware commands use these options:
 - `--catalog-id ID`: Glue Data Catalog ID.
 - `--output text|json|markdown|sarif`: output format where supported. `audit`
   and `lint` support SARIF; `permissions`, `lint`, `summary`, `audit`,
-  `explain`, `plan`, and `apply` support Markdown.
+  `explain`, `explain-batch`, `plan`, and `apply` support Markdown.
 - `--output-file PATH`: write the command report to a file instead of stdout
   where supported. `doctor`, `permissions`, `completion`, `check`, `validate`,
-  `lint`, `summary`, `audit`, `explain`, `plan`, and `apply` support this for
-  reports; `init`, `schema`, and `snapshot` use it for generated files.
+  `lint`, `summary`, `audit`, `explain`, `explain-batch`, `plan`, and `apply`
+  support this for reports; `init`, `schema`, and `snapshot` use it for generated files.
   `import` uses `--output` for the generated desired-state path and `--format`
   for JSON/YAML.
 - `--github-summary`: append a Markdown report to `$GITHUB_STEP_SUMMARY` where
@@ -110,6 +114,63 @@ Report files and GitHub summaries are written before `check --fail-on-findings`,
 
 See [`report-formats.md`](report-formats.md) for JSON and Markdown payload
 examples for check, summary, audit, explain, plan, and apply reports.
+
+## `review`
+
+Write a complete approval bundle:
+
+```bash
+lfguard review \
+  --desired desired.json \
+  --current-snapshot current.json \
+  --output-dir review/
+```
+
+The bundle contains:
+
+- `manifest.json`: schema version, lfguard version, input hashes, status, and
+  artifact list.
+- `summary.md` and `summary.json`: human and machine summaries.
+- `lint.json`, `audit.json`, `plan.json`, and `explain.json`: stable evidence
+  files for services, LLM agents, pull requests, tickets, and audit logs.
+  `explain.json` is review-specific planned grant-change evidence; use
+  `explain-batch` for effective-access decisions.
+
+Use `--fail-on-blocked` when CI should fail on lint errors or destructive
+planned changes. Audit findings and safe planned changes set the review status
+to `review_required`. Existing bundle files are not overwritten unless `--force`
+is passed.
+
+## `explain-batch`
+
+Explain multiple access requests from one snapshot:
+
+```bash
+lfguard explain-batch \
+  --requests access-requests.json \
+  --current-snapshot current.json \
+  --output json
+```
+
+The request file may contain either a top-level array or an object with a
+`requests` array:
+
+```json
+{
+  "requests": [
+    {
+      "id": "analyst-orders",
+      "principal": "arn:aws:iam::111122223333:role/Analyst",
+      "database": "analytics",
+      "table": "orders",
+      "permissions": ["SELECT"]
+    }
+  ]
+}
+```
+
+Pass `--desired desired.json` when the output should also include desired-grant
+gap evidence. Use `--fail-on-denied` when denied requests should fail CI.
 
 ## `init`
 

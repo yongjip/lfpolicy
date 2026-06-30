@@ -72,7 +72,7 @@ The safety model is enforced in several places:
 - Saved-plan apply can be limited by change ID, action type, and safety budgets
   before any AWS call is made.
 - Risky desired grants can be allowed only through scoped exceptions with reason,
-  expiry, and owner or approval metadata.
+  ticket, owner, approver, and expiry metadata.
 - The boto3 adapter applies only actions represented by planner `Change`
   objects.
 

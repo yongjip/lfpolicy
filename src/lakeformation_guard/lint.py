@@ -202,17 +202,38 @@ def _lint_duplicate_lf_tag_key_metadata_keys(
 def _lint_policy_exceptions(exceptions: Tuple[PolicyException, ...]) -> List[LintFinding]:
     findings: List[LintFinding] = []
     for exception in exceptions:
-        if not exception.is_expired():
-            continue
-        findings.append(
-            LintFinding(
-                code="POLICY_EXCEPTION_EXPIRED",
-                severity="error",
-                target=exception.identity,
-                message="Policy exception is expired and no longer suppresses lint findings",
-                details=exception.to_dict(),
+        if exception.is_expired():
+            findings.append(
+                LintFinding(
+                    code="POLICY_EXCEPTION_EXPIRED",
+                    severity="error",
+                    target=exception.identity,
+                    message="Policy exception is expired and no longer suppresses lint findings",
+                    details=exception.to_dict(),
+                )
             )
-        )
+            continue
+        days_until_expiry = exception.days_until_expiry()
+        if days_until_expiry <= 14:
+            findings.append(
+                LintFinding(
+                    code="POLICY_EXCEPTION_EXPIRING_SOON",
+                    severity="warning",
+                    target=exception.identity,
+                    message="Policy exception expires within 14 days and should be reviewed",
+                    details={**exception.to_dict(), "days_until_expiry": days_until_expiry},
+                )
+            )
+        if exception.owner == exception.approved_by:
+            findings.append(
+                LintFinding(
+                    code="POLICY_EXCEPTION_APPROVER_IS_OWNER",
+                    severity="warning",
+                    target=exception.identity,
+                    message="Policy exception owner and approver should be different for review separation",
+                    details=exception.to_dict(),
+                )
+            )
     return findings
 
 

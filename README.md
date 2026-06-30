@@ -4,11 +4,11 @@
 [![PyPI](https://img.shields.io/pypi/v/lfguard.svg)](https://pypi.org/project/lfguard/)
 [![Python](https://img.shields.io/pypi/pyversions/lfguard.svg)](https://pypi.org/project/lfguard/)
 
-`lfguard` is a strict framework for defining, validating, explaining, planning,
-and safely applying AWS Lake Formation data permissions. It compares a desired
-LF-Tag and permission policy against current state, reports drift, produces a
-conservative change plan, and can apply only the changes that you explicitly
-allow.
+`lfguard` is a strict framework for reviewing, validating, explaining, and
+planning AWS Lake Formation data permissions. It compares a desired LF-Tag and
+permission policy against current state, reports drift, produces a conservative
+change plan, and writes stable evidence that services, LLM agents, pull
+requests, Jira tickets, and audit logs can attach before anything is applied.
 
 The import package is `lakeformation_guard`; the CLI command is `lfguard`.
 
@@ -24,7 +24,8 @@ The import package is `lakeformation_guard`; the CLI command is `lfguard`.
 - Python-native permission groups that generate reviewable desired state.
 - Offline audit and plan workflows from JSON or YAML snapshots.
 - Offline effective-access explanations from JSON or YAML snapshots.
-- Live AWS inventory and apply workflows through the optional `boto3` adapter.
+- Live AWS inventory and controlled apply workflows through the optional
+  `boto3` adapter.
 - Live AWS import for starter desired-state scaffolds.
 
 By default, plans only add missing definitions, tag assignments, and permissions.
@@ -41,13 +42,13 @@ desired-state file so drift checks stay focused and reviewable.
 
 ## Why use it
 
-- Reviewable plans before touching production Lake Formation state.
+- Review bundles before touching production Lake Formation state.
 - Conservative defaults that avoid accidental revokes and tag removals.
 - Works offline from snapshots, which makes CI drift checks possible.
 - Lints desired policy for undefined LF-Tag keys and values before AWS access.
 - Explains why access exists or is missing before changing policy.
-- Captures risky access exceptions with reason, owner or approver, expiry, and
-  scoped rules instead of forcing broad lint ignores.
+- Captures risky access exceptions with reason, ticket, owner, approver, expiry,
+  and scoped rules instead of forcing broad lint ignores.
 - Keeps the Python API dependency-light while isolating boto3 in the AWS adapter.
 - Produces text, JSON, Markdown, and SARIF output suitable for pull request
   comments, release checks, code scanning, and platform automation.
@@ -60,15 +61,16 @@ desired-state file so drift checks stay focused and reviewable.
 
 | Step | Command | Purpose |
 | --- | --- | --- |
-| 1 | `lfguard check` | Validate and lint desired policy before AWS access. |
-| 2 | `lfguard audit` | Compare desired policy with current state and report drift. |
-| 3 | `lfguard plan` | Produce the conservative change set reviewers should approve. |
-| 4 | `lfguard apply` | Dry-run by default; execute only after review. |
+| 1 | `lfguard review` | Write lint, audit, plan, planned grant evidence, and summaries into one bundle. |
+| 2 | `lfguard explain-batch` | Answer operational access questions from a reviewed snapshot. |
+| 3 | `lfguard check` | Validate and lint desired policy before AWS access. |
+| 4 | `lfguard audit` / `lfguard plan` | Run focused drift or plan checks when a full bundle is not needed. |
+| 5 | `lfguard apply` | Optional; dry-run by default and execute only after review. |
 
 Everything else is supporting workflow: Python policy generation, sample files,
 repository bootstrap, schema export, install diagnostics, IAM policy starters,
 effective-access explanation, and report formatting. Those helpers are optional.
-The core value is still check, audit, plan, and conservative apply.
+The core value is review, exception control, explanation, and stable evidence.
 
 `lfguard check --fail-on-findings` is deliberately rigid: it blocks undefined
 tags, mixed-case LF-Tags, multiple values for one key on a resource, broad
@@ -147,25 +149,31 @@ lfguard sample --output-dir lfguard-demo
 The command writes `desired.json`, `current-snapshot.json`, and a short
 `README.md` with copy-paste commands.
 
-Check that the generated files are valid and lint-clean:
+Write the review bundle that a service, pull request, ticket, or audit log can
+attach:
+
+```bash
+lfguard review \
+  --desired lfguard-demo/desired.json \
+  --current-snapshot lfguard-demo/current-snapshot.json \
+  --output-dir lfguard-demo/review
+```
+
+The bundle includes `summary.md`, `summary.json`, `lint.json`, `audit.json`,
+`plan.json`, `explain.json` with planned grant-change evidence, and
+`manifest.json`.
+
+Run focused checks when you only need one view:
 
 ```bash
 lfguard check \
   --desired lfguard-demo/desired.json \
   --current-snapshot lfguard-demo/current-snapshot.json
-```
 
-Audit the deliberately incomplete snapshot:
-
-```bash
 lfguard audit \
   --desired lfguard-demo/desired.json \
   --current-snapshot lfguard-demo/current-snapshot.json
-```
 
-Plan the additive changes that would close the gap:
-
-```bash
 lfguard plan \
   --desired lfguard-demo/desired.json \
   --current-snapshot lfguard-demo/current-snapshot.json
@@ -501,7 +509,7 @@ role before live inventory or apply workflows.
 The repository includes GitHub Actions for CI and PyPI Trusted Publishing. See
 [`docs/publishing.md`](docs/publishing.md) for the release path and the exact
 PyPI publisher settings. The latest release notes are in
-[`docs/release-notes/v0.6.5.md`](docs/release-notes/v0.6.5.md), with prior
+[`docs/release-notes/v0.7.0.md`](docs/release-notes/v0.7.0.md), with prior
 release notes under [`docs/release-notes/`](docs/release-notes/).
 
 ## More docs

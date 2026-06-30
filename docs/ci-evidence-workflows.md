@@ -12,11 +12,8 @@ For a normal permission pull request, keep these artifacts:
 | Artifact | Command | Why it matters |
 | --- | --- | --- |
 | Generated desired state | `lfguard generate policy.py --output-file policy/desired.json --check` | Proves reviewed Python policy and committed desired JSON are in sync. |
-| Policy summary | `lfguard summary --desired policy/desired.json --output markdown` | Gives reviewers a compact principal/resource/permission inventory. |
-| Check report | `lfguard check --desired policy/desired.json --current-snapshot snapshots/prod-current.json --output markdown` | Proves files parse and lint before drift gates run. |
-| Audit JSON | `lfguard audit ... --output json` | Stable machine-readable drift evidence for dashboards or approval systems. |
-| Plan JSON | `lfguard plan ... --output json` | Stable change evidence with deterministic change IDs and destructive flags. |
-| Explain JSON | `lfguard explain ... --output json` | Shows why a sensitive principal has, or does not have, access. |
+| Review bundle | `lfguard review --desired policy/desired.json --current-snapshot snapshots/prod-current.json --output-dir artifacts/review` | Stable lint, audit, plan, planned grant evidence, input hashes, and summary status for approval systems. |
+| Batch explain JSON | `lfguard explain-batch --requests access-requests.json --current-snapshot snapshots/prod-current.json --output json` | Answers operational access questions without opening the AWS console. |
 | Apply dry run | `lfguard apply ... --output markdown` | Shows what live apply would do before `--execute` is allowed. |
 
 Store JSON for machines and Markdown for reviewers. SARIF is useful when the

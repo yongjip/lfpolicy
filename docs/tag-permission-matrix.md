@@ -237,7 +237,7 @@ illegal permission combinations this project blocks before apply.
 
 It reports errors for policy that can be valid but must be explicit: mutating
 permissions, grant option, and named database/table grants. Use scoped
-`exceptions` with reason, expiry, and owner or approver metadata when these are
+`exceptions` with reason, ticket, owner, approver, and expiry metadata when these are
 intentional. Wildcard LF-Tag policy values remain warnings. In CI,
 `lfguard check --fail-on-findings` blocks both errors and warnings by default,
 which keeps the lake closer to a controlled database permission model.

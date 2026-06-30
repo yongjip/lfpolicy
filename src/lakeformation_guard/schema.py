@@ -401,7 +401,7 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
         "policyException": {
             "type": "object",
             "additionalProperties": False,
-            "required": ["principal", "rules", "reason", "expires_at"],
+            "required": ["principal", "rules", "reason", "ticket", "expires_at", "approved_by", "owner"],
             "properties": {
                 "principal": _STRING_VALUE,
                 "resource": {"$ref": "#/$defs/resourcePattern"},
@@ -418,14 +418,11 @@ STATE_JSON_SCHEMA: Dict[str, Any] = {
                     ],
                 },
                 "reason": _STRING_VALUE,
+                "ticket": _STRING_VALUE,
                 "expires_at": {"type": "string", "format": "date"},
                 "approved_by": _STRING_VALUE,
                 "owner": _STRING_VALUE,
             },
-            "anyOf": [
-                {"required": ["approved_by"]},
-                {"required": ["owner"]},
-            ],
         },
         "exceptionRule": {
             "enum": [

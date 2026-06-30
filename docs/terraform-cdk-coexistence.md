@@ -98,7 +98,7 @@ of truth for the managed surface.
 
 Terraform or CDK can own simple static grants when the access pattern changes
 rarely and review evidence is not needed beyond IaC plan output. `lfguard` is
-more valuable when teams need LF-Tag policy validation, explain evidence,
+more valuable when teams need LF-Tag policy validation, access explanation,
 exception metadata, drift reports, selective apply, or safety budgets.
 
 See [`positioning.md`](positioning.md) for the broader tool boundary.

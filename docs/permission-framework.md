@@ -46,6 +46,8 @@ reviewable:
       "permissions": ["ALL"],
       "rules": ["allow_broad_permissions", "allow_named_resource_grants"],
       "reason": "break-glass database administration",
+      "ticket": "SEC-123",
+      "owner": "data-platform",
       "expires_at": "2099-12-31",
       "approved_by": "data-governance"
     }
@@ -105,7 +107,7 @@ schema-version changes as integration events.
 ## Operating Guides
 
 - [`ci-evidence-workflows.md`](ci-evidence-workflows.md): CI artifact sets,
-  drift gates, plan review, explain evidence, and apply dry-run evidence.
+  drift gates, plan review, access explanation, and apply dry-run evidence.
 - [`terraform-cdk-coexistence.md`](terraform-cdk-coexistence.md): ownership
   boundaries between infrastructure tools and `lfguard`.
 - [`import-adoption-recipes.md`](import-adoption-recipes.md): practical import,
