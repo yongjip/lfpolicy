@@ -35,7 +35,7 @@ review/
 ```json
 {
   "schema_version": "lfguard.review.manifest.v1",
-  "lfguard_version": "0.7.1",
+  "lfguard_version": "0.7.2",
   "status": "review_required",
   "inputs": {
     "desired": {
@@ -176,6 +176,9 @@ Finding severities and advisory actions are intentionally separate:
 For advisory integrations, avoid treating every `severity: "error"` as a user
 block. Use `recommended_action` for DMS or LLM workflow decisions and reserve
 "cannot proceed" language for `hard_block: true`.
+
+See [`llm-agent-integration.md`](llm-agent-integration.md) for the decision
+rules that service-embedded LLM agents should follow.
 
 Markdown audit reports use the same finding order and include summary counts,
 which makes them suitable for GitHub Actions job summaries:

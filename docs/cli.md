@@ -143,6 +143,10 @@ recommended actions. Audit findings and safe planned changes set the review
 status to `review_required`. Existing bundle files are not overwritten unless
 `--force` is passed.
 
+Service-embedded LLM agents should follow
+[`llm-agent-integration.md`](llm-agent-integration.md) when interpreting
+`severity`, `recommended_action`, `hard_block`, and `blocking_reasons`.
+
 ## `explain-batch`
 
 Explain multiple access requests from one snapshot:

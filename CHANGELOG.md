@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.7.2
+
+- Adds `AGENTS.md`, `CLAUDE.md`, `llms.txt`, and
+  `docs/llm-agent-integration.md` so coding agents and service-embedded LLM
+  agents can find the correct repo and runtime decision rules.
+- Adds regression coverage for agent documentation links, source distribution
+  inclusion, and the PyPI project URL for LLM integration guidance.
+- Ignores macOS `.DS_Store` metadata files.
+
 ## 0.7.1
 
 - Adds advisory `recommended_action` and `hard_block` fields to lint, audit,

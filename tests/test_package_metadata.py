@@ -47,7 +47,13 @@ class PackageMetadataTests(unittest.TestCase):
     def test_source_distribution_includes_example_workflows(self):
         manifest = (self.root / "MANIFEST.in").read_text(encoding="utf-8")
 
+        self.assertIn("include AGENTS.md", manifest)
+        self.assertIn("include CLAUDE.md", manifest)
+        self.assertIn("include llms.txt", manifest)
         self.assertIn("recursive-include examples *.json *.md *.py *.yaml *.yml", manifest)
+        self.assertTrue((self.root / "AGENTS.md").exists())
+        self.assertTrue((self.root / "CLAUDE.md").exists())
+        self.assertTrue((self.root / "llms.txt").exists())
         self.assertTrue((self.root / "examples" / "policy.py").exists())
         self.assertTrue((self.root / "examples" / "github-actions" / "lakeformation-drift.yml").exists())
         self.assertTrue((self.root / "examples" / "pre-commit" / "pre-commit-config.yaml").exists())
@@ -59,6 +65,7 @@ class PackageMetadataTests(unittest.TestCase):
             "Documentation",
             "CLI Reference",
             "Adoption Checklist",
+            "LLM Agent Integration",
             "Report Formats",
             "Architecture",
             "Roadmap",

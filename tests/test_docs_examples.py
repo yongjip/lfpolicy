@@ -16,6 +16,8 @@ class DocumentationExampleTests(unittest.TestCase):
             *sorted((root / ".github" / "ISSUE_TEMPLATE").glob("*.md")),
             *sorted((root / "docs").rglob("*.md")),
             *sorted((root / "examples").glob("*.md")),
+            root / "AGENTS.md",
+            root / "CLAUDE.md",
             root / "CHANGELOG.md",
             root / "CONTRIBUTING.md",
             root / "SECURITY.md",
