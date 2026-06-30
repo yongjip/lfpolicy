@@ -1,0 +1,13 @@
+{
+  "grants": [
+    {
+      "principal": "arn:aws:iam::111122223333:role/Analyst",
+      "resource": {
+        "kind": "table",
+        "database": "analytics",
+        "table": "orders"
+      },
+      "permissions": ["SELECT"]
+    }
+  ]
+}

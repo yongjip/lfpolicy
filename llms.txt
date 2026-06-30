@@ -17,6 +17,8 @@ Use these Markdown documents when an LLM needs to understand or integrate
 
 - [LLM Agent Integration](docs/llm-agent-integration.md): Runtime decision rules
   for DMS workflows and service-embedded LLM agents.
+- [Service Integration](docs/service-integration.md): CLI subprocess and JSON
+  artifact contract for application wrappers.
 - [Repository Agent Instructions](AGENTS.md): Guidance for coding agents that
   modify this repository.
 - [Claude Code Memory](CLAUDE.md): Thin Claude Code pointer to the shared agent

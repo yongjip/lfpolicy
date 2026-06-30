@@ -226,15 +226,90 @@ class DocumentationExampleTests(unittest.TestCase):
         audit = json.loads((artifacts / "lfguard-audit.json").read_text(encoding="utf-8"))
         plan = json.loads((artifacts / "lfguard-plan.json").read_text(encoding="utf-8"))
         explain = json.loads((artifacts / "lfguard-explain.json").read_text(encoding="utf-8"))
+        explain_batch = json.loads((artifacts / "lfguard-explain-batch.json").read_text(encoding="utf-8"))
         apply_dry_run = (artifacts / "lfguard-apply-dry-run.md").read_text(encoding="utf-8")
 
         self.assertEqual(audit["schema_version"], "lfguard.audit.v1")
         self.assertEqual(plan["schema_version"], "lfguard.plan.v1")
         self.assertEqual(explain["schema_version"], "lfguard.explain.v1")
+        self.assertEqual(explain_batch["schema_version"], "lfguard.explain_batch.v1")
         self.assertEqual([change["id"] for change in plan["changes"]], ["change_001", "change_002", "change_003"])
         self.assertEqual(explain["summary"]["matched"], 1)
+        self.assertEqual(explain_batch["summary"], {"total": 3, "allowed": 1, "denied": 2})
+        self.assertEqual(
+            [(result["id"], result["decision"]) for result in explain_batch["results"]],
+            [
+                ("analyst-orders-select", "allowed"),
+                ("analyst-orders-describe", "denied"),
+                ("engineer-orders-select", "denied"),
+            ],
+        )
+        self.assertEqual(explain_batch["results"][1]["explain"]["summary"]["matched"], 0)
+        self.assertEqual(explain_batch["results"][1]["explain"]["summary"]["not_matched"], 1)
         self.assertIn("Dry run: no changes applied.", apply_dry_run)
         self.assertIn("change_003", apply_dry_run)
+
+    def test_review_bundle_contract_fixture_is_service_safe(self):
+        root = Path(__file__).resolve().parents[1]
+        bundle = root / "examples" / "artifacts" / "review-bundle"
+
+        manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
+        summary = json.loads((bundle / "summary.json").read_text(encoding="utf-8"))
+        lint_payload = json.loads((bundle / "lint.json").read_text(encoding="utf-8"))
+        audit_payload = json.loads((bundle / "audit.json").read_text(encoding="utf-8"))
+        plan_payload = json.loads((bundle / "plan.json").read_text(encoding="utf-8"))
+        explain_payload = json.loads((bundle / "explain.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(manifest["schema_version"], "lfguard.review.manifest.v1")
+        self.assertEqual(manifest["lfguard_version"], "0.8.0")
+        self.assertEqual(manifest["inputs"]["current"]["source"], "current_snapshot")
+        self.assertIn("sha256", manifest["inputs"]["desired"])
+        self.assertIn("sha256", manifest["inputs"]["current"])
+        self.assertEqual(summary["schema_version"], "lfguard.review.summary.v1")
+        self.assertEqual(summary["status"], "review_required")
+        self.assertEqual(summary["recommended_action"], "review_required")
+        self.assertEqual(summary["blocking_reasons"], [])
+        self.assertEqual(set(summary["action_summary"]), {"inform", "review_required", "approval_required", "block"})
+        self.assertEqual(lint_payload["schema_version"], "lfguard.lint.v1")
+        self.assertEqual(audit_payload["schema_version"], "lfguard.audit.v1")
+        self.assertEqual(plan_payload["schema_version"], "lfguard.plan.v1")
+        self.assertEqual(explain_payload["schema_version"], "lfguard.review.explain.v1")
+        self.assertIn("Planned grant-change evidence", explain_payload["description"])
+        self.assertIn("explain-batch", explain_payload["description"])
+        self.assertEqual(explain_payload["summary"], {"planned_grant_changes": 1})
+        grant_change = explain_payload["grant_changes"][0]
+        for key in (
+            "change_id",
+            "action",
+            "risk",
+            "principal",
+            "resource",
+            "requested_permissions",
+            "before",
+            "after",
+            "reason",
+            "recommended_action",
+            "hard_block",
+        ):
+            self.assertIn(key, grant_change)
+        self.assertEqual(grant_change["risk"], "safe")
+        self.assertFalse(grant_change["hard_block"])
+
+    def test_service_integration_docs_define_cli_contract_boundary(self):
+        root = Path(__file__).resolve().parents[1]
+        service_docs = (root / "docs" / "service-integration.md").read_text(encoding="utf-8")
+        llm_docs = (root / "docs" / "llm-agent-integration.md").read_text(encoding="utf-8")
+
+        for expected in (
+            'sys.executable, "-m", "lakeformation_guard"',
+            "Do not import private",
+            "Do not run `lfguard apply` automatically",
+            "`recommended_action`",
+            "`hard_block`",
+            "`severity: \"error\"`",
+        ):
+            self.assertIn(expected, service_docs)
+        self.assertIn("Do not convert every `severity: \"error\"` into a user-facing block", llm_docs)
 
     def test_lake_formation_guide_covers_operating_model(self):
         root = Path(__file__).resolve().parents[1]

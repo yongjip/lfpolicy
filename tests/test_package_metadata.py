@@ -66,6 +66,7 @@ class PackageMetadataTests(unittest.TestCase):
             "CLI Reference",
             "Adoption Checklist",
             "LLM Agent Integration",
+            "Service Integration",
             "Report Formats",
             "Architecture",
             "Roadmap",
@@ -111,7 +112,9 @@ class PackageMetadataTests(unittest.TestCase):
             self.assertIn("/tmp/lfguard-policy-bootstrap/policy.py", workflow)
             self.assertIn("/lfguard check", workflow)
             self.assertIn("--current-snapshot /tmp/lfguard-demo/current-snapshot.json", workflow)
+            self.assertIn("/lfguard review", workflow)
             self.assertIn("/lfguard explain", workflow)
+            self.assertIn("/lfguard explain-batch", workflow)
             self.assertIn("LakePolicy", workflow)
             self.assertIn("CurrentStateProvider", workflow)
             self.assertIn("callable(explain)", workflow)
@@ -150,7 +153,9 @@ class PackageMetadataTests(unittest.TestCase):
         self.assertIn("lfguard generate /tmp/lfguard-pypi-policy/policy.py", workflow)
         self.assertIn("--output-file /tmp/lfguard-pypi-policy/policy/desired.json --check", workflow)
         self.assertIn("lfguard sample --output-dir /tmp/lfguard-pypi-demo", workflow)
+        self.assertIn("lfguard review", workflow)
         self.assertIn("lfguard explain", workflow)
+        self.assertIn("lfguard explain-batch", workflow)
         self.assertIn("LakePolicy", workflow)
         self.assertIn("CurrentStateProvider", workflow)
         self.assertIn("callable(explain)", workflow)

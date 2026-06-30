@@ -1,0 +1,58 @@
+{
+  "description": "Planned grant-change evidence for review bundles. Use lfguard explain-batch for effective-access decisions.",
+  "grant_changes": [
+    {
+      "action": "grant.add_permissions",
+      "after": {
+        "permissions": [
+          "DESCRIBE",
+          "SELECT"
+        ],
+        "principal": "arn:aws:iam::111122223333:role/Analyst",
+        "resource": {
+          "expression": {
+            "domain": [
+              "sales"
+            ],
+            "sensitivity": [
+              "internal",
+              "public"
+            ]
+          },
+          "kind": "lf_tag_policy",
+          "resource_type": "TABLE"
+        }
+      },
+      "before": null,
+      "change_id": "change_003",
+      "grantable_permissions": [],
+      "hard_block": false,
+      "principal": "arn:aws:iam::111122223333:role/Analyst",
+      "reason": "Principal is missing desired Lake Formation permissions",
+      "recommended_action": "review_required",
+      "requested_permissions": [
+        "DESCRIBE",
+        "SELECT"
+      ],
+      "resource": {
+        "expression": {
+          "domain": [
+            "sales"
+          ],
+          "sensitivity": [
+            "internal",
+            "public"
+          ]
+        },
+        "kind": "lf_tag_policy",
+        "resource_type": "TABLE"
+      },
+      "risk": "safe",
+      "target": "arn:aws:iam::111122223333:role/Analyst -> lf_tag_policy:resource_type=TABLE:expression=domain=sales,sensitivity=internal|public"
+    }
+  ],
+  "schema_version": "lfguard.review.explain.v1",
+  "summary": {
+    "planned_grant_changes": 1
+  }
+}

@@ -1,0 +1,165 @@
+{
+  "results": [
+    {
+      "decision": "allowed",
+      "explain": {
+        "data_cells_filter": null,
+        "effective_lf_tags": {},
+        "effective_lf_tags_by_catalog": [],
+        "findings": [
+          {
+            "details": {
+              "requested_permissions": [
+                "SELECT"
+              ]
+            },
+            "grantable_permissions": [],
+            "id": "finding_001",
+            "message": "Direct grant resource exactly matches the target.",
+            "permissions": [
+              "SELECT"
+            ],
+            "resource": {
+              "database": "analytics",
+              "kind": "table",
+              "table": "orders"
+            },
+            "source": "direct_grant",
+            "status": "matched"
+          }
+        ],
+        "notes": [],
+        "principal": "arn:aws:iam::111122223333:role/Analyst",
+        "requested_permissions": [
+          "SELECT"
+        ],
+        "resource": {
+          "database": "analytics",
+          "kind": "table",
+          "table": "orders"
+        },
+        "schema_version": "lfguard.explain.v1",
+        "summary": {
+          "context": 0,
+          "matched": 1,
+          "missing": 0,
+          "not_matched": 0
+        }
+      },
+      "id": "analyst-orders-select",
+      "principal": "arn:aws:iam::111122223333:role/Analyst",
+      "requested_permissions": [
+        "SELECT"
+      ],
+      "resource": {
+        "database": "analytics",
+        "kind": "table",
+        "table": "orders"
+      }
+    },
+    {
+      "decision": "denied",
+      "explain": {
+        "data_cells_filter": null,
+        "effective_lf_tags": {},
+        "effective_lf_tags_by_catalog": [],
+        "findings": [
+          {
+            "details": {
+              "missing_permissions": [
+                "DESCRIBE"
+              ],
+              "requested_permissions": [
+                "DESCRIBE"
+              ]
+            },
+            "grantable_permissions": [],
+            "id": "finding_001",
+            "message": "Direct grant resource exactly matches the target. Missing requested permission(s): DESCRIBE.",
+            "permissions": [
+              "SELECT"
+            ],
+            "resource": {
+              "database": "analytics",
+              "kind": "table",
+              "table": "orders"
+            },
+            "source": "direct_grant",
+            "status": "not_matched"
+          }
+        ],
+        "notes": [],
+        "principal": "arn:aws:iam::111122223333:role/Analyst",
+        "requested_permissions": [
+          "DESCRIBE"
+        ],
+        "resource": {
+          "database": "analytics",
+          "kind": "table",
+          "table": "orders"
+        },
+        "schema_version": "lfguard.explain.v1",
+        "summary": {
+          "context": 0,
+          "matched": 0,
+          "missing": 0,
+          "not_matched": 1
+        }
+      },
+      "id": "analyst-orders-describe",
+      "principal": "arn:aws:iam::111122223333:role/Analyst",
+      "requested_permissions": [
+        "DESCRIBE"
+      ],
+      "resource": {
+        "database": "analytics",
+        "kind": "table",
+        "table": "orders"
+      }
+    },
+    {
+      "decision": "denied",
+      "explain": {
+        "data_cells_filter": null,
+        "effective_lf_tags": {},
+        "effective_lf_tags_by_catalog": [],
+        "findings": [],
+        "notes": [
+          "No current or desired grants matched this principal/resource scope."
+        ],
+        "principal": "arn:aws:iam::111122223333:role/DataEngineer",
+        "requested_permissions": [
+          "SELECT"
+        ],
+        "resource": {
+          "database": "analytics",
+          "kind": "table",
+          "table": "orders"
+        },
+        "schema_version": "lfguard.explain.v1",
+        "summary": {
+          "context": 0,
+          "matched": 0,
+          "missing": 0,
+          "not_matched": 0
+        }
+      },
+      "id": "engineer-orders-select",
+      "principal": "arn:aws:iam::111122223333:role/DataEngineer",
+      "requested_permissions": [
+        "SELECT"
+      ],
+      "resource": {
+        "database": "analytics",
+        "kind": "table",
+        "table": "orders"
+      }
+    }
+  ],
+  "schema_version": "lfguard.explain_batch.v1",
+  "summary": {
+    "allowed": 1,
+    "denied": 2,
+    "total": 3
+  }
+}

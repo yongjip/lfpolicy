@@ -115,6 +115,11 @@ jobs:
           /tmp/lfguard-wheel-smoke/bin/lfguard lint --desired /tmp/lfguard-demo/desired.json
           /tmp/lfguard-wheel-smoke/bin/lfguard lint --desired /tmp/lfguard-demo/desired.json --output sarif --output-file /tmp/lfguard-lint.sarif
           /tmp/lfguard-wheel-smoke/bin/lfguard summary --desired /tmp/lfguard-demo/desired.json --current-snapshot /tmp/lfguard-demo/current-snapshot.json --output markdown
+          /tmp/lfguard-wheel-smoke/bin/lfguard review \
+            --desired /tmp/lfguard-demo/desired.json \
+            --current-snapshot /tmp/lfguard-demo/current-snapshot.json \
+            --output-dir /tmp/lfguard-review-smoke \
+            --force
           /tmp/lfguard-wheel-smoke/bin/lfguard explain \
             --desired /tmp/lfguard-demo/desired.json \
             --current-snapshot /tmp/lfguard-demo/current-snapshot.json \
@@ -123,6 +128,11 @@ jobs:
             --table customers \
             --permissions SELECT \
             --output json
+          /tmp/lfguard-wheel-smoke/bin/lfguard explain-batch \
+            --requests examples/access-requests.json \
+            --current-snapshot examples/access-current-snapshot.json \
+            --output json \
+            --output-file /tmp/lfguard-explain-batch.json
           /tmp/lfguard-wheel-smoke/bin/lfguard plan \
             --desired /tmp/lfguard-demo/desired.json \
             --current-snapshot /tmp/lfguard-demo/current-snapshot.json
@@ -186,6 +196,11 @@ jobs:
             --desired /tmp/lfguard-pypi-demo/desired.json \
             --current-snapshot /tmp/lfguard-pypi-demo/current-snapshot.json \
             --fail-on-findings
+          lfguard review \
+            --desired /tmp/lfguard-pypi-demo/desired.json \
+            --current-snapshot /tmp/lfguard-pypi-demo/current-snapshot.json \
+            --output-dir /tmp/lfguard-pypi-review \
+            --force
           lfguard explain \
             --desired /tmp/lfguard-pypi-demo/desired.json \
             --current-snapshot /tmp/lfguard-pypi-demo/current-snapshot.json \
@@ -194,4 +209,10 @@ jobs:
             --table customers \
             --permissions SELECT \
             --output json
+          python -c 'import json, pathlib; pathlib.Path("/tmp/lfguard-pypi-requests.json").write_text(json.dumps({"requests": [{"id": "pypi-smoke", "principal": "arn:aws:iam::111122223333:role/DataConsumer", "database": "sales_curated", "table": "customers", "permissions": ["SELECT"]}]}), encoding="utf-8")'
+          lfguard explain-batch \
+            --requests /tmp/lfguard-pypi-requests.json \
+            --current-snapshot /tmp/lfguard-pypi-demo/current-snapshot.json \
+            --output json \
+            --output-file /tmp/lfguard-pypi-explain-batch.json
           python -c "from lakeformation_guard import CurrentStateProvider, DesiredState, LakePolicy, explain, plan, table_creator; print(DesiredState.__name__, LakePolicy.__name__, CurrentStateProvider, callable(explain), callable(plan), callable(table_creator))"

@@ -1,0 +1,38 @@
+{
+  "action_summary": {
+    "approval_required": 0,
+    "block": 0,
+    "inform": 0,
+    "review_required": 6
+  },
+  "artifacts": {
+    "audit": "audit.json",
+    "explain": "explain.json",
+    "lint": "lint.json",
+    "plan": "plan.json"
+  },
+  "blocking_reasons": [],
+  "recommended_action": "review_required",
+  "schema_version": "lfguard.review.summary.v1",
+  "status": "review_required",
+  "summary": {
+    "audit": {
+      "errors": 3,
+      "total": 3,
+      "warnings": 0
+    },
+    "explain": {
+      "planned_grant_changes": 1
+    },
+    "lint": {
+      "errors": 0,
+      "total": 0,
+      "warnings": 0
+    },
+    "plan": {
+      "destructive": 0,
+      "safe": 3,
+      "total": 3
+    }
+  }
+}

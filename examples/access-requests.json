@@ -1,0 +1,25 @@
+{
+  "requests": [
+    {
+      "id": "analyst-orders-select",
+      "principal": "arn:aws:iam::111122223333:role/Analyst",
+      "database": "analytics",
+      "table": "orders",
+      "permissions": ["SELECT"]
+    },
+    {
+      "id": "analyst-orders-describe",
+      "principal": "arn:aws:iam::111122223333:role/Analyst",
+      "database": "analytics",
+      "table": "orders",
+      "permissions": ["DESCRIBE"]
+    },
+    {
+      "id": "engineer-orders-select",
+      "principal": "arn:aws:iam::111122223333:role/DataEngineer",
+      "database": "analytics",
+      "table": "orders",
+      "permissions": ["SELECT"]
+    }
+  ]
+}

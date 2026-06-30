@@ -59,6 +59,11 @@ jobs:
           /tmp/lfguard-wheel-smoke/bin/lfguard lint --desired /tmp/lfguard-demo/desired.json
           /tmp/lfguard-wheel-smoke/bin/lfguard lint --desired /tmp/lfguard-demo/desired.json --output sarif --output-file /tmp/lfguard-lint.sarif
           /tmp/lfguard-wheel-smoke/bin/lfguard summary --desired /tmp/lfguard-demo/desired.json --current-snapshot /tmp/lfguard-demo/current-snapshot.json --output markdown
+          /tmp/lfguard-wheel-smoke/bin/lfguard review \
+            --desired /tmp/lfguard-demo/desired.json \
+            --current-snapshot /tmp/lfguard-demo/current-snapshot.json \
+            --output-dir /tmp/lfguard-review-smoke \
+            --force
           /tmp/lfguard-wheel-smoke/bin/lfguard explain \
             --desired /tmp/lfguard-demo/desired.json \
             --current-snapshot /tmp/lfguard-demo/current-snapshot.json \
@@ -67,6 +72,11 @@ jobs:
             --table customers \
             --permissions SELECT \
             --output json
+          /tmp/lfguard-wheel-smoke/bin/lfguard explain-batch \
+            --requests examples/access-requests.json \
+            --current-snapshot examples/access-current-snapshot.json \
+            --output json \
+            --output-file /tmp/lfguard-explain-batch.json
           /tmp/lfguard-wheel-smoke/bin/lfguard plan \
             --desired /tmp/lfguard-demo/desired.json \
             --current-snapshot /tmp/lfguard-demo/current-snapshot.json

@@ -16,8 +16,10 @@ These files let you try `lfguard` without AWS credentials:
 - `permission-requests.py`: a Python-native policy that models approved access
   requests as data and compiles them to ordinary desired state.
 - `current-snapshot.json`: a deliberately incomplete current-state snapshot.
-- `artifacts/`: checked-in report fixtures for audit, plan, explain, and apply
-  dry-run evidence.
+- `access-requests.json` and `access-current-snapshot.json`: batch access
+  diagnosis inputs for service adapter tests.
+- `artifacts/`: checked-in report fixtures for audit, plan, review bundles,
+  explain, explain-batch, and apply dry-run evidence.
 - `github-actions/lakeformation-drift.yml`: a copyable GitHub Actions workflow
   for scheduled or manually dispatched drift checks against live AWS state. It
   expects `policy.py` and generated `policy/desired.json` in the policy
@@ -41,6 +43,8 @@ Markdown evidence a pull request or scheduled governance job would attach:
 - `artifacts/lfguard-audit.json`
 - `artifacts/lfguard-plan.json`
 - `artifacts/lfguard-explain.json`
+- `artifacts/lfguard-explain-batch.json`
+- `artifacts/review-bundle/`
 - `artifacts/lfguard-apply-dry-run.md`
 
 If you installed `lfguard` from PyPI and do not have this repository checked

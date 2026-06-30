@@ -509,7 +509,7 @@ role before live inventory or apply workflows.
 The repository includes GitHub Actions for CI and PyPI Trusted Publishing. See
 [`docs/publishing.md`](docs/publishing.md) for the release path and the exact
 PyPI publisher settings. The latest release notes are in
-[`docs/release-notes/v0.7.2.md`](docs/release-notes/v0.7.2.md), with prior
+[`docs/release-notes/v0.8.0.md`](docs/release-notes/v0.8.0.md), with prior
 release notes under [`docs/release-notes/`](docs/release-notes/).
 
 ## More docs
@@ -518,6 +518,8 @@ release notes under [`docs/release-notes/`](docs/release-notes/).
   codes.
 - [`docs/llm-agent-integration.md`](docs/llm-agent-integration.md): decision
   rules for DMS workflows and LLM agents consuming lfguard JSON.
+- [`docs/service-integration.md`](docs/service-integration.md): subprocess and
+  JSON artifact contract for services that embed lfguard as advisory evidence.
 - [`docs/recipes.md`](docs/recipes.md): audit-only, CI, and controlled apply
   workflows.
 - [`docs/ci-evidence-workflows.md`](docs/ci-evidence-workflows.md): artifact

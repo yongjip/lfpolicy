@@ -146,6 +146,9 @@ status to `review_required`. Existing bundle files are not overwritten unless
 Service-embedded LLM agents should follow
 [`llm-agent-integration.md`](llm-agent-integration.md) when interpreting
 `severity`, `recommended_action`, `hard_block`, and `blocking_reasons`.
+Backend services that wrap lfguard should follow
+[`service-integration.md`](service-integration.md) and consume CLI JSON
+artifacts instead of private Python internals.
 
 ## `explain-batch`
 
@@ -177,6 +180,9 @@ The request file may contain either a top-level array or an object with a
 
 Pass `--desired desired.json` when the output should also include desired-grant
 gap evidence. Use `--fail-on-denied` when denied requests should fail CI.
+For adapter tests, see `examples/access-requests.json`,
+`examples/access-current-snapshot.json`, and
+`examples/artifacts/lfguard-explain-batch.json`.
 
 ## `init`
 

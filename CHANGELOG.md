@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.8.0
+
+- Promotes the package to beta maturity for advisory Lake Formation governance
+  integrations.
+- Adds service integration guidance for consuming `review` and `explain-batch`
+  through the stable CLI JSON contract instead of private Python internals.
+- Adds checked-in contract fixtures for review bundles and batch access
+  decisions so DMS, LLM agents, and other services can test their adapters
+  against stable example payloads.
+- Reinforces that technical `severity` is not a workflow block; integrations
+  should use `recommended_action`, `hard_block`, and review `status`.
+
 ## 0.7.2
 
 - Adds `AGENTS.md`, `CLAUDE.md`, `llms.txt`, and

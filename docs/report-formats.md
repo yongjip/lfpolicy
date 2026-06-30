@@ -35,7 +35,7 @@ review/
 ```json
 {
   "schema_version": "lfguard.review.manifest.v1",
-  "lfguard_version": "0.7.2",
+  "lfguard_version": "0.8.0",
   "status": "review_required",
   "inputs": {
     "desired": {
@@ -115,6 +115,9 @@ evidence, not full effective-access decisions:
 Use `lfguard explain-batch` when the question is whether specific principals can
 currently access specific resources.
 
+Checked-in review bundle fixtures are available under
+`examples/artifacts/review-bundle/` for service adapter tests.
+
 ## Audit Reports
 
 Use audit reports when you want to detect drift without proposing or applying
@@ -179,6 +182,8 @@ block. Use `recommended_action` for DMS or LLM workflow decisions and reserve
 
 See [`llm-agent-integration.md`](llm-agent-integration.md) for the decision
 rules that service-embedded LLM agents should follow.
+See [`service-integration.md`](service-integration.md) for subprocess and JSON
+artifact guidance for backend services.
 
 Markdown audit reports use the same finding order and include summary counts,
 which makes them suitable for GitHub Actions job summaries:

@@ -5,6 +5,10 @@ reads `lfguard` JSON output. This is runtime integration guidance, not coding
 agent guidance for modifying this repository. Repository coding agents should
 start with [`../AGENTS.md`](../AGENTS.md).
 
+Backend services should invoke `lfguard` through the CLI module and consume JSON
+artifacts. See [`service-integration.md`](service-integration.md) for the
+subprocess contract boundary.
+
 ## Core Rule
 
 Separate technical severity from workflow action.

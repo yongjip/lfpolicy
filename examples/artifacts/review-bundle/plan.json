@@ -1,0 +1,170 @@
+{
+  "changes": [
+    {
+      "action": "lf_tag.add_values",
+      "after": {
+        "tag_key": "sensitivity",
+        "tag_values": [
+          "internal",
+          "public",
+          "restricted"
+        ]
+      },
+      "aws_api": "update_lf_tag",
+      "before": {
+        "tag_key": "sensitivity",
+        "tag_values": [
+          "public"
+        ]
+      },
+      "destructive": false,
+      "hard_block": false,
+      "id": "change_001",
+      "payload": {
+        "tag_key": "sensitivity",
+        "tag_values": [
+          "internal",
+          "restricted"
+        ]
+      },
+      "principal": null,
+      "reason": "LF-Tag is missing allowed values",
+      "recommended_action": "review_required",
+      "requires_flag": null,
+      "resource": null,
+      "risk": "safe",
+      "target": "lf_tag:sensitivity"
+    },
+    {
+      "action": "resource_tag.add_values",
+      "after": {
+        "resource": {
+          "database": "analytics",
+          "kind": "table",
+          "table": "orders"
+        },
+        "tags": {
+          "domain": [
+            "sales"
+          ],
+          "sensitivity": [
+            "internal"
+          ]
+        }
+      },
+      "aws_api": "add_lf_tags_to_resource",
+      "before": {
+        "resource": {
+          "database": "analytics",
+          "kind": "table",
+          "table": "orders"
+        },
+        "tags": {
+          "domain": [
+            "sales"
+          ]
+        }
+      },
+      "destructive": false,
+      "hard_block": false,
+      "id": "change_002",
+      "payload": {
+        "resource": {
+          "database": "analytics",
+          "kind": "table",
+          "table": "orders"
+        },
+        "tags": {
+          "sensitivity": [
+            "internal"
+          ]
+        }
+      },
+      "principal": null,
+      "reason": "Resource is missing desired LF-Tag assignments",
+      "recommended_action": "review_required",
+      "requires_flag": null,
+      "resource": {
+        "database": "analytics",
+        "kind": "table",
+        "table": "orders"
+      },
+      "risk": "safe",
+      "target": "table:database=analytics:table=orders"
+    },
+    {
+      "action": "grant.add_permissions",
+      "after": {
+        "permissions": [
+          "DESCRIBE",
+          "SELECT"
+        ],
+        "principal": "arn:aws:iam::111122223333:role/Analyst",
+        "resource": {
+          "expression": {
+            "domain": [
+              "sales"
+            ],
+            "sensitivity": [
+              "internal",
+              "public"
+            ]
+          },
+          "kind": "lf_tag_policy",
+          "resource_type": "TABLE"
+        }
+      },
+      "aws_api": "grant_permissions",
+      "before": null,
+      "destructive": false,
+      "hard_block": false,
+      "id": "change_003",
+      "payload": {
+        "grantable_permissions": [],
+        "permissions": [
+          "DESCRIBE",
+          "SELECT"
+        ],
+        "principal": "arn:aws:iam::111122223333:role/Analyst",
+        "resource": {
+          "expression": {
+            "domain": [
+              "sales"
+            ],
+            "sensitivity": [
+              "internal",
+              "public"
+            ]
+          },
+          "kind": "lf_tag_policy",
+          "resource_type": "TABLE"
+        }
+      },
+      "principal": "arn:aws:iam::111122223333:role/Analyst",
+      "reason": "Principal is missing desired Lake Formation permissions",
+      "recommended_action": "review_required",
+      "requires_flag": null,
+      "resource": {
+        "expression": {
+          "domain": [
+            "sales"
+          ],
+          "sensitivity": [
+            "internal",
+            "public"
+          ]
+        },
+        "kind": "lf_tag_policy",
+        "resource_type": "TABLE"
+      },
+      "risk": "safe",
+      "target": "arn:aws:iam::111122223333:role/Analyst -> lf_tag_policy:resource_type=TABLE:expression=domain=sales,sensitivity=internal|public"
+    }
+  ],
+  "schema_version": "lfguard.plan.v1",
+  "summary": {
+    "destructive": 0,
+    "safe": 3,
+    "total": 3
+  }
+}
