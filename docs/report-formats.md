@@ -39,7 +39,7 @@ review/
 ```json
 {
   "schema_version": "lfguard.review.manifest.v1",
-  "lfguard_version": "0.8.0",
+  "lfguard_version": "0.8.1",
   "status": "review_required",
   "inputs": {
     "desired": {
@@ -78,7 +78,7 @@ guidance for services and LLM agents.
   "blocking_reasons": [],
   "evidence": {
     "generated_at": "2026-07-01T00:00:00Z",
-    "lfguard_version": "0.8.0",
+    "lfguard_version": "0.8.1",
     "inputs": {
       "desired": {
         "source": "desired_state",

@@ -13,7 +13,7 @@
   },
   "blocking_reasons": [],
   "evidence": {
-    "generated_at": "2026-06-30T15:43:27Z",
+    "generated_at": "2026-06-30T15:57:02Z",
     "inputs": {
       "current": {
         "path": "examples/artifacts/review-cases/approval_required/current.json",
@@ -26,7 +26,7 @@
         "source": "desired_state"
       }
     },
-    "lfguard_version": "0.8.0",
+    "lfguard_version": "0.8.1",
     "truncation": {
       "artifacts": [],
       "truncated": false

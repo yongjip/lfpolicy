@@ -16,8 +16,8 @@ Configure a pending publisher in PyPI with:
 - Workflow: `release.yml`
 - Environment: `pypi`
 
-Then publish by publishing a GitHub Release for a version tag such as `v0.8.0`,
-or by manually dispatching the release workflow with `release_tag: v0.8.0`.
+Then publish by publishing a GitHub Release for a version tag such as `v0.8.1`,
+or by manually dispatching the release workflow with `release_tag: v0.8.1`.
 Pushing a tag alone does not publish to PyPI. The release workflow first
 verifies that the tag matches the package version, builds the artifacts,
 verifies distribution filenames and embedded metadata, checks them, smoke-tests
@@ -26,9 +26,9 @@ when the version is not already published, then installs `lfguard` back from
 PyPI and smoke-tests the published package.
 
 ```bash
-git tag v0.8.0
-git push origin v0.8.0
-gh release create v0.8.0 --title "lfguard 0.8.0" --notes-file docs/release-notes/v0.8.0.md
+git tag v0.8.1
+git push origin v0.8.1
+gh release create v0.8.1 --title "lfguard 0.8.1" --notes-file docs/release-notes/v0.8.1.md
 ```
 
 Use the matching file under [`release-notes/`](release-notes/) as the GitHub
@@ -69,7 +69,7 @@ After the GitHub release workflow finishes, verify PyPI and the tag:
 
 ```bash
 python -m pip index versions lfguard
-git ls-remote --tags origin v0.8.0
+git ls-remote --tags origin v0.8.1
 ```
 
 The release workflow also runs this published-package smoke test automatically

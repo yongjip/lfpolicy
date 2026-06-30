@@ -3,7 +3,7 @@ import re
 import unittest
 from pathlib import Path
 
-from lakeformation_guard import DesiredState, Grant, ResourceRef, lint_desired
+from lakeformation_guard import DesiredState, Grant, ResourceRef, __version__, lint_desired
 from lakeformation_guard.policy import load_policy
 
 
@@ -338,7 +338,7 @@ class DocumentationExampleTests(unittest.TestCase):
         explain_payload = json.loads((bundle / "explain.json").read_text(encoding="utf-8"))
 
         self.assertEqual(manifest["schema_version"], "lfguard.review.manifest.v1")
-        self.assertEqual(manifest["lfguard_version"], "0.8.0")
+        self.assertEqual(manifest["lfguard_version"], __version__)
         self.assertEqual(manifest["inputs"]["current"]["source"], "current_snapshot")
         self.assertIn("sha256", manifest["inputs"]["desired"])
         self.assertIn("sha256", manifest["inputs"]["current"])

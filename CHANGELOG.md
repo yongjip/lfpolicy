@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.8.1
+
+- Adds a stable finding catalog for lint, audit, and plan action metadata,
+  including titles and documentation URLs in JSON evidence.
+- Adds review summary evidence metadata with input provenance, version, and
+  truncation fields for services that store compact approval records.
+- Adds compact explain-batch diagnosis fields and service-facing golden fixture
+  matrices for review and access-diagnosis outcomes.
+- Changes the release workflow so tag pushes alone do not publish to PyPI;
+  publishing now requires a GitHub Release or manual workflow dispatch.
+
 ## 0.8.0
 
 - Promotes the package to beta maturity for advisory Lake Formation governance
