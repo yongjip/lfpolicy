@@ -28,6 +28,7 @@
           "severity": { "enum": ["error", "warning"] },
           "recommended_action": { "enum": ["inform", "review_required", "approval_required", "block"] },
           "hard_block": { "type": "boolean" },
+          "docs_anchor": { "type": "string" },
           "docs_url": { "type": "string" },
           "target": { "type": ["string", "null"] },
           "principal": { "type": ["string", "null"] },

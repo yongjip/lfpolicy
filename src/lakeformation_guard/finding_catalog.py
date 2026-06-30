@@ -17,13 +17,15 @@ DOCS_BASE_URL = "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/fi
 
 
 def _entry(identifier: str, title: str, category: str, action: str, *, key: str = "code") -> Dict[str, Any]:
+    docs_anchor = identifier.lower().replace("_", "-").replace(".", "-")
     return {
         key: identifier,
         "title": title,
         "category": category,
         "default_recommended_action": action,
         "hard_block": is_hard_block(action),
-        "docs_url": "{}#{}".format(DOCS_BASE_URL, identifier.lower().replace("_", "-").replace(".", "-")),
+        "docs_anchor": docs_anchor,
+        "docs_url": "{}#{}".format(DOCS_BASE_URL, docs_anchor),
     }
 
 
@@ -69,6 +71,10 @@ AUDIT_FINDINGS: Mapping[str, Mapping[str, Any]] = {
     "DATA_CELLS_FILTER_DRIFT": _entry("DATA_CELLS_FILTER_DRIFT", "Data cells filter drift", "data_cells_filter", ACTION_REVIEW_REQUIRED),
     "DATA_CELLS_FILTER_MISSING": _entry("DATA_CELLS_FILTER_MISSING", "Data cells filter missing", "data_cells_filter", ACTION_REVIEW_REQUIRED),
     "DATA_CELLS_FILTER_UNMANAGED": _entry("DATA_CELLS_FILTER_UNMANAGED", "Data cells filter unmanaged", "data_cells_filter", ACTION_REVIEW_REQUIRED),
+    "GRANT_MISSING": _entry("GRANT_MISSING", "Grant missing", "grant", ACTION_REVIEW_REQUIRED),
+    "GRANT_PERMISSIONS_MISSING": _entry("GRANT_PERMISSIONS_MISSING", "Grant permissions missing", "grant", ACTION_REVIEW_REQUIRED),
+    "GRANT_PERMISSIONS_UNMANAGED": _entry("GRANT_PERMISSIONS_UNMANAGED", "Grant permissions unmanaged", "grant", ACTION_REVIEW_REQUIRED),
+    "GRANT_UNMANAGED": _entry("GRANT_UNMANAGED", "Grant unmanaged", "grant", ACTION_REVIEW_REQUIRED),
     "LF_TAG_EXPRESSION_BODY_DRIFT": _entry("LF_TAG_EXPRESSION_BODY_DRIFT", "LF-Tag expression body drift", "lf_tag_expression", ACTION_REVIEW_REQUIRED),
     "LF_TAG_EXPRESSION_MISSING": _entry("LF_TAG_EXPRESSION_MISSING", "LF-Tag expression missing", "lf_tag_expression", ACTION_REVIEW_REQUIRED),
     "LF_TAG_EXPRESSION_UNMANAGED": _entry("LF_TAG_EXPRESSION_UNMANAGED", "LF-Tag expression unmanaged", "lf_tag_expression", ACTION_REVIEW_REQUIRED),

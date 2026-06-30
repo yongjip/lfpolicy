@@ -47,6 +47,7 @@ class AuditFinding:
             "severity": self.severity,
             "recommended_action": action,
             "hard_block": is_hard_block(action),
+            "docs_anchor": metadata["docs_anchor"],
             "docs_url": metadata["docs_url"],
             "target": self.target,
             "principal": self.details.get("principal"),

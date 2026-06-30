@@ -18,6 +18,7 @@
           "resource_type": "TABLE"
         }
       },
+      "docs_anchor": "grant-missing",
       "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#grant-missing",
       "hard_block": false,
       "id": "finding_001",
@@ -35,7 +36,7 @@
       },
       "severity": "error",
       "target": "arn:aws:iam::111122223333:role/Analyst -> lf_tag_policy:resource_type=TABLE:expression=sensitivity=internal",
-      "title": "Grant Missing"
+      "title": "Grant missing"
     }
   ],
   "schema_version": "lfguard.audit.v1",

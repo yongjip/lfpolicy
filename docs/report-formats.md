@@ -39,7 +39,7 @@ review/
 ```json
 {
   "schema_version": "lfguard.review.manifest.v1",
-  "lfguard_version": "0.8.1",
+  "lfguard_version": "0.8.2",
   "status": "review_required",
   "inputs": {
     "desired": {
@@ -69,6 +69,7 @@ guidance for services and LLM agents.
   "schema_version": "lfguard.review.summary.v1",
   "status": "review_required",
   "recommended_action": "approval_required",
+  "hard_block": false,
   "action_summary": {
     "inform": 0,
     "review_required": 1,
@@ -78,7 +79,7 @@ guidance for services and LLM agents.
   "blocking_reasons": [],
   "evidence": {
     "generated_at": "2026-07-01T00:00:00Z",
-    "lfguard_version": "0.8.1",
+    "lfguard_version": "0.8.2",
     "inputs": {
       "desired": {
         "source": "desired_state",
@@ -118,6 +119,7 @@ evidence, not full effective-access decisions:
       "risk": "safe",
       "recommended_action": "review_required",
       "hard_block": false,
+      "docs_anchor": "grant-add-permissions",
       "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#grant-add-permissions",
       "principal": "arn:aws:iam::111122223333:role/Analyst",
       "resource": {
@@ -140,6 +142,11 @@ evidence, not full effective-access decisions:
 
 Use `lfguard explain-batch` when the question is whether specific principals can
 currently access specific resources.
+
+Use `code`, `action`, and `docs_anchor` as stable keys for service mappings and
+stored audit evidence. `docs_url` points to live documentation on the repository
+`main` branch and may show newer explanatory text than the lfguard version that
+generated older evidence.
 
 Checked-in review bundle fixtures are available under
 `examples/artifacts/review-bundle/` for service adapter tests.
@@ -547,6 +554,7 @@ changes:
       "risk": "safe",
       "recommended_action": "review_required",
       "hard_block": false,
+      "docs_anchor": "lf-tag-add-values",
       "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#lf-tag-add-values",
       "principal": null,
       "resource": null,

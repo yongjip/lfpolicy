@@ -1055,6 +1055,7 @@ def _review_summary_payload(
         "schema_version": REVIEW_SUMMARY_SCHEMA_VERSION,
         "status": status,
         "recommended_action": recommended_action,
+        "hard_block": recommended_action == ACTION_BLOCK,
         "action_summary": dict(action_summary(review_actions)),
         "blocking_reasons": _review_blocking_reasons(lint_payload, audit_payload, plan_payload),
         "summary": {
@@ -1134,6 +1135,7 @@ def _review_blocking_reasons(
                     "title": item.get("title"),
                     "message": item.get("message") or item.get("reason"),
                     "recommended_action": item.get("recommended_action", ACTION_BLOCK),
+                    "docs_anchor": item.get("docs_anchor"),
                     "docs_url": item.get("docs_url"),
                 }
             )
@@ -1156,6 +1158,7 @@ def _review_explain_payload(change_plan: Plan) -> dict:
                 "risk": change.risk,
                 "recommended_action": change_payload["recommended_action"],
                 "hard_block": change_payload["hard_block"],
+                "docs_anchor": change_payload["docs_anchor"],
                 "docs_url": change_payload["docs_url"],
                 "principal": change.principal,
                 "resource": change.resource,

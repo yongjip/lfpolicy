@@ -31,6 +31,7 @@
           "risk": { "enum": ["safe", "destructive"] },
           "recommended_action": { "enum": ["inform", "review_required", "approval_required", "block"] },
           "hard_block": { "type": "boolean" },
+          "docs_anchor": { "type": "string" },
           "docs_url": { "type": "string" },
           "principal": { "type": ["string", "null"] },
           "resource": { "type": ["object", "null"] },

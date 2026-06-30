@@ -19,7 +19,8 @@ class FindingCatalogTests(unittest.TestCase):
         self.assertEqual(codes - set(LINT_FINDINGS), set())
 
     def test_audit_finding_codes_have_catalog_entries(self):
-        codes = _finding_codes(self.root / "src" / "lakeformation_guard" / "audit.py", "AuditFinding")
+        source_path = self.root / "src" / "lakeformation_guard" / "audit.py"
+        codes = _finding_codes(source_path, "AuditFinding") | _dynamic_grant_audit_codes(source_path)
 
         self.assertEqual(codes - set(AUDIT_FINDINGS), set())
 
@@ -34,9 +35,10 @@ class FindingCatalogTests(unittest.TestCase):
                     self.assertIn("category", entry)
                     self.assertIn("default_recommended_action", entry)
                     self.assertIn("hard_block", entry)
+                    self.assertIn("docs_anchor", entry)
                     self.assertIn("docs_url", entry)
-                    anchor = entry["docs_url"].split("#", 1)[1]
-                    self.assertIn('id="{}"'.format(anchor), self.catalog_doc)
+                    self.assertTrue(entry["docs_url"].endswith("#" + entry["docs_anchor"]))
+                    self.assertIn('id="{}"'.format(entry["docs_anchor"]), self.catalog_doc)
 
 
 def _finding_codes(path: Path, class_name: str) -> set:
@@ -68,3 +70,16 @@ def _dynamic_lint_codes(path: Path) -> set:
                 if template.startswith("{}_"):
                     templates.add(template)
     return {template.format(prefix) for prefix in prefixes for template in templates}
+
+
+def _dynamic_grant_audit_codes(path: Path) -> set:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    codes = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Name) or node.func.id != "_grant_finding":
+            continue
+        if node.args and isinstance(node.args[0], ast.Constant):
+            codes.add(node.args[0].value)
+    return codes

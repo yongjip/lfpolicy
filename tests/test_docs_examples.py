@@ -308,6 +308,7 @@ class DocumentationExampleTests(unittest.TestCase):
             )
             self.assertEqual(summary["status"], status)
             self.assertEqual(summary["recommended_action"], action)
+            self.assertEqual(summary["hard_block"], hard_block)
             self.assertEqual(summary["action_summary"]["block"] > 0, hard_block)
             self.assertIn("evidence", summary)
             self.assertEqual(summary["evidence"]["truncation"], {"truncated": False, "artifacts": []})
@@ -345,6 +346,7 @@ class DocumentationExampleTests(unittest.TestCase):
         self.assertEqual(summary["schema_version"], "lfguard.review.summary.v1")
         self.assertEqual(summary["status"], "review_required")
         self.assertEqual(summary["recommended_action"], "review_required")
+        self.assertFalse(summary["hard_block"])
         self.assertEqual(summary["blocking_reasons"], [])
         self.assertEqual(set(summary["action_summary"]), {"inform", "review_required", "approval_required", "block"})
         self.assertEqual(summary["evidence"]["lfguard_version"], manifest["lfguard_version"])
@@ -371,6 +373,7 @@ class DocumentationExampleTests(unittest.TestCase):
             "recommended_action",
             "hard_block",
             "title",
+            "docs_anchor",
             "docs_url",
         ):
             self.assertIn(key, grant_change)

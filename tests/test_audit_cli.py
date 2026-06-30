@@ -142,6 +142,7 @@ class AuditCliTests(unittest.TestCase):
             self.assertEqual([change["title"] for change in payload["changes"]], ["Create LF-Tag", "Grant permissions"])
             self.assertEqual([change["recommended_action"] for change in payload["changes"]], ["review_required", "review_required"])
             self.assertEqual([change["hard_block"] for change in payload["changes"]], [False, False])
+            self.assertEqual(payload["changes"][0]["docs_anchor"], "lf-tag-create")
             self.assertIn("#lf-tag-create", payload["changes"][0]["docs_url"])
 
     def test_cli_review_writes_bundle_artifacts(self):
@@ -211,6 +212,7 @@ class AuditCliTests(unittest.TestCase):
             self.assertEqual(summary["schema_version"], "lfguard.review.summary.v1")
             self.assertEqual(summary["status"], "review_required")
             self.assertEqual(summary["recommended_action"], "review_required")
+            self.assertEqual(summary["hard_block"], False)
             self.assertEqual(summary["blocking_reasons"], [])
             self.assertEqual(summary["evidence"]["lfguard_version"], manifest["lfguard_version"])
             self.assertEqual(summary["evidence"]["generated_at"], manifest["created_at"])
@@ -230,6 +232,7 @@ class AuditCliTests(unittest.TestCase):
             self.assertEqual(explain_payload["grant_changes"][0]["title"], "Grant permissions")
             self.assertEqual(explain_payload["grant_changes"][0]["recommended_action"], "review_required")
             self.assertEqual(explain_payload["grant_changes"][0]["hard_block"], False)
+            self.assertEqual(explain_payload["grant_changes"][0]["docs_anchor"], "grant-add-permissions")
             self.assertIn("#grant-add-permissions", explain_payload["grant_changes"][0]["docs_url"])
 
     def test_cli_review_status_passed_for_clean_state(self):
@@ -350,8 +353,10 @@ class AuditCliTests(unittest.TestCase):
             self.assertEqual(exit_code, 1)
             self.assertEqual(summary["status"], "blocked")
             self.assertEqual(summary["recommended_action"], "block")
+            self.assertEqual(summary["hard_block"], True)
             self.assertEqual(summary["blocking_reasons"][0]["code"], "POLICY_EXCEPTION_EXPIRED")
             self.assertEqual(summary["blocking_reasons"][0]["title"], "Policy exception expired")
+            self.assertEqual(summary["blocking_reasons"][0]["docs_anchor"], "policy-exception-expired")
             self.assertIn("#policy-exception-expired", summary["blocking_reasons"][0]["docs_url"])
             self.assertEqual(lint_payload["findings"][0]["recommended_action"], "block")
             self.assertEqual(lint_payload["findings"][0]["hard_block"], True)
@@ -399,6 +404,7 @@ class AuditCliTests(unittest.TestCase):
             self.assertEqual(exit_code, 1)
             self.assertEqual(summary["status"], "blocked")
             self.assertEqual(summary["recommended_action"], "block")
+            self.assertEqual(summary["hard_block"], True)
             self.assertEqual(summary["blocking_reasons"][0]["code"], "grant.revoke_permissions")
             self.assertEqual(summary["summary"]["plan"]["destructive"], 1)
             self.assertEqual(plan_payload["changes"][0]["recommended_action"], "block")

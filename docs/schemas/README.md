@@ -14,6 +14,8 @@ Recommended use:
 - use `recommended_action`, `hard_block`, and review `status` for workflow
   decisions;
 - use `explain-batch` result `decision` for access diagnosis;
+- use `code`, `action`, and `docs_anchor` for stable service mappings and
+  stored evidence;
 - avoid treating every `severity: "error"` as a hard block.
 
 Compatibility policy:
@@ -24,6 +26,8 @@ Compatibility policy:
   existing `recommended_action`, `hard_block`, `status`, or `decision` fields
   without explicit release-note documentation;
 - schemas intentionally avoid closed enums for finding `code` and plan `action`;
+- `docs_url` is a convenience link to live documentation and may show newer
+  explanatory text than the lfguard version that generated historical evidence;
 - services should use [`../finding-catalog.md`](../finding-catalog.md) for
   stable finding and plan action metadata.
 

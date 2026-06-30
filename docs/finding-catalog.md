@@ -9,6 +9,12 @@ and explain-batch `decision`, not from `severity` alone.
 action. Runtime configuration may still change lint severity, but it must not
 turn `severity: "error"` into an automatic workflow block by itself.
 
+JSON reports include `docs_anchor` and `docs_url` for catalog-backed findings
+and plan changes. Use `code`, `action`, and `docs_anchor` as stable keys for
+stored audit evidence and service UI mappings. `docs_url` points to live
+documentation on the repository `main` branch and may show newer explanatory
+text than the lfguard version that generated historical evidence.
+
 ## Compatibility
 
 Minor releases may add optional fields, new finding codes, new plan actions, or
@@ -63,6 +69,10 @@ change the meaning of existing `recommended_action`, `hard_block`, `status`, or
 | <a id="data-cells-filter-drift"></a>`DATA_CELLS_FILTER_DRIFT` | Data cells filter drift | data_cells_filter | `review_required` | false |
 | <a id="data-cells-filter-missing"></a>`DATA_CELLS_FILTER_MISSING` | Data cells filter missing | data_cells_filter | `review_required` | false |
 | <a id="data-cells-filter-unmanaged"></a>`DATA_CELLS_FILTER_UNMANAGED` | Data cells filter unmanaged | data_cells_filter | `review_required` | false |
+| <a id="grant-missing"></a>`GRANT_MISSING` | Grant missing | grant | `review_required` | false |
+| <a id="grant-permissions-missing"></a>`GRANT_PERMISSIONS_MISSING` | Grant permissions missing | grant | `review_required` | false |
+| <a id="grant-permissions-unmanaged"></a>`GRANT_PERMISSIONS_UNMANAGED` | Grant permissions unmanaged | grant | `review_required` | false |
+| <a id="grant-unmanaged"></a>`GRANT_UNMANAGED` | Grant unmanaged | grant | `review_required` | false |
 | <a id="lf-tag-expression-body-drift"></a>`LF_TAG_EXPRESSION_BODY_DRIFT` | LF-Tag expression body drift | lf_tag_expression | `review_required` | false |
 | <a id="lf-tag-expression-missing"></a>`LF_TAG_EXPRESSION_MISSING` | LF-Tag expression missing | lf_tag_expression | `review_required` | false |
 | <a id="lf-tag-expression-unmanaged"></a>`LF_TAG_EXPRESSION_UNMANAGED` | LF-Tag expression unmanaged | lf_tag_expression | `review_required` | false |

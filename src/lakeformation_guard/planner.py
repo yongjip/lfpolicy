@@ -133,6 +133,7 @@ class Change:
             "risk": self.risk,
             "recommended_action": action,
             "hard_block": is_hard_block(action),
+            "docs_anchor": metadata["docs_anchor"],
             "docs_url": metadata["docs_url"],
             "principal": self.principal,
             "resource": _json_ready(self.resource),

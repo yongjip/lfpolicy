@@ -8,6 +8,7 @@
     "schema_version": { "const": "lfguard.review.summary.v1" },
     "status": { "enum": ["passed", "review_required", "blocked"] },
     "recommended_action": { "enum": ["inform", "review_required", "approval_required", "block"] },
+    "hard_block": { "type": "boolean" },
     "action_summary": {
       "type": "object",
       "required": ["inform", "review_required", "approval_required", "block"],
@@ -29,8 +30,11 @@
           "id": { "type": ["string", "null"] },
           "code": { "type": ["string", "null"] },
           "target": { "type": ["string", "null"] },
+          "title": { "type": ["string", "null"] },
           "message": { "type": ["string", "null"] },
-          "recommended_action": { "const": "block" }
+          "recommended_action": { "const": "block" },
+          "docs_anchor": { "type": ["string", "null"] },
+          "docs_url": { "type": ["string", "null"] }
         },
         "additionalProperties": true
       }

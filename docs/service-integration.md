@@ -55,6 +55,11 @@ Do not treat every `severity: "error"` from `lint.json` or `audit.json` as a
 workflow block. Severity is the technical governance signal. Workflow action is
 expressed by `recommended_action` and `hard_block`.
 
+Use `code`, `action`, and `docs_anchor` for stable service mappings and stored
+audit evidence. `docs_url` is a convenience link to live documentation and may
+show newer explanatory text than the lfguard version that generated an older
+report.
+
 Suggested service labels:
 
 | `recommended_action` | Meaning |

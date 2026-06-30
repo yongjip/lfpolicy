@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.8.2
+
+- Adds top-level `hard_block` to `review/summary.json` so services can consume
+  the documented review decision contract directly.
+- Adds stable `docs_anchor` fields to lint, audit, plan, review blocking
+  reasons, and planned grant evidence while documenting `docs_url` as a live
+  documentation link.
+- Expands audit finding catalog coverage for grant drift codes and strengthens
+  catalog coverage tests for dynamically generated audit findings.
+
 ## 0.8.1
 
 - Adds a stable finding catalog for lint, audit, and plan action metadata,
