@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/yongjip/aws-datalake-guard/docs/schemas/lfguard.explain_batch.v1.schema.json",
+  "title": "lfguard explain-batch report v1",
+  "type": "object",
+  "required": ["schema_version", "summary", "results"],
+  "properties": {
+    "schema_version": { "const": "lfguard.explain_batch.v1" },
+    "summary": {
+      "type": "object",
+      "required": ["total", "allowed", "denied"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "allowed": { "type": "integer", "minimum": 0 },
+        "denied": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "decision", "principal", "resource", "requested_permissions", "explain"],
+        "properties": {
+          "id": { "type": "string" },
+          "decision": { "enum": ["allowed", "denied"] },
+          "principal": { "type": "string" },
+          "resource": { "type": "object" },
+          "requested_permissions": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "diagnosis": {
+            "type": "object",
+            "required": [
+              "matched_findings",
+              "not_matched_findings",
+              "missing_desired_grants",
+              "matched_sources",
+              "missing_permissions",
+              "notes"
+            ],
+            "properties": {
+              "matched_findings": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "not_matched_findings": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "missing_desired_grants": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "matched_sources": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "missing_permissions": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "notes": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            },
+            "additionalProperties": true
+          },
+          "explain": {
+            "type": "object",
+            "required": ["schema_version", "summary", "findings", "notes"],
+            "properties": {
+              "schema_version": { "const": "lfguard.explain.v1" },
+              "summary": { "type": "object" },
+              "findings": { "type": "array" },
+              "notes": { "type": "array" }
+            },
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

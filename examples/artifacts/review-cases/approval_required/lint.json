@@ -1,0 +1,67 @@
+{
+  "findings": [
+    {
+      "code": "BROAD_PRINCIPAL_GRANT",
+      "details": {
+        "principal": "IAM_ALLOWED_PRINCIPALS",
+        "resource": {
+          "database": "analytics",
+          "kind": "database"
+        }
+      },
+      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#broad-principal-grant",
+      "hard_block": false,
+      "message": "Lake Formation grants to broad IAM principal groups are not controlled policy",
+      "recommended_action": "approval_required",
+      "severity": "error",
+      "target": "IAM_ALLOWED_PRINCIPALS -> database:database=analytics",
+      "title": "Broad principal grant"
+    },
+    {
+      "code": "BROAD_PERMISSION_GRANT",
+      "details": {
+        "permissions": [
+          "ALL"
+        ],
+        "principal": "IAM_ALLOWED_PRINCIPALS",
+        "resource": {
+          "database": "analytics",
+          "kind": "database"
+        }
+      },
+      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#broad-permission-grant",
+      "hard_block": false,
+      "message": "Broad Lake Formation permissions such as ALL/SUPER are not allowed in desired policy",
+      "recommended_action": "approval_required",
+      "severity": "error",
+      "target": "IAM_ALLOWED_PRINCIPALS -> database:database=analytics",
+      "title": "Broad permission grant"
+    },
+    {
+      "code": "NAMED_RESOURCE_GRANT_REVIEW",
+      "details": {
+        "permissions": [
+          "ALL"
+        ],
+        "principal": "IAM_ALLOWED_PRINCIPALS",
+        "resource": {
+          "database": "analytics",
+          "kind": "database"
+        }
+      },
+      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#named-resource-grant-review",
+      "hard_block": false,
+      "message": "Named database/table/column grants should be documented exceptions; prefer LF-Tag policy grants",
+      "recommended_action": "approval_required",
+      "severity": "error",
+      "target": "IAM_ALLOWED_PRINCIPALS -> database:database=analytics",
+      "title": "Named resource grant requires review"
+    }
+  ],
+  "schema_version": "lfguard.lint.v1",
+  "summary": {
+    "errors": 3,
+    "total": 3,
+    "warnings": 0
+  }
+}

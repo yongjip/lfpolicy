@@ -1,0 +1,9 @@
+{
+  "findings": [],
+  "schema_version": "lfguard.audit.v1",
+  "summary": {
+    "errors": 0,
+    "total": 0,
+    "warnings": 0
+  }
+}

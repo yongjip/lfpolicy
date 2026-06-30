@@ -1,0 +1,69 @@
+{
+  "action_summary": {
+    "approval_required": 0,
+    "block": 1,
+    "inform": 0,
+    "review_required": 0
+  },
+  "artifacts": {
+    "audit": "audit.json",
+    "explain": "explain.json",
+    "lint": "lint.json",
+    "plan": "plan.json"
+  },
+  "blocking_reasons": [
+    {
+      "code": "POLICY_EXCEPTION_EXPIRED",
+      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#policy-exception-expired",
+      "id": null,
+      "message": "Policy exception is expired and no longer suppresses lint findings",
+      "recommended_action": "block",
+      "source": "lint",
+      "target": "exception:arn:aws:iam::111122223333:role/Analyst:allow_broad_permissions",
+      "title": "Policy exception expired"
+    }
+  ],
+  "evidence": {
+    "generated_at": "2026-06-30T15:43:27Z",
+    "inputs": {
+      "current": {
+        "path": "examples/artifacts/review-cases/blocked/current.json",
+        "sha256": "e24ba97b800c757a5a9f14fb34e362e892515004b1404d1627f491279739489c",
+        "source": "current_snapshot"
+      },
+      "desired": {
+        "path": "examples/artifacts/review-cases/blocked/desired.json",
+        "sha256": "7239084c3b1c6f57bdba6b01eeb16c3deeb3cc9299a73c0858ec7669c95b0a89",
+        "source": "desired_state"
+      }
+    },
+    "lfguard_version": "0.8.0",
+    "truncation": {
+      "artifacts": [],
+      "truncated": false
+    }
+  },
+  "recommended_action": "block",
+  "schema_version": "lfguard.review.summary.v1",
+  "status": "blocked",
+  "summary": {
+    "audit": {
+      "errors": 0,
+      "total": 0,
+      "warnings": 0
+    },
+    "explain": {
+      "planned_grant_changes": 0
+    },
+    "lint": {
+      "errors": 1,
+      "total": 1,
+      "warnings": 0
+    },
+    "plan": {
+      "destructive": 0,
+      "safe": 0,
+      "total": 0
+    }
+  }
+}

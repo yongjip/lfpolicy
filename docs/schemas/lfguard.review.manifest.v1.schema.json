@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/yongjip/aws-datalake-guard/docs/schemas/lfguard.review.manifest.v1.schema.json",
+  "title": "lfguard review manifest v1",
+  "type": "object",
+  "required": ["schema_version", "lfguard_version", "created_at", "status", "inputs", "outputs"],
+  "properties": {
+    "schema_version": { "const": "lfguard.review.manifest.v1" },
+    "lfguard_version": { "type": "string" },
+    "created_at": { "type": "string" },
+    "status": { "enum": ["passed", "review_required", "blocked"] },
+    "inputs": {
+      "type": "object",
+      "required": ["desired", "current"],
+      "properties": {
+        "desired": {
+          "type": "object",
+          "required": ["source", "path", "sha256"],
+          "properties": {
+            "source": { "const": "desired_state" },
+            "path": { "type": "string" },
+            "sha256": { "type": "string" }
+          },
+          "additionalProperties": true
+        },
+        "current": {
+          "type": "object",
+          "required": ["source"],
+          "properties": {
+            "source": { "enum": ["current_snapshot", "current_cache", "aws_live"] },
+            "path": { "type": "string" },
+            "sha256": { "type": "string" },
+            "profile": { "type": ["string", "null"] },
+            "region": { "type": ["string", "null"] },
+            "catalog_id": { "type": ["string", "null"] }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "input_summary": { "type": "object" },
+    "plan_options": { "type": "object" },
+    "outputs": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": true
+}

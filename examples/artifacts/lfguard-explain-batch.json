@@ -2,6 +2,18 @@
   "results": [
     {
       "decision": "allowed",
+      "diagnosis": {
+        "matched_findings": [
+          "finding_001"
+        ],
+        "matched_sources": [
+          "direct_grant"
+        ],
+        "missing_desired_grants": [],
+        "missing_permissions": [],
+        "not_matched_findings": [],
+        "notes": []
+      },
       "explain": {
         "data_cells_filter": null,
         "effective_lf_tags": {},
@@ -59,6 +71,18 @@
     },
     {
       "decision": "denied",
+      "diagnosis": {
+        "matched_findings": [],
+        "matched_sources": [],
+        "missing_desired_grants": [],
+        "missing_permissions": [
+          "DESCRIBE"
+        ],
+        "not_matched_findings": [
+          "finding_001"
+        ],
+        "notes": []
+      },
       "explain": {
         "data_cells_filter": null,
         "effective_lf_tags": {},
@@ -119,6 +143,16 @@
     },
     {
       "decision": "denied",
+      "diagnosis": {
+        "matched_findings": [],
+        "matched_sources": [],
+        "missing_desired_grants": [],
+        "missing_permissions": [],
+        "not_matched_findings": [],
+        "notes": [
+          "No current or desired grants matched this principal/resource scope."
+        ]
+      },
       "explain": {
         "data_cells_filter": null,
         "effective_lf_tags": {},

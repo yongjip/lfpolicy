@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from .advisory import is_hard_block, lint_recommended_action
 from .config import lint_exception_applies, lint_severity
+from .finding_catalog import lint_metadata
 from .models import DesiredState, Grant, GuardrailConfig, PolicyException, ResourceTagAssignment
 from .permissions import BROAD_PERMISSION_COVERAGE
 from .state_index import (
@@ -57,11 +58,14 @@ class LintFinding:
 
     def to_dict(self) -> Dict[str, Any]:
         action = lint_recommended_action(self.code, self.severity)
+        metadata = lint_metadata(self.code)
         return {
             "code": self.code,
+            "title": metadata["title"],
             "severity": self.severity,
             "recommended_action": action,
             "hard_block": is_hard_block(action),
+            "docs_url": metadata["docs_url"],
             "target": self.target,
             "message": self.message,
             "details": dict(self.details),

@@ -1,0 +1,58 @@
+{
+  "results": [
+    {
+      "decision": "denied",
+      "diagnosis": {
+        "matched_findings": [],
+        "matched_sources": [],
+        "missing_desired_grants": [],
+        "missing_permissions": [],
+        "not_matched_findings": [],
+        "notes": [
+          "No current or desired grants matched this principal/resource scope."
+        ]
+      },
+      "explain": {
+        "data_cells_filter": null,
+        "effective_lf_tags": {},
+        "effective_lf_tags_by_catalog": [],
+        "findings": [],
+        "notes": [
+          "No current or desired grants matched this principal/resource scope."
+        ],
+        "principal": "arn:aws:iam::111122223333:role/DataEngineer",
+        "requested_permissions": [
+          "SELECT"
+        ],
+        "resource": {
+          "database": "analytics",
+          "kind": "table",
+          "table": "orders"
+        },
+        "schema_version": "lfguard.explain.v1",
+        "summary": {
+          "context": 0,
+          "matched": 0,
+          "missing": 0,
+          "not_matched": 0
+        }
+      },
+      "id": "denied-no-matching-grant",
+      "principal": "arn:aws:iam::111122223333:role/DataEngineer",
+      "requested_permissions": [
+        "SELECT"
+      ],
+      "resource": {
+        "database": "analytics",
+        "kind": "table",
+        "table": "orders"
+      }
+    }
+  ],
+  "schema_version": "lfguard.explain_batch.v1",
+  "summary": {
+    "allowed": 0,
+    "denied": 1,
+    "total": 1
+  }
+}

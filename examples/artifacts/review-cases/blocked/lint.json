@@ -1,0 +1,31 @@
+{
+  "findings": [
+    {
+      "code": "POLICY_EXCEPTION_EXPIRED",
+      "details": {
+        "approved_by": "data-governance",
+        "expires_at": "2000-01-01",
+        "owner": "data-platform",
+        "principal": "arn:aws:iam::111122223333:role/Analyst",
+        "reason": "temporary access",
+        "rules": [
+          "allow_broad_permissions"
+        ],
+        "ticket": "SEC-123"
+      },
+      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#policy-exception-expired",
+      "hard_block": true,
+      "message": "Policy exception is expired and no longer suppresses lint findings",
+      "recommended_action": "block",
+      "severity": "error",
+      "target": "exception:arn:aws:iam::111122223333:role/Analyst:allow_broad_permissions",
+      "title": "Policy exception expired"
+    }
+  ],
+  "schema_version": "lfguard.lint.v1",
+  "summary": {
+    "errors": 1,
+    "total": 1,
+    "warnings": 0
+  }
+}

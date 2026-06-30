@@ -51,9 +51,11 @@ class PackageMetadataTests(unittest.TestCase):
         self.assertIn("include CLAUDE.md", manifest)
         self.assertIn("include llms.txt", manifest)
         self.assertIn("recursive-include examples *.json *.md *.py *.yaml *.yml", manifest)
+        self.assertIn("recursive-include docs *.md *.json", manifest)
         self.assertTrue((self.root / "AGENTS.md").exists())
         self.assertTrue((self.root / "CLAUDE.md").exists())
         self.assertTrue((self.root / "llms.txt").exists())
+        self.assertTrue((self.root / "docs" / "schemas" / "lfguard.review.summary.v1.schema.json").exists())
         self.assertTrue((self.root / "examples" / "policy.py").exists())
         self.assertTrue((self.root / "examples" / "github-actions" / "lakeformation-drift.yml").exists())
         self.assertTrue((self.root / "examples" / "pre-commit" / "pre-commit-config.yaml").exists())
@@ -68,6 +70,8 @@ class PackageMetadataTests(unittest.TestCase):
             "LLM Agent Integration",
             "Service Integration",
             "Report Formats",
+            "Report Schemas",
+            "Finding Catalog",
             "Architecture",
             "Roadmap",
             "Safety Model",
@@ -124,11 +128,14 @@ class PackageMetadataTests(unittest.TestCase):
         workflow = (self.root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
 
         self.assertIn("Validate release tag", workflow)
-        self.assertIn("tags:", workflow)
-        self.assertIn('"v*"', workflow)
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertIn("release_tag:", workflow)
+        self.assertIn("Release tag ${RELEASE_TAG} must start with v.", workflow)
+        self.assertNotIn("\n  push:", workflow)
         self.assertIn("concurrency:", workflow)
-        self.assertIn("group: release-${{ github.event.release.tag_name || github.ref_name }}", workflow)
+        self.assertIn("group: release-${{ github.event.release.tag_name || github.event.inputs.release_tag }}", workflow)
         self.assertIn("cancel-in-progress: false", workflow)
+        self.assertIn("ref: ${{ env.RELEASE_TAG }}", workflow)
         self.assertIn("package_version=", workflow)
         self.assertIn("release_version=", workflow)
         self.assertIn("Check PyPI version", workflow)
@@ -143,7 +150,7 @@ class PackageMetadataTests(unittest.TestCase):
         self.assertIn("needs: [build, publish]", workflow)
         self.assertIn("needs.publish.result == 'skipped'", workflow)
         self.assertIn(
-            "RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}",
+            "RELEASE_TAG: ${{ github.event.release.tag_name || github.event.inputs.release_tag }}",
             workflow,
         )
         self.assertIn('python -m pip install --no-cache-dir "lfguard==${version}"', workflow)

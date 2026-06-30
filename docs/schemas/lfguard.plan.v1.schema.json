@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/yongjip/aws-datalake-guard/docs/schemas/lfguard.plan.v1.schema.json",
+  "title": "lfguard plan report v1",
+  "type": "object",
+  "required": ["schema_version", "summary", "changes"],
+  "properties": {
+    "schema_version": { "const": "lfguard.plan.v1" },
+    "summary": {
+      "type": "object",
+      "required": ["total", "safe", "destructive"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "safe": { "type": "integer", "minimum": 0 },
+        "destructive": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "action", "target", "reason", "destructive", "risk"],
+        "properties": {
+          "id": { "type": "string" },
+          "action": { "type": "string" },
+          "title": { "type": "string" },
+          "target": { "type": "string" },
+          "reason": { "type": "string" },
+          "destructive": { "type": "boolean" },
+          "risk": { "enum": ["safe", "destructive"] },
+          "recommended_action": { "enum": ["inform", "review_required", "approval_required", "block"] },
+          "hard_block": { "type": "boolean" },
+          "docs_url": { "type": "string" },
+          "principal": { "type": ["string", "null"] },
+          "resource": { "type": ["object", "null"] },
+          "before": {},
+          "after": {},
+          "payload": { "type": "object" },
+          "requires_flag": { "type": ["string", "null"] },
+          "aws_api": { "type": ["string", "null"] }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

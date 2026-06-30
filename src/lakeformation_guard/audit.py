@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
 from .advisory import audit_recommended_action, is_hard_block
 from .config import unmanaged_severity
+from .finding_catalog import audit_metadata
 from .models import CurrentState, DesiredState, Grant, ResourceRef
 from .permissions import missing_permissions
 from .state_index import (
@@ -38,12 +39,15 @@ class AuditFinding:
 
     def to_dict(self) -> Dict[str, Any]:
         action = audit_recommended_action(self.code, self.severity)
+        metadata = audit_metadata(self.code)
         return {
             "id": self.id,
             "code": self.code,
+            "title": metadata["title"],
             "severity": self.severity,
             "recommended_action": action,
             "hard_block": is_hard_block(action),
+            "docs_url": metadata["docs_url"],
             "target": self.target,
             "principal": self.details.get("principal"),
             "resource": self.details.get("resource"),

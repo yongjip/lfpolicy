@@ -1,0 +1,9 @@
+{
+  "changes": [],
+  "schema_version": "lfguard.plan.v1",
+  "summary": {
+    "destructive": 0,
+    "safe": 0,
+    "total": 0
+  }
+}

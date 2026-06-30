@@ -246,8 +246,85 @@ class DocumentationExampleTests(unittest.TestCase):
         )
         self.assertEqual(explain_batch["results"][1]["explain"]["summary"]["matched"], 0)
         self.assertEqual(explain_batch["results"][1]["explain"]["summary"]["not_matched"], 1)
+        self.assertEqual(explain_batch["results"][0]["diagnosis"]["matched_sources"], ["direct_grant"])
+        self.assertEqual(explain_batch["results"][1]["diagnosis"]["missing_permissions"], ["DESCRIBE"])
         self.assertIn("Dry run: no changes applied.", apply_dry_run)
         self.assertIn("change_003", apply_dry_run)
+
+    def test_report_contract_schemas_validate_checked_in_fixtures(self):
+        root = Path(__file__).resolve().parents[1]
+        schemas = root / "docs" / "schemas"
+        artifacts = root / "examples" / "artifacts"
+        pairs = (
+            ("lfguard.audit.v1.schema.json", artifacts / "lfguard-audit.json"),
+            ("lfguard.lint.v1.schema.json", artifacts / "review-bundle" / "lint.json"),
+            ("lfguard.plan.v1.schema.json", artifacts / "lfguard-plan.json"),
+            ("lfguard.review.manifest.v1.schema.json", artifacts / "review-bundle" / "manifest.json"),
+            ("lfguard.review.summary.v1.schema.json", artifacts / "review-bundle" / "summary.json"),
+            ("lfguard.review.explain.v1.schema.json", artifacts / "review-bundle" / "explain.json"),
+            ("lfguard.explain_batch.v1.schema.json", artifacts / "lfguard-explain-batch.json"),
+        )
+
+        for schema_name, fixture_path in pairs:
+            schema = json.loads((schemas / schema_name).read_text(encoding="utf-8"))
+            fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+            self.assertEqual(schema["$schema"], "https://json-schema.org/draft/2020-12/schema")
+            self.assertEqual(schema["type"], "object")
+            _validate_schema_subset(fixture, schema, path=str(fixture_path.relative_to(root)))
+
+        review_case_root = artifacts / "review-cases"
+        for case_dir in sorted(path for path in review_case_root.iterdir() if path.is_dir()):
+            for schema_name, artifact_name in (
+                ("lfguard.review.manifest.v1.schema.json", "manifest.json"),
+                ("lfguard.review.summary.v1.schema.json", "summary.json"),
+                ("lfguard.lint.v1.schema.json", "lint.json"),
+                ("lfguard.audit.v1.schema.json", "audit.json"),
+                ("lfguard.plan.v1.schema.json", "plan.json"),
+                ("lfguard.review.explain.v1.schema.json", "explain.json"),
+            ):
+                schema = json.loads((schemas / schema_name).read_text(encoding="utf-8"))
+                fixture = json.loads((case_dir / artifact_name).read_text(encoding="utf-8"))
+                _validate_schema_subset(fixture, schema, path=str((case_dir / artifact_name).relative_to(root)))
+
+        explain_case_root = artifacts / "explain-batch-cases"
+        explain_schema = json.loads((schemas / "lfguard.explain_batch.v1.schema.json").read_text(encoding="utf-8"))
+        for fixture_path in sorted(explain_case_root.glob("*.json")):
+            fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+            _validate_schema_subset(fixture, explain_schema, path=str(fixture_path.relative_to(root)))
+
+    def test_service_contract_fixture_matrix_covers_review_and_explain_outcomes(self):
+        root = Path(__file__).resolve().parents[1]
+        artifacts = root / "examples" / "artifacts"
+
+        expected_review = {
+            "passed": ("passed", "inform", False),
+            "review_required": ("review_required", "review_required", False),
+            "approval_required": ("review_required", "approval_required", False),
+            "blocked": ("blocked", "block", True),
+        }
+        for case_name, (status, action, hard_block) in expected_review.items():
+            summary = json.loads(
+                (artifacts / "review-cases" / case_name / "summary.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(summary["status"], status)
+            self.assertEqual(summary["recommended_action"], action)
+            self.assertEqual(summary["action_summary"]["block"] > 0, hard_block)
+            self.assertIn("evidence", summary)
+            self.assertEqual(summary["evidence"]["truncation"], {"truncated": False, "artifacts": []})
+
+        expected_explain = {
+            "allowed": ("allowed", ["direct_grant"], []),
+            "denied_missing_permission": ("denied", [], ["DESCRIBE"]),
+            "denied_no_matching_grant": ("denied", [], []),
+        }
+        for case_name, (decision, matched_sources, missing_permissions) in expected_explain.items():
+            payload = json.loads(
+                (artifacts / "explain-batch-cases" / "{}.json".format(case_name)).read_text(encoding="utf-8")
+            )
+            result = payload["results"][0]
+            self.assertEqual(result["decision"], decision)
+            self.assertEqual(result["diagnosis"]["matched_sources"], matched_sources)
+            self.assertEqual(result["diagnosis"]["missing_permissions"], missing_permissions)
 
     def test_review_bundle_contract_fixture_is_service_safe(self):
         root = Path(__file__).resolve().parents[1]
@@ -270,6 +347,9 @@ class DocumentationExampleTests(unittest.TestCase):
         self.assertEqual(summary["recommended_action"], "review_required")
         self.assertEqual(summary["blocking_reasons"], [])
         self.assertEqual(set(summary["action_summary"]), {"inform", "review_required", "approval_required", "block"})
+        self.assertEqual(summary["evidence"]["lfguard_version"], manifest["lfguard_version"])
+        self.assertEqual(summary["evidence"]["inputs"]["current"]["source"], "current_snapshot")
+        self.assertEqual(summary["evidence"]["truncation"], {"truncated": False, "artifacts": []})
         self.assertEqual(lint_payload["schema_version"], "lfguard.lint.v1")
         self.assertEqual(audit_payload["schema_version"], "lfguard.audit.v1")
         self.assertEqual(plan_payload["schema_version"], "lfguard.plan.v1")
@@ -290,6 +370,8 @@ class DocumentationExampleTests(unittest.TestCase):
             "reason",
             "recommended_action",
             "hard_block",
+            "title",
+            "docs_url",
         ):
             self.assertIn(key, grant_change)
         self.assertEqual(grant_change["risk"], "safe")
@@ -405,3 +487,50 @@ class DocumentationExampleTests(unittest.TestCase):
 
 def _is_external_link(target: str) -> bool:
     return target.startswith(("http://", "https://", "mailto:"))
+
+
+def _validate_schema_subset(data, schema, *, path):
+    if "const" in schema:
+        assert data == schema["const"], "{} expected const {!r}, got {!r}".format(path, schema["const"], data)
+    if "enum" in schema:
+        assert data in schema["enum"], "{} expected one of {!r}, got {!r}".format(path, schema["enum"], data)
+
+    if "type" in schema:
+        expected_types = schema["type"]
+        if isinstance(expected_types, str):
+            expected_types = [expected_types]
+        assert any(_matches_json_type(data, expected_type) for expected_type in expected_types), (
+            "{} expected type {!r}, got {}".format(path, expected_types, type(data).__name__)
+        )
+
+    if "minimum" in schema and isinstance(data, (int, float)) and not isinstance(data, bool):
+        assert data >= schema["minimum"], "{} expected minimum {}".format(path, schema["minimum"])
+
+    if isinstance(data, dict):
+        for key in schema.get("required", []):
+            assert key in data, "{} missing required key {}".format(path, key)
+        for key, child_schema in schema.get("properties", {}).items():
+            if key in data:
+                _validate_schema_subset(data[key], child_schema, path="{}.{}".format(path, key))
+
+    if isinstance(data, list) and "items" in schema:
+        for index, item in enumerate(data):
+            _validate_schema_subset(item, schema["items"], path="{}[{}]".format(path, index))
+
+
+def _matches_json_type(data, expected_type):
+    if expected_type == "object":
+        return isinstance(data, dict)
+    if expected_type == "array":
+        return isinstance(data, list)
+    if expected_type == "string":
+        return isinstance(data, str)
+    if expected_type == "integer":
+        return isinstance(data, int) and not isinstance(data, bool)
+    if expected_type == "number":
+        return isinstance(data, (int, float)) and not isinstance(data, bool)
+    if expected_type == "boolean":
+        return isinstance(data, bool)
+    if expected_type == "null":
+        return data is None
+    return True

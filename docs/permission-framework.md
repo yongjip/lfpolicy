@@ -2,7 +2,7 @@
 
 `lfguard` is a strict framework for defining, validating, explaining, planning,
 and safely applying AWS Lake Formation data permissions. It is not a
-consumer-specific integration layer; DMS, CI systems, internal consoles, Jira,
+consumer-specific integration layer; approval systems, CI jobs, internal consoles, Jira,
 Slack, and cache-backed inventory systems should integrate through state files,
 providers, and stable JSON reports.
 

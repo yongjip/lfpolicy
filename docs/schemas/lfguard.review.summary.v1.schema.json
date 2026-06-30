@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/yongjip/aws-datalake-guard/docs/schemas/lfguard.review.summary.v1.schema.json",
+  "title": "lfguard review summary v1",
+  "type": "object",
+  "required": ["schema_version", "status", "recommended_action", "action_summary", "blocking_reasons", "summary"],
+  "properties": {
+    "schema_version": { "const": "lfguard.review.summary.v1" },
+    "status": { "enum": ["passed", "review_required", "blocked"] },
+    "recommended_action": { "enum": ["inform", "review_required", "approval_required", "block"] },
+    "action_summary": {
+      "type": "object",
+      "required": ["inform", "review_required", "approval_required", "block"],
+      "properties": {
+        "inform": { "type": "integer", "minimum": 0 },
+        "review_required": { "type": "integer", "minimum": 0 },
+        "approval_required": { "type": "integer", "minimum": 0 },
+        "block": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "blocking_reasons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source", "recommended_action"],
+        "properties": {
+          "source": { "enum": ["lint", "audit", "plan"] },
+          "id": { "type": ["string", "null"] },
+          "code": { "type": ["string", "null"] },
+          "target": { "type": ["string", "null"] },
+          "message": { "type": ["string", "null"] },
+          "recommended_action": { "const": "block" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["lint", "audit", "plan", "explain"],
+      "additionalProperties": true
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["generated_at", "lfguard_version", "inputs", "truncation"],
+      "properties": {
+        "generated_at": { "type": "string" },
+        "lfguard_version": { "type": "string" },
+        "inputs": { "type": "object" },
+        "truncation": {
+          "type": "object",
+          "required": ["truncated", "artifacts"],
+          "properties": {
+            "truncated": { "type": "boolean" },
+            "artifacts": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "artifacts": { "type": "object" }
+  },
+  "additionalProperties": true
+}

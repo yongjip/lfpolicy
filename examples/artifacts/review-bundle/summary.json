@@ -12,6 +12,26 @@
     "plan": "plan.json"
   },
   "blocking_reasons": [],
+  "evidence": {
+    "generated_at": "2026-06-30T15:42:21Z",
+    "inputs": {
+      "current": {
+        "path": "examples/current-snapshot.json",
+        "sha256": "9d2118c3fb0418906d5335d9d83177d3404033ee715c3e09cc85cbf02cbd2d3e",
+        "source": "current_snapshot"
+      },
+      "desired": {
+        "path": "examples/desired.json",
+        "sha256": "080f0ea48d40eb0a0c76ebda69bd78432749e6bc2146c95681097cddde867b2d",
+        "source": "desired_state"
+      }
+    },
+    "lfguard_version": "0.8.0",
+    "truncation": {
+      "artifacts": [],
+      "truncated": false
+    }
+  },
   "recommended_action": "review_required",
   "schema_version": "lfguard.review.summary.v1",
   "status": "review_required",

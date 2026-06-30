@@ -3,6 +3,8 @@
 Use `lfguard` as an advisory evidence layer for Lake Formation permission
 review and access diagnosis. Services should keep ownership of approval,
 customer-facing language, audit storage, and actual grant or revoke execution.
+`lfguard` does not decide the service's IAM role layout, approval identity
+model, or runtime credential separation.
 
 ## Contract Boundary
 
@@ -15,6 +17,10 @@ Call the public CLI module from the service runtime:
 Do not import private `lakeformation_guard.cli` helpers or other implementation
 details from application code. Treat JSON files written by `review` and
 `explain-batch` as the integration contract.
+
+The consuming service owns runtime AWS credentials. `lfguard` does not bypass
+AWS authorization and should not be treated as the component that designs or
+enforces service IAM role separation.
 
 Run subprocesses with:
 
@@ -75,6 +81,10 @@ python -m lakeformation_guard explain-batch \
 
 Treat access as allowed only when a result has `decision: "allowed"`. A
 principal/resource match without the requested permissions remains `denied`.
+Use `diagnosis` for compact UI or ticket summaries, and use the nested
+`explain` object for detailed Lake Formation snapshot/desired-state evidence.
+`explain-batch` does not diagnose IAM, S3, KMS, or application-layer
+authorization.
 
 Prefer `--current-snapshot` when the diagnosis must be reproducible evidence.
 Use `--current-cache` for repeated live inventory reads when freshness and AWS
@@ -94,5 +104,9 @@ The repository includes service-facing contract fixtures:
 - `examples/artifacts/review-bundle/summary.json`
 - `examples/artifacts/review-bundle/explain.json`
 - `examples/artifacts/lfguard-explain-batch.json`
+- `examples/artifacts/review-cases/`
+- `examples/artifacts/explain-batch-cases/`
 
-Use them to test adapters before wiring live AWS inventory.
+The matching JSON Schemas live under `docs/schemas/`, and stable finding/action
+metadata lives in `docs/finding-catalog.md`. Use the schemas, catalog, and
+fixtures to test adapters before wiring live AWS inventory.

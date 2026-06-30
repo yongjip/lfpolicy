@@ -517,9 +517,12 @@ release notes under [`docs/release-notes/`](docs/release-notes/).
 - [`docs/cli.md`](docs/cli.md): command reference, common options, and exit
   codes.
 - [`docs/llm-agent-integration.md`](docs/llm-agent-integration.md): decision
-  rules for DMS workflows and LLM agents consuming lfguard JSON.
+  rules for service workflows and LLM agents consuming lfguard JSON.
 - [`docs/service-integration.md`](docs/service-integration.md): subprocess and
   JSON artifact contract for services that embed lfguard as advisory evidence.
+- [`docs/schemas/`](docs/schemas/): JSON Schemas for stable report contracts.
+- [`docs/finding-catalog.md`](docs/finding-catalog.md): stable finding and
+  plan action metadata for service UI and workflow mapping.
 - [`docs/recipes.md`](docs/recipes.md): audit-only, CI, and controlled apply
   workflows.
 - [`docs/ci-evidence-workflows.md`](docs/ci-evidence-workflows.md): artifact

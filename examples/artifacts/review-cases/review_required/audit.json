@@ -1,0 +1,47 @@
+{
+  "findings": [
+    {
+      "code": "GRANT_MISSING",
+      "details": {
+        "missing_grantable_permissions": [],
+        "missing_permissions": [
+          "SELECT"
+        ],
+        "principal": "arn:aws:iam::111122223333:role/Analyst",
+        "resource": {
+          "expression": {
+            "sensitivity": [
+              "internal"
+            ]
+          },
+          "kind": "lf_tag_policy",
+          "resource_type": "TABLE"
+        }
+      },
+      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#grant-missing",
+      "hard_block": false,
+      "id": "finding_001",
+      "message": "Principal grant is missing",
+      "principal": "arn:aws:iam::111122223333:role/Analyst",
+      "recommended_action": "review_required",
+      "resource": {
+        "expression": {
+          "sensitivity": [
+            "internal"
+          ]
+        },
+        "kind": "lf_tag_policy",
+        "resource_type": "TABLE"
+      },
+      "severity": "error",
+      "target": "arn:aws:iam::111122223333:role/Analyst -> lf_tag_policy:resource_type=TABLE:expression=sensitivity=internal",
+      "title": "Grant Missing"
+    }
+  ],
+  "schema_version": "lfguard.audit.v1",
+  "summary": {
+    "errors": 1,
+    "total": 1,
+    "warnings": 0
+  }
+}

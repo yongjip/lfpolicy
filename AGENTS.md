@@ -3,9 +3,9 @@
 ## Project Purpose
 
 `lfguard` is a Python CLI and library for AWS Lake Formation permission review.
-Its product direction is advisory governance evidence for services, DMS flows,
-LLM agents, pull requests, tickets, and audit logs. Do not reposition it as an
-automatic approval workflow or a Terraform/CDK replacement.
+Its product direction is advisory governance evidence for services, approval
+systems, LLM agents, pull requests, tickets, and audit logs. Do not reposition
+it as an automatic approval workflow or a Terraform/CDK replacement.
 
 ## Setup And Tests
 
@@ -21,7 +21,7 @@ automatic approval workflow or a Terraform/CDK replacement.
 
 - Preserve stable JSON fields unless intentionally making a documented release
   contract change.
-- For LLM and DMS integration behavior, read
+- For LLM and service integration behavior, read
   [`docs/llm-agent-integration.md`](docs/llm-agent-integration.md) first.
 - Do not treat `severity: "error"` as an automatic workflow block. Workflow
   decisions must use `recommended_action`, `hard_block`, and review `status`.
@@ -29,6 +29,10 @@ automatic approval workflow or a Terraform/CDK replacement.
   effective-access explanation. Use `explain-batch` for access decisions.
 - `apply` must stay explicit and conservative. Do not add automatic apply or
   approval workflow behavior without a direct product decision.
+- Do not make consuming-service IAM role design, approval identity checks, or
+  runtime credential separation an `lfguard` package responsibility. `lfguard`
+  may document that AWS authorization is enforced by AWS and that consuming
+  services own credentials, approval, audit storage, and grant/revoke execution.
 
 ## Version And Release
 
@@ -44,3 +48,6 @@ automatic approval workflow or a Terraform/CDK replacement.
   temporary review bundle output.
 - Keep docs and examples aligned with the advisory posture: explain risk and
   recommended action; reserve "blocked" language for hard blocks.
+- Keep the product boundary explicit: `lfguard` emits advisory evidence and
+  optional explicit apply commands; service IAM architecture and approval
+  orchestration belong to the consuming service.

@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/yongjip/aws-datalake-guard/docs/schemas/lfguard.review.explain.v1.schema.json",
+  "title": "lfguard review planned grant evidence v1",
+  "type": "object",
+  "required": ["schema_version", "description", "summary", "grant_changes"],
+  "properties": {
+    "schema_version": { "const": "lfguard.review.explain.v1" },
+    "description": { "type": "string" },
+    "summary": {
+      "type": "object",
+      "required": ["planned_grant_changes"],
+      "properties": {
+        "planned_grant_changes": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "grant_changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "change_id",
+          "action",
+          "risk",
+          "principal",
+          "resource",
+          "requested_permissions",
+          "before",
+          "after",
+          "reason",
+          "recommended_action",
+          "hard_block"
+        ],
+        "properties": {
+          "change_id": { "type": "string" },
+          "action": { "type": "string" },
+          "title": { "type": "string" },
+          "target": { "type": "string" },
+          "risk": { "enum": ["safe", "destructive"] },
+          "principal": { "type": "string" },
+          "resource": { "type": "object" },
+          "requested_permissions": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "grantable_permissions": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "before": {},
+          "after": {},
+          "reason": { "type": "string" },
+          "recommended_action": { "enum": ["inform", "review_required", "approval_required", "block"] },
+          "hard_block": { "type": "boolean" },
+          "docs_url": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

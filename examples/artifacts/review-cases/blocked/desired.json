@@ -1,0 +1,21 @@
+{
+  "exceptions": [
+    {
+      "approved_by": "data-governance",
+      "expires_at": "2000-01-01",
+      "owner": "data-platform",
+      "principal": "arn:aws:iam::111122223333:role/Analyst",
+      "reason": "temporary access",
+      "rules": [
+        "allow_broad_permissions"
+      ],
+      "ticket": "SEC-123"
+    }
+  ],
+  "grants": [],
+  "lf_tags": {
+    "sensitivity": [
+      "internal"
+    ]
+  }
+}

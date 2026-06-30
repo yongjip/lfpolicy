@@ -1,0 +1,14 @@
+{
+  "grants": [
+    {
+      "permissions": [
+        "ALL"
+      ],
+      "principal": "IAM_ALLOWED_PRINCIPALS",
+      "resource": {
+        "database": "analytics",
+        "kind": "database"
+      }
+    }
+  ]
+}

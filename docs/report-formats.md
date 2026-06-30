@@ -5,6 +5,10 @@ support reports accept `--output text`, `--output json`, `--output markdown`,
 or `--output sarif` where appropriate, and `--output-file PATH` writes the same
 report without printing to stdout.
 
+JSON Schemas for the stable machine-readable report fields live under
+[`schemas/`](schemas/). They validate the public contract surface while leaving
+nested Lake Formation payload details extensible.
+
 ## Review Bundles
 
 Use review bundles when a service, LLM agent, pull request, Jira ticket, or audit
@@ -71,7 +75,27 @@ guidance for services and LLM agents.
     "approval_required": 1,
     "block": 0
   },
-  "blocking_reasons": []
+  "blocking_reasons": [],
+  "evidence": {
+    "generated_at": "2026-07-01T00:00:00Z",
+    "lfguard_version": "0.8.0",
+    "inputs": {
+      "desired": {
+        "source": "desired_state",
+        "path": "desired.json",
+        "sha256": "..."
+      },
+      "current": {
+        "source": "current_snapshot",
+        "path": "current.json",
+        "sha256": "..."
+      }
+    },
+    "truncation": {
+      "truncated": false,
+      "artifacts": []
+    }
+  }
 }
 ```
 
@@ -90,9 +114,11 @@ evidence, not full effective-access decisions:
     {
       "change_id": "change_002",
       "action": "grant.add_permissions",
+      "title": "Grant permissions",
       "risk": "safe",
       "recommended_action": "review_required",
       "hard_block": false,
+      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#grant-add-permissions",
       "principal": "arn:aws:iam::111122223333:role/Analyst",
       "resource": {
         "kind": "lf_tag_policy",
@@ -177,7 +203,7 @@ Finding severities and advisory actions are intentionally separate:
 - `hard_block`: boolean shortcut for `recommended_action: "block"`.
 
 For advisory integrations, avoid treating every `severity: "error"` as a user
-block. Use `recommended_action` for DMS or LLM workflow decisions and reserve
+block. Use `recommended_action` for service or LLM workflow decisions and reserve
 "cannot proceed" language for `hard_block: true`.
 
 See [`llm-agent-integration.md`](llm-agent-integration.md) for the decision
@@ -437,6 +463,57 @@ policy grants use the grant catalog's effective tags for matching.
 Markdown explain reports include the same summary, effective LF-Tag tables, and
 finding table for pull request comments or GitHub Actions summaries.
 
+## Explain-Batch Reports
+
+Use explain-batch reports for operational access diagnosis across one or more
+requests:
+
+```bash
+lfguard explain-batch \
+  --requests examples/access-requests.json \
+  --current-snapshot examples/access-current-snapshot.json \
+  --output json
+```
+
+The top-level `decision` is the access contract. Treat access as allowed only
+when `decision` is `allowed`. The compact `diagnosis` object summarizes matching
+finding IDs, missing permissions, matching sources, and notes for service UIs or
+tickets. The nested `explain` object remains the detailed Lake Formation
+snapshot/desired-state evidence. `lfguard` does not diagnose IAM, S3, KMS, or
+application-layer authorization in this report.
+
+```json
+{
+  "schema_version": "lfguard.explain_batch.v1",
+  "summary": {
+    "total": 1,
+    "allowed": 0,
+    "denied": 1
+  },
+  "results": [
+    {
+      "id": "analyst-orders-describe",
+      "decision": "denied",
+      "principal": "arn:aws:iam::111122223333:role/Analyst",
+      "resource": {
+        "kind": "table",
+        "database": "analytics",
+        "table": "orders"
+      },
+      "requested_permissions": ["DESCRIBE"],
+      "diagnosis": {
+        "matched_findings": [],
+        "not_matched_findings": ["finding_001"],
+        "missing_desired_grants": [],
+        "matched_sources": [],
+        "missing_permissions": ["DESCRIBE"],
+        "notes": []
+      }
+    }
+  ]
+}
+```
+
 ## Plan Reports
 
 Use plan reports when you want a reviewable change list before touching AWS.
@@ -463,10 +540,14 @@ changes:
     {
       "id": "change_001",
       "action": "lf_tag.add_values",
+      "title": "Add LF-Tag values",
       "target": "lf_tag:sensitivity",
       "reason": "LF-Tag is missing allowed values",
       "destructive": false,
       "risk": "safe",
+      "recommended_action": "review_required",
+      "hard_block": false,
+      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#lf-tag-add-values",
       "principal": null,
       "resource": null,
       "before": {

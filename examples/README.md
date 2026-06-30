@@ -45,6 +45,8 @@ Markdown evidence a pull request or scheduled governance job would attach:
 - `artifacts/lfguard-explain.json`
 - `artifacts/lfguard-explain-batch.json`
 - `artifacts/review-bundle/`
+- `artifacts/review-cases/`
+- `artifacts/explain-batch-cases/`
 - `artifacts/lfguard-apply-dry-run.md`
 
 If you installed `lfguard` from PyPI and do not have this repository checked

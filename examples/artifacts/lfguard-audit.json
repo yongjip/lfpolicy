@@ -10,12 +10,16 @@
         ],
         "tag_key": "sensitivity"
       },
+      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#lf-tag-values-missing",
+      "hard_block": false,
       "id": "finding_001",
       "message": "Desired LF-Tag values are missing",
       "principal": null,
+      "recommended_action": "review_required",
       "resource": null,
       "severity": "error",
-      "target": "lf_tag:sensitivity"
+      "target": "lf_tag:sensitivity",
+      "title": "LF-Tag values missing"
     },
     {
       "code": "RESOURCE_TAG_VALUES_MISSING",
@@ -30,16 +34,20 @@
         },
         "tag_key": "sensitivity"
       },
+      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#resource-tag-values-missing",
+      "hard_block": false,
       "id": "finding_002",
       "message": "Resource is missing desired LF-Tag values",
       "principal": null,
+      "recommended_action": "review_required",
       "resource": {
         "database": "analytics",
         "kind": "table",
         "table": "orders"
       },
       "severity": "error",
-      "target": "table:database=analytics:table=orders"
+      "target": "table:database=analytics:table=orders",
+      "title": "Resource tag values missing"
     },
     {
       "code": "GRANT_MISSING",
@@ -64,9 +72,12 @@
           "resource_type": "TABLE"
         }
       },
+      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#grant-missing",
+      "hard_block": false,
       "id": "finding_003",
       "message": "Principal grant is missing",
       "principal": "arn:aws:iam::111122223333:role/Analyst",
+      "recommended_action": "review_required",
       "resource": {
         "expression": {
           "domain": [
@@ -81,7 +92,8 @@
         "resource_type": "TABLE"
       },
       "severity": "error",
-      "target": "arn:aws:iam::111122223333:role/Analyst -> lf_tag_policy:resource_type=TABLE:expression=domain=sales,sensitivity=internal|public"
+      "target": "arn:aws:iam::111122223333:role/Analyst -> lf_tag_policy:resource_type=TABLE:expression=domain=sales,sensitivity=internal|public",
+      "title": "Grant Missing"
     }
   ],
   "schema_version": "lfguard.audit.v1",

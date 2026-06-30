@@ -25,6 +25,7 @@
       },
       "before": null,
       "change_id": "change_003",
+      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#grant-add-permissions",
       "grantable_permissions": [],
       "hard_block": false,
       "principal": "arn:aws:iam::111122223333:role/Analyst",
@@ -48,7 +49,8 @@
         "resource_type": "TABLE"
       },
       "risk": "safe",
-      "target": "arn:aws:iam::111122223333:role/Analyst -> lf_tag_policy:resource_type=TABLE:expression=domain=sales,sensitivity=internal|public"
+      "target": "arn:aws:iam::111122223333:role/Analyst -> lf_tag_policy:resource_type=TABLE:expression=domain=sales,sensitivity=internal|public",
+      "title": "Grant permissions"
     }
   ],
   "schema_version": "lfguard.review.explain.v1",

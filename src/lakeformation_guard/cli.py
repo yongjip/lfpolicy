@@ -918,6 +918,8 @@ def _build_review_bundle(
         current=current,
         summary=summary_payload,
     )
+    summary_payload = dict(summary_payload)
+    summary_payload["evidence"] = _review_summary_evidence(manifest_payload)
     return {
         "manifest": manifest_payload,
         "summary": summary_payload,
@@ -1070,6 +1072,18 @@ def _review_summary_payload(
     }
 
 
+def _review_summary_evidence(manifest_payload: Mapping[str, Any]) -> dict:
+    return {
+        "generated_at": manifest_payload["created_at"],
+        "lfguard_version": manifest_payload["lfguard_version"],
+        "inputs": manifest_payload["inputs"],
+        "truncation": {
+            "truncated": False,
+            "artifacts": [],
+        },
+    }
+
+
 def _review_status(
     lint_summary: Mapping[str, int],
     audit_summary: Mapping[str, int],
@@ -1117,8 +1131,10 @@ def _review_blocking_reasons(
                     "id": item.get("id"),
                     "code": item.get("code") or item.get("action"),
                     "target": item.get("target"),
+                    "title": item.get("title"),
                     "message": item.get("message") or item.get("reason"),
                     "recommended_action": item.get("recommended_action", ACTION_BLOCK),
+                    "docs_url": item.get("docs_url"),
                 }
             )
     return reasons
@@ -1134,11 +1150,13 @@ def _review_explain_payload(change_plan: Plan) -> dict:
             {
                 "change_id": change.id,
                 "action": change.action,
+                "title": change_payload["title"],
                 "target": change.target,
                 "reason": change.reason,
                 "risk": change.risk,
                 "recommended_action": change_payload["recommended_action"],
                 "hard_block": change_payload["hard_block"],
+                "docs_url": change_payload["docs_url"],
                 "principal": change.principal,
                 "resource": change.resource,
                 "requested_permissions": list(change.payload.get("permissions", ())),
@@ -1454,6 +1472,7 @@ def _explain_batch_report(desired: DesiredState, current: CurrentState, requests
                 "principal": request["principal"],
                 "resource": request["resource"].to_dict(),
                 "requested_permissions": list(request["permissions"]),
+                "diagnosis": _explain_batch_diagnosis(report),
                 "explain": report.to_dict(),
             }
         )
@@ -1472,6 +1491,32 @@ def _explain_decision(report: ExplainReport) -> str:
     if report.summary()["matched"]:
         return "allowed"
     return "denied"
+
+
+def _explain_batch_diagnosis(report: ExplainReport) -> dict:
+    matched_findings = []
+    not_matched_findings = []
+    missing_desired_grants = []
+    matched_sources = set()
+    missing_permission_names = set()
+    for finding in report.findings:
+        if finding.status == "matched":
+            matched_findings.append(finding.id)
+            matched_sources.add(finding.source)
+        elif finding.status == "not_matched":
+            not_matched_findings.append(finding.id)
+        elif finding.status == "missing":
+            missing_desired_grants.append(finding.id)
+        for permission in finding.details.get("missing_permissions", ()):
+            missing_permission_names.add(str(permission))
+    return {
+        "matched_findings": matched_findings,
+        "not_matched_findings": not_matched_findings,
+        "missing_desired_grants": missing_desired_grants,
+        "matched_sources": sorted(matched_sources),
+        "missing_permissions": sorted(missing_permission_names),
+        "notes": list(report.notes),
+    }
 
 
 def _render_explain_batch(payload: Mapping[str, Any], output: str) -> str:

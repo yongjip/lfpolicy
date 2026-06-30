@@ -1,0 +1,58 @@
+{
+  "action_summary": {
+    "approval_required": 3,
+    "block": 0,
+    "inform": 0,
+    "review_required": 0
+  },
+  "artifacts": {
+    "audit": "audit.json",
+    "explain": "explain.json",
+    "lint": "lint.json",
+    "plan": "plan.json"
+  },
+  "blocking_reasons": [],
+  "evidence": {
+    "generated_at": "2026-06-30T15:43:27Z",
+    "inputs": {
+      "current": {
+        "path": "examples/artifacts/review-cases/approval_required/current.json",
+        "sha256": "e29011142a709c973a1e63746f11738046cde6706b9af7e167a975283af9023a",
+        "source": "current_snapshot"
+      },
+      "desired": {
+        "path": "examples/artifacts/review-cases/approval_required/desired.json",
+        "sha256": "e29011142a709c973a1e63746f11738046cde6706b9af7e167a975283af9023a",
+        "source": "desired_state"
+      }
+    },
+    "lfguard_version": "0.8.0",
+    "truncation": {
+      "artifacts": [],
+      "truncated": false
+    }
+  },
+  "recommended_action": "approval_required",
+  "schema_version": "lfguard.review.summary.v1",
+  "status": "review_required",
+  "summary": {
+    "audit": {
+      "errors": 0,
+      "total": 0,
+      "warnings": 0
+    },
+    "explain": {
+      "planned_grant_changes": 0
+    },
+    "lint": {
+      "errors": 3,
+      "total": 3,
+      "warnings": 0
+    },
+    "plan": {
+      "destructive": 0,
+      "safe": 0,
+      "total": 0
+    }
+  }
+}

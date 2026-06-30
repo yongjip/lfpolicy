@@ -1,0 +1,50 @@
+{
+  "description": "Planned grant-change evidence for review bundles. Use lfguard explain-batch for effective-access decisions.",
+  "grant_changes": [
+    {
+      "action": "grant.add_permissions",
+      "after": {
+        "permissions": [
+          "SELECT"
+        ],
+        "principal": "arn:aws:iam::111122223333:role/Analyst",
+        "resource": {
+          "expression": {
+            "sensitivity": [
+              "internal"
+            ]
+          },
+          "kind": "lf_tag_policy",
+          "resource_type": "TABLE"
+        }
+      },
+      "before": null,
+      "change_id": "change_001",
+      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#grant-add-permissions",
+      "grantable_permissions": [],
+      "hard_block": false,
+      "principal": "arn:aws:iam::111122223333:role/Analyst",
+      "reason": "Principal is missing desired Lake Formation permissions",
+      "recommended_action": "review_required",
+      "requested_permissions": [
+        "SELECT"
+      ],
+      "resource": {
+        "expression": {
+          "sensitivity": [
+            "internal"
+          ]
+        },
+        "kind": "lf_tag_policy",
+        "resource_type": "TABLE"
+      },
+      "risk": "safe",
+      "target": "arn:aws:iam::111122223333:role/Analyst -> lf_tag_policy:resource_type=TABLE:expression=sensitivity=internal",
+      "title": "Grant permissions"
+    }
+  ],
+  "schema_version": "lfguard.review.explain.v1",
+  "summary": {
+    "planned_grant_changes": 1
+  }
+}

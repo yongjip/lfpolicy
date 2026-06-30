@@ -1541,6 +1541,10 @@ class ProviderExplainTests(unittest.TestCase):
                 [(result["id"], result["decision"]) for result in payload["results"]],
                 [("allowed", "allowed"), ("denied", "denied"), ("missing-permission", "denied")],
             )
+            self.assertEqual(payload["results"][0]["diagnosis"]["matched_findings"], ["finding_001"])
+            self.assertEqual(payload["results"][0]["diagnosis"]["matched_sources"], ["direct_grant"])
+            self.assertEqual(payload["results"][2]["diagnosis"]["not_matched_findings"], ["finding_001"])
+            self.assertEqual(payload["results"][2]["diagnosis"]["missing_permissions"], ["DESCRIBE"])
 
             with contextlib.redirect_stdout(io.StringIO()):
                 fail_exit_code = main(

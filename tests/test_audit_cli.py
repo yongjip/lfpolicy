@@ -139,8 +139,10 @@ class AuditCliTests(unittest.TestCase):
                 ["lf_tag.create", "grant.add_permissions"],
             )
             self.assertEqual([change["id"] for change in payload["changes"]], ["change_001", "change_002"])
+            self.assertEqual([change["title"] for change in payload["changes"]], ["Create LF-Tag", "Grant permissions"])
             self.assertEqual([change["recommended_action"] for change in payload["changes"]], ["review_required", "review_required"])
             self.assertEqual([change["hard_block"] for change in payload["changes"]], [False, False])
+            self.assertIn("#lf-tag-create", payload["changes"][0]["docs_url"])
 
     def test_cli_review_writes_bundle_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -210,6 +212,12 @@ class AuditCliTests(unittest.TestCase):
             self.assertEqual(summary["status"], "review_required")
             self.assertEqual(summary["recommended_action"], "review_required")
             self.assertEqual(summary["blocking_reasons"], [])
+            self.assertEqual(summary["evidence"]["lfguard_version"], manifest["lfguard_version"])
+            self.assertEqual(summary["evidence"]["generated_at"], manifest["created_at"])
+            self.assertEqual(summary["evidence"]["inputs"]["desired"]["sha256"], _sha256(desired_path))
+            self.assertEqual(summary["evidence"]["inputs"]["current"]["source"], "current_snapshot")
+            self.assertEqual(summary["evidence"]["inputs"]["current"]["sha256"], _sha256(current_path))
+            self.assertEqual(summary["evidence"]["truncation"], {"truncated": False, "artifacts": []})
             self.assertEqual(lint_payload["schema_version"], "lfguard.lint.v1")
             self.assertEqual(explain_payload["schema_version"], "lfguard.review.explain.v1")
             self.assertEqual(explain_payload["summary"], {"planned_grant_changes": 1})
@@ -219,8 +227,10 @@ class AuditCliTests(unittest.TestCase):
                 [("change_002", "grant.add_permissions", "safe")],
             )
             self.assertEqual(explain_payload["grant_changes"][0]["requested_permissions"], ["SELECT"])
+            self.assertEqual(explain_payload["grant_changes"][0]["title"], "Grant permissions")
             self.assertEqual(explain_payload["grant_changes"][0]["recommended_action"], "review_required")
             self.assertEqual(explain_payload["grant_changes"][0]["hard_block"], False)
+            self.assertIn("#grant-add-permissions", explain_payload["grant_changes"][0]["docs_url"])
 
     def test_cli_review_status_passed_for_clean_state(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -341,6 +351,8 @@ class AuditCliTests(unittest.TestCase):
             self.assertEqual(summary["status"], "blocked")
             self.assertEqual(summary["recommended_action"], "block")
             self.assertEqual(summary["blocking_reasons"][0]["code"], "POLICY_EXCEPTION_EXPIRED")
+            self.assertEqual(summary["blocking_reasons"][0]["title"], "Policy exception expired")
+            self.assertIn("#policy-exception-expired", summary["blocking_reasons"][0]["docs_url"])
             self.assertEqual(lint_payload["findings"][0]["recommended_action"], "block")
             self.assertEqual(lint_payload["findings"][0]["hard_block"], True)
 

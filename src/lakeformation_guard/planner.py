@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from .advisory import is_hard_block, plan_recommended_action
+from .finding_catalog import plan_metadata
 from .models import (
     CurrentState,
     DataCellsFilterDefinition,
@@ -121,15 +122,18 @@ class Change:
 
     def to_dict(self) -> Dict[str, Any]:
         action = plan_recommended_action(self.action, destructive=self.destructive)
+        metadata = plan_metadata(self.action)
         return {
             "id": self.id,
             "action": self.action,
+            "title": metadata["title"],
             "target": self.target,
             "reason": self.reason,
             "destructive": self.destructive,
             "risk": self.risk,
             "recommended_action": action,
             "hard_block": is_hard_block(action),
+            "docs_url": metadata["docs_url"],
             "principal": self.principal,
             "resource": _json_ready(self.resource),
             "before": _json_ready(None if self.before is _UNSET else self.before),

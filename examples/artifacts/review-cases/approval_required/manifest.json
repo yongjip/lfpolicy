@@ -1,0 +1,51 @@
+{
+  "created_at": "2026-06-30T15:43:27Z",
+  "input_summary": {
+    "current": {
+      "data_cells_filters": 0,
+      "grants": 1,
+      "lf_tag_expressions": 0,
+      "lf_tags": 0,
+      "resource_tags": 0
+    },
+    "desired": {
+      "data_cells_filters": 0,
+      "grants": 1,
+      "lf_tag_expressions": 0,
+      "lf_tags": 0,
+      "resource_tags": 0
+    }
+  },
+  "inputs": {
+    "current": {
+      "path": "examples/artifacts/review-cases/approval_required/current.json",
+      "sha256": "e29011142a709c973a1e63746f11738046cde6706b9af7e167a975283af9023a",
+      "source": "current_snapshot"
+    },
+    "desired": {
+      "path": "examples/artifacts/review-cases/approval_required/desired.json",
+      "sha256": "e29011142a709c973a1e63746f11738046cde6706b9af7e167a975283af9023a",
+      "source": "desired_state"
+    }
+  },
+  "lfguard_version": "0.8.0",
+  "outputs": [
+    "summary.md",
+    "summary.json",
+    "lint.json",
+    "audit.json",
+    "plan.json",
+    "explain.json"
+  ],
+  "plan_options": {
+    "allow_data_cells_filter_deletes": false,
+    "allow_data_cells_filter_updates": false,
+    "allow_lf_tag_expression_deletes": false,
+    "allow_lf_tag_expression_updates": false,
+    "allow_lf_tag_value_removals": false,
+    "allow_permission_revokes": false,
+    "allow_resource_tag_removals": false
+  },
+  "schema_version": "lfguard.review.manifest.v1",
+  "status": "review_required"
+}

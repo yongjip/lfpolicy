@@ -1,6 +1,6 @@
 # LLM Agent Integration
 
-Use this guide when an LLM agent, DMS workflow, approval assistant, or service
+Use this guide when an LLM agent, approval workflow assistant, or service
 reads `lfguard` JSON output. This is runtime integration guidance, not coding
 agent guidance for modifying this repository. Repository coding agents should
 start with [`../AGENTS.md`](../AGENTS.md).
@@ -65,7 +65,7 @@ Recommended review summary handling:
 ```
 
 The correct interpretation is: "This is not blocked, but it needs approval
-before proceeding."
+or reviewer action before proceeding."
 
 ## Finding And Change Rules
 

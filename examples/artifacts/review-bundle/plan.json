@@ -18,6 +18,7 @@
         ]
       },
       "destructive": false,
+      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#lf-tag-add-values",
       "hard_block": false,
       "id": "change_001",
       "payload": {
@@ -33,7 +34,8 @@
       "requires_flag": null,
       "resource": null,
       "risk": "safe",
-      "target": "lf_tag:sensitivity"
+      "target": "lf_tag:sensitivity",
+      "title": "Add LF-Tag values"
     },
     {
       "action": "resource_tag.add_values",
@@ -66,6 +68,7 @@
         }
       },
       "destructive": false,
+      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#resource-tag-add-values",
       "hard_block": false,
       "id": "change_002",
       "payload": {
@@ -90,7 +93,8 @@
         "table": "orders"
       },
       "risk": "safe",
-      "target": "table:database=analytics:table=orders"
+      "target": "table:database=analytics:table=orders",
+      "title": "Add resource LF-Tags"
     },
     {
       "action": "grant.add_permissions",
@@ -117,6 +121,7 @@
       "aws_api": "grant_permissions",
       "before": null,
       "destructive": false,
+      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#grant-add-permissions",
       "hard_block": false,
       "id": "change_003",
       "payload": {
@@ -158,7 +163,8 @@
         "resource_type": "TABLE"
       },
       "risk": "safe",
-      "target": "arn:aws:iam::111122223333:role/Analyst -> lf_tag_policy:resource_type=TABLE:expression=domain=sales,sensitivity=internal|public"
+      "target": "arn:aws:iam::111122223333:role/Analyst -> lf_tag_policy:resource_type=TABLE:expression=domain=sales,sensitivity=internal|public",
+      "title": "Grant permissions"
     }
   ],
   "schema_version": "lfguard.plan.v1",

@@ -1,0 +1,24 @@
+{
+  "grants": [
+    {
+      "permissions": [
+        "SELECT"
+      ],
+      "principal": "arn:aws:iam::111122223333:role/Analyst",
+      "resource": {
+        "expression": {
+          "sensitivity": [
+            "internal"
+          ]
+        },
+        "kind": "lf_tag_policy",
+        "resource_type": "TABLE"
+      }
+    }
+  ],
+  "lf_tags": {
+    "sensitivity": [
+      "internal"
+    ]
+  }
+}
