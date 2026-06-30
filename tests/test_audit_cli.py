@@ -139,6 +139,8 @@ class AuditCliTests(unittest.TestCase):
                 ["lf_tag.create", "grant.add_permissions"],
             )
             self.assertEqual([change["id"] for change in payload["changes"]], ["change_001", "change_002"])
+            self.assertEqual([change["recommended_action"] for change in payload["changes"]], ["review_required", "review_required"])
+            self.assertEqual([change["hard_block"] for change in payload["changes"]], [False, False])
 
     def test_cli_review_writes_bundle_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -206,6 +208,8 @@ class AuditCliTests(unittest.TestCase):
             self.assertEqual(manifest["inputs"]["current"]["sha256"], _sha256(current_path))
             self.assertEqual(summary["schema_version"], "lfguard.review.summary.v1")
             self.assertEqual(summary["status"], "review_required")
+            self.assertEqual(summary["recommended_action"], "review_required")
+            self.assertEqual(summary["blocking_reasons"], [])
             self.assertEqual(lint_payload["schema_version"], "lfguard.lint.v1")
             self.assertEqual(explain_payload["schema_version"], "lfguard.review.explain.v1")
             self.assertEqual(explain_payload["summary"], {"planned_grant_changes": 1})
@@ -215,6 +219,8 @@ class AuditCliTests(unittest.TestCase):
                 [("change_002", "grant.add_permissions", "safe")],
             )
             self.assertEqual(explain_payload["grant_changes"][0]["requested_permissions"], ["SELECT"])
+            self.assertEqual(explain_payload["grant_changes"][0]["recommended_action"], "review_required")
+            self.assertEqual(explain_payload["grant_changes"][0]["hard_block"], False)
 
     def test_cli_review_status_passed_for_clean_state(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -242,8 +248,9 @@ class AuditCliTests(unittest.TestCase):
             summary = json.loads((review_dir / "summary.json").read_text(encoding="utf-8"))
             self.assertEqual(exit_code, 0)
             self.assertEqual(summary["status"], "passed")
+            self.assertEqual(summary["recommended_action"], "inform")
 
-    def test_cli_review_status_blocked_for_lint_errors(self):
+    def test_cli_review_status_review_required_for_policy_lint_errors(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             desired_path = tmp_path / "desired.json"
@@ -276,8 +283,66 @@ class AuditCliTests(unittest.TestCase):
                 )
 
             summary = json.loads((review_dir / "summary.json").read_text(encoding="utf-8"))
+            lint_payload = json.loads((review_dir / "lint.json").read_text(encoding="utf-8"))
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(summary["status"], "review_required")
+            self.assertEqual(summary["recommended_action"], "approval_required")
+            self.assertEqual(summary["blocking_reasons"], [])
+            self.assertEqual(
+                {finding["recommended_action"] for finding in lint_payload["findings"]},
+                {"approval_required"},
+            )
+            self.assertFalse(any(finding["hard_block"] for finding in lint_payload["findings"]))
+
+    def test_cli_review_status_blocked_for_hard_block_lint_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            desired_path = tmp_path / "desired.json"
+            current_path = tmp_path / "current.json"
+            review_dir = tmp_path / "review"
+            desired_path.write_text(
+                json.dumps(
+                    {
+                        "lf_tags": {"sensitivity": ["internal"]},
+                        "exceptions": [
+                            {
+                                "principal": "role",
+                                "rules": ["allow_broad_permissions"],
+                                "reason": "temporary access",
+                                "ticket": "SEC-123",
+                                "owner": "data-platform",
+                                "approved_by": "data-governance",
+                                "expires_at": "2000-01-01",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            current_path.write_text(json.dumps({"lf_tags": {"sensitivity": ["internal"]}, "grants": []}), encoding="utf-8")
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                exit_code = main(
+                    [
+                        "review",
+                        "--desired",
+                        str(desired_path),
+                        "--current-snapshot",
+                        str(current_path),
+                        "--output-dir",
+                        str(review_dir),
+                        "--fail-on-blocked",
+                    ]
+                )
+
+            summary = json.loads((review_dir / "summary.json").read_text(encoding="utf-8"))
+            lint_payload = json.loads((review_dir / "lint.json").read_text(encoding="utf-8"))
             self.assertEqual(exit_code, 1)
             self.assertEqual(summary["status"], "blocked")
+            self.assertEqual(summary["recommended_action"], "block")
+            self.assertEqual(summary["blocking_reasons"][0]["code"], "POLICY_EXCEPTION_EXPIRED")
+            self.assertEqual(lint_payload["findings"][0]["recommended_action"], "block")
+            self.assertEqual(lint_payload["findings"][0]["hard_block"], True)
 
     def test_cli_review_status_blocked_for_destructive_plan(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -318,9 +383,14 @@ class AuditCliTests(unittest.TestCase):
                 )
 
             summary = json.loads((review_dir / "summary.json").read_text(encoding="utf-8"))
+            plan_payload = json.loads((review_dir / "plan.json").read_text(encoding="utf-8"))
             self.assertEqual(exit_code, 1)
             self.assertEqual(summary["status"], "blocked")
+            self.assertEqual(summary["recommended_action"], "block")
+            self.assertEqual(summary["blocking_reasons"][0]["code"], "grant.revoke_permissions")
             self.assertEqual(summary["summary"]["plan"]["destructive"], 1)
+            self.assertEqual(plan_payload["changes"][0]["recommended_action"], "block")
+            self.assertEqual(plan_payload["changes"][0]["hard_block"], True)
 
     def test_cli_review_manifest_records_current_cache_provenance(self):
         with tempfile.TemporaryDirectory() as tmp:

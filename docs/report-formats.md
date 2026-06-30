@@ -35,7 +35,7 @@ review/
 ```json
 {
   "schema_version": "lfguard.review.manifest.v1",
-  "lfguard_version": "0.7.0",
+  "lfguard_version": "0.7.1",
   "status": "review_required",
   "inputs": {
     "desired": {
@@ -54,9 +54,26 @@ review/
 ```
 
 `summary.json` uses `schema_version: "lfguard.review.summary.v1"` and reports
-`passed`, `review_required`, or `blocked`. A bundle is blocked when lint errors
-or destructive planned changes are present. Audit findings and safe planned
-changes require review without blocking by default.
+`passed`, `review_required`, or `blocked`. The status is separate from technical
+finding severity. A bundle is blocked only when at least one finding or plan
+change has `recommended_action: "block"`. Non-blocking lint errors remain
+`severity: "error"` but produce `review_required` or `approval_required` action
+guidance for services and LLM agents.
+
+```json
+{
+  "schema_version": "lfguard.review.summary.v1",
+  "status": "review_required",
+  "recommended_action": "approval_required",
+  "action_summary": {
+    "inform": 0,
+    "review_required": 1,
+    "approval_required": 1,
+    "block": 0
+  },
+  "blocking_reasons": []
+}
+```
 
 `explain.json` in a review bundle uses
 `schema_version: "lfguard.review.explain.v1"` and contains planned grant-change
@@ -74,6 +91,8 @@ evidence, not full effective-access decisions:
       "change_id": "change_002",
       "action": "grant.add_permissions",
       "risk": "safe",
+      "recommended_action": "review_required",
+      "hard_block": false,
       "principal": "arn:aws:iam::111122223333:role/Analyst",
       "resource": {
         "kind": "lf_tag_policy",
@@ -123,6 +142,8 @@ JSON audit reports contain a severity summary and an ordered list of findings:
       "id": "finding_001",
       "code": "LF_TAG_VALUES_MISSING",
       "severity": "error",
+      "recommended_action": "review_required",
+      "hard_block": false,
       "target": "lf_tag:sensitivity",
       "principal": null,
       "resource": null,
@@ -145,13 +166,16 @@ Current LF-Tag assignments on resources that are absent from desired state are
 reported as `RESOURCE_TAG_UNMANAGED`. These findings include the resource
 identity and current tag values, and also respect ownership and ignore rules.
 
-Finding severities have these meanings:
+Finding severities and advisory actions are intentionally separate:
 
-- `error`: desired state is missing from current state and should usually block
-  CI when `--fail-on-findings` is used.
-- `warning`: current state contains unmanaged extras. Use
-  `--fail-on-severity error` when warnings should remain visible but should not
-  fail CI.
+- `severity`: technical governance signal such as `error` or `warning`.
+- `recommended_action`: user-facing workflow guidance: `inform`,
+  `review_required`, `approval_required`, or `block`.
+- `hard_block`: boolean shortcut for `recommended_action: "block"`.
+
+For advisory integrations, avoid treating every `severity: "error"` as a user
+block. Use `recommended_action` for DMS or LLM workflow decisions and reserve
+"cannot proceed" language for `hard_block: true`.
 
 Markdown audit reports use the same finding order and include summary counts,
 which makes them suitable for GitHub Actions job summaries:

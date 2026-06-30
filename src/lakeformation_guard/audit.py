@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
+from .advisory import audit_recommended_action, is_hard_block
 from .config import unmanaged_severity
 from .models import CurrentState, DesiredState, Grant, ResourceRef
 from .permissions import missing_permissions
@@ -36,10 +37,13 @@ class AuditFinding:
     id: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
+        action = audit_recommended_action(self.code, self.severity)
         return {
             "id": self.id,
             "code": self.code,
             "severity": self.severity,
+            "recommended_action": action,
+            "hard_block": is_hard_block(action),
             "target": self.target,
             "principal": self.details.get("principal"),
             "resource": self.details.get("resource"),

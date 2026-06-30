@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
+from .advisory import is_hard_block, lint_recommended_action
 from .config import lint_exception_applies, lint_severity
 from .models import DesiredState, Grant, GuardrailConfig, PolicyException, ResourceTagAssignment
 from .permissions import BROAD_PERMISSION_COVERAGE
@@ -55,9 +56,12 @@ class LintFinding:
     details: Mapping[str, Any]
 
     def to_dict(self) -> Dict[str, Any]:
+        action = lint_recommended_action(self.code, self.severity)
         return {
             "code": self.code,
             "severity": self.severity,
+            "recommended_action": action,
+            "hard_block": is_hard_block(action),
             "target": self.target,
             "message": self.message,
             "details": dict(self.details),

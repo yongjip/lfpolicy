@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.7.1
+
+- Adds advisory `recommended_action` and `hard_block` fields to lint, audit,
+  plan, and review grant-change evidence so services can separate severity from
+  user-facing workflow actions.
+- Changes review blocking semantics to block only hard-block findings or
+  destructive planned changes; non-blocking lint errors now produce
+  `review_required` with `approval_required` or `review_required` action
+  guidance.
+
 ## 0.7.0
 
 - Adds `lfguard review` for approval bundles with manifest, summary, lint,

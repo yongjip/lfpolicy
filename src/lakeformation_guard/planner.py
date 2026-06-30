@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
+from .advisory import is_hard_block, plan_recommended_action
 from .models import (
     CurrentState,
     DataCellsFilterDefinition,
@@ -119,6 +120,7 @@ class Change:
         return _ACTION_AWS_API.get(self.action)
 
     def to_dict(self) -> Dict[str, Any]:
+        action = plan_recommended_action(self.action, destructive=self.destructive)
         return {
             "id": self.id,
             "action": self.action,
@@ -126,6 +128,8 @@ class Change:
             "reason": self.reason,
             "destructive": self.destructive,
             "risk": self.risk,
+            "recommended_action": action,
+            "hard_block": is_hard_block(action),
             "principal": self.principal,
             "resource": _json_ready(self.resource),
             "before": _json_ready(None if self.before is _UNSET else self.before),

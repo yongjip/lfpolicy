@@ -15,6 +15,13 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
 
 from ._version import __version__
+from .advisory import (
+    ACTION_BLOCK,
+    ACTION_INFORM,
+    ACTION_REVIEW_REQUIRED,
+    action_summary,
+    strongest_action,
+)
 from .audit import AUDIT_SCHEMA_VERSION, AuditFinding, audit
 from .aws import AWSLakeFormationAdapter
 from .aws_permissions import (
@@ -1039,10 +1046,15 @@ def _review_summary_payload(
     lint_summary = lint_payload["summary"]
     audit_summary = audit_payload["summary"]
     plan_summary = plan_payload["summary"]
-    status = _review_status(lint_summary, audit_summary, plan_summary)
+    review_actions = _review_actions(lint_payload, audit_payload, plan_payload)
+    recommended_action = strongest_action(review_actions)
+    status = _review_status(lint_summary, audit_summary, plan_summary, recommended_action)
     return {
         "schema_version": REVIEW_SUMMARY_SCHEMA_VERSION,
         "status": status,
+        "recommended_action": recommended_action,
+        "action_summary": dict(action_summary(review_actions)),
+        "blocking_reasons": _review_blocking_reasons(lint_payload, audit_payload, plan_payload),
         "summary": {
             "lint": lint_summary,
             "audit": audit_summary,
@@ -1062,12 +1074,54 @@ def _review_status(
     lint_summary: Mapping[str, int],
     audit_summary: Mapping[str, int],
     plan_summary: Mapping[str, int],
+    recommended_action: str,
 ) -> str:
-    if lint_summary["errors"] or plan_summary["destructive"]:
+    if recommended_action == ACTION_BLOCK:
         return "blocked"
     if lint_summary["warnings"] or audit_summary["total"] or plan_summary["total"]:
         return "review_required"
+    if lint_summary["errors"]:
+        return "review_required"
     return "passed"
+
+
+def _review_actions(
+    lint_payload: Mapping[str, Any],
+    audit_payload: Mapping[str, Any],
+    plan_payload: Mapping[str, Any],
+) -> Tuple[str, ...]:
+    actions = []
+    actions.extend(str(finding.get("recommended_action", ACTION_INFORM)) for finding in lint_payload["findings"])
+    actions.extend(str(finding.get("recommended_action", ACTION_REVIEW_REQUIRED)) for finding in audit_payload["findings"])
+    actions.extend(str(change.get("recommended_action", ACTION_REVIEW_REQUIRED)) for change in plan_payload["changes"])
+    return tuple(actions)
+
+
+def _review_blocking_reasons(
+    lint_payload: Mapping[str, Any],
+    audit_payload: Mapping[str, Any],
+    plan_payload: Mapping[str, Any],
+) -> list:
+    reasons = []
+    for source, items in (
+        ("lint", lint_payload["findings"]),
+        ("audit", audit_payload["findings"]),
+        ("plan", plan_payload["changes"]),
+    ):
+        for item in items:
+            if not item.get("hard_block"):
+                continue
+            reasons.append(
+                {
+                    "source": source,
+                    "id": item.get("id"),
+                    "code": item.get("code") or item.get("action"),
+                    "target": item.get("target"),
+                    "message": item.get("message") or item.get("reason"),
+                    "recommended_action": item.get("recommended_action", ACTION_BLOCK),
+                }
+            )
+    return reasons
 
 
 def _review_explain_payload(change_plan: Plan) -> dict:
@@ -1075,6 +1129,7 @@ def _review_explain_payload(change_plan: Plan) -> dict:
     for change in change_plan.changes:
         if not change.action.startswith("grant."):
             continue
+        change_payload = change.to_dict()
         grant_changes.append(
             {
                 "change_id": change.id,
@@ -1082,12 +1137,14 @@ def _review_explain_payload(change_plan: Plan) -> dict:
                 "target": change.target,
                 "reason": change.reason,
                 "risk": change.risk,
+                "recommended_action": change_payload["recommended_action"],
+                "hard_block": change_payload["hard_block"],
                 "principal": change.principal,
                 "resource": change.resource,
                 "requested_permissions": list(change.payload.get("permissions", ())),
                 "grantable_permissions": list(change.payload.get("grantable_permissions", ())),
-                "before": change.to_dict().get("before"),
-                "after": change.to_dict().get("after"),
+                "before": change_payload.get("before"),
+                "after": change_payload.get("after"),
             }
         )
     return {
@@ -1106,6 +1163,7 @@ def _render_review_summary_markdown(payload: Mapping[str, Any]) -> str:
         "# lfguard review",
         "",
         "- Status: `{}`".format(payload["status"]),
+        "- Recommended action: `{}`".format(payload["recommended_action"]),
         "- Lint findings: {total} total, {errors} error(s), {warnings} warning(s)".format(**summary["lint"]),
         "- Audit findings: {total} total, {errors} error(s), {warnings} warning(s)".format(**summary["audit"]),
         "- Plan changes: {total} total, {safe} safe, {destructive} destructive".format(**summary["plan"]),

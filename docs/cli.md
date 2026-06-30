@@ -136,10 +136,12 @@ The bundle contains:
   `explain.json` is review-specific planned grant-change evidence; use
   `explain-batch` for effective-access decisions.
 
-Use `--fail-on-blocked` when CI should fail on lint errors or destructive
-planned changes. Audit findings and safe planned changes set the review status
-to `review_required`. Existing bundle files are not overwritten unless `--force`
-is passed.
+Use `--fail-on-blocked` when CI should fail only on hard-block findings or
+destructive planned changes. Non-blocking lint errors keep their `severity:
+error` signal but are surfaced as `review_required` or `approval_required`
+recommended actions. Audit findings and safe planned changes set the review
+status to `review_required`. Existing bundle files are not overwritten unless
+`--force` is passed.
 
 ## `explain-batch`
 
