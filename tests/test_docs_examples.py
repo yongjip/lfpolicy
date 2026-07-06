@@ -58,6 +58,36 @@ class DocumentationExampleTests(unittest.TestCase):
             else:
                 DesiredState.from_dict(data)
 
+    def test_active_docs_do_not_document_apply_command(self):
+        root = Path(__file__).resolve().parents[1]
+        active_paths = [
+            root / "README.md",
+            root / "AGENTS.md",
+            root / "CLAUDE.md",
+            root / "CONTRIBUTING.md",
+            root / "llms.txt",
+            *sorted(path for path in (root / "docs").rglob("*.md") if "release-notes" not in path.parts),
+            *sorted((root / "examples").glob("*.md")),
+        ]
+
+        for docs_path in active_paths:
+            text = docs_path.read_text(encoding="utf-8")
+            self.assertNotIn(
+                "lfguard apply",
+                text,
+                "{} documents removed apply command".format(docs_path.relative_to(root)),
+            )
+            self.assertNotIn(
+                "additive-apply",
+                text,
+                "{} documents removed apply IAM template".format(docs_path.relative_to(root)),
+            )
+            self.assertNotIn(
+                "destructive-apply",
+                text,
+                "{} documents removed apply IAM template".format(docs_path.relative_to(root)),
+            )
+
     def test_aws_api_coverage_mentions_adapter_methods(self):
         root = Path(__file__).resolve().parents[1]
         docs_text = (root / "docs" / "aws-api-coverage.md").read_text(encoding="utf-8")
@@ -69,16 +99,6 @@ class DocumentationExampleTests(unittest.TestCase):
             "list_lf_tags",
             "list_lf_tag_expressions",
             "list_permissions",
-            "create_lf_tag",
-            "delete_lf_tag",
-            "update_lf_tag",
-            "create_lf_tag_expression",
-            "update_lf_tag_expression",
-            "delete_lf_tag_expression",
-            "add_lf_tags_to_resource",
-            "remove_lf_tags_from_resource",
-            "grant_permissions",
-            "revoke_permissions",
         )
 
         for method in methods:
@@ -92,6 +112,20 @@ class DocumentationExampleTests(unittest.TestCase):
             "lakeformation:ListLFTags",
             "lakeformation:ListLFTagExpressions",
             "lakeformation:ListPermissions",
+        ):
+            self.assertIn(action, docs_text)
+
+        for removed in (
+            "create_lf_tag",
+            "delete_lf_tag",
+            "update_lf_tag",
+            "create_lf_tag_expression",
+            "update_lf_tag_expression",
+            "delete_lf_tag_expression",
+            "add_lf_tags_to_resource",
+            "remove_lf_tags_from_resource",
+            "grant_permissions",
+            "revoke_permissions",
             "lakeformation:CreateLFTag",
             "lakeformation:DeleteLFTag",
             "lakeformation:UpdateLFTag",
@@ -103,7 +137,8 @@ class DocumentationExampleTests(unittest.TestCase):
             "lakeformation:GrantPermissions",
             "lakeformation:RevokePermissions",
         ):
-            self.assertIn(action, docs_text)
+            self.assertNotIn(removed, source_text)
+            self.assertNotIn(removed, docs_text)
 
     def test_code_scanning_workflow_uploads_lint_and_audit_sarif(self):
         root = Path(__file__).resolve().parents[1]
@@ -233,7 +268,6 @@ class DocumentationExampleTests(unittest.TestCase):
         plan = json.loads((artifacts / "lfguard-plan.json").read_text(encoding="utf-8"))
         explain = json.loads((artifacts / "lfguard-explain.json").read_text(encoding="utf-8"))
         explain_batch = json.loads((artifacts / "lfguard-explain-batch.json").read_text(encoding="utf-8"))
-        apply_dry_run = (artifacts / "lfguard-apply-dry-run.md").read_text(encoding="utf-8")
 
         self.assertEqual(audit["schema_version"], "lfguard.audit.v1")
         self.assertEqual(plan["schema_version"], "lfguard.plan.v1")
@@ -254,8 +288,7 @@ class DocumentationExampleTests(unittest.TestCase):
         self.assertEqual(explain_batch["results"][1]["explain"]["summary"]["not_matched"], 1)
         self.assertEqual(explain_batch["results"][0]["diagnosis"]["matched_sources"], ["direct_grant"])
         self.assertEqual(explain_batch["results"][1]["diagnosis"]["missing_permissions"], ["DESCRIBE"])
-        self.assertIn("Dry run: no changes applied.", apply_dry_run)
-        self.assertIn("change_003", apply_dry_run)
+        self.assertFalse((artifacts / "lfguard-apply-dry-run.md").exists())
 
     def test_report_contract_schemas_validate_checked_in_fixtures(self):
         root = Path(__file__).resolve().parents[1]
@@ -394,7 +427,7 @@ class DocumentationExampleTests(unittest.TestCase):
         for expected in (
             'sys.executable, "-m", "lakeformation_guard"',
             "Do not import private",
-            "Do not run `lfguard apply` automatically",
+            "has no apply command in 0.9.0 and later",
             "`recommended_action`",
             "`hard_block`",
             "`severity: \"error\"`",
@@ -468,7 +501,7 @@ class DocumentationExampleTests(unittest.TestCase):
 
         for expected in (
             "Python-native policy builder",
-            "policy.py -> generated desired.json -> lfguard check/audit/plan/apply",
+            "policy.py -> generated desired.json -> lfguard check/audit/plan/review",
             "Permission group names are not enums",
             "reader()",
             "editor()",

@@ -3,7 +3,7 @@
 `lfguard` is built for Lake Formation policy guardrails, not general AWS
 infrastructure provisioning. It is most useful when LF-Tag policy should be
 reviewed as code, checked for drift, explained, and attached to approval or
-audit records before any optional apply step.
+audit records before any external execution step.
 
 ## Use lfguard when
 
@@ -30,8 +30,8 @@ its own audit and approval workflow. A common pattern is:
 2. Store desired LF-Tag policy in the application or platform repository.
 3. Run `lfguard review` in CI to produce machine-readable JSON plus Markdown
    evidence.
-4. Run `lfguard apply` first as a dry run, then with `--execute` only after
-   the review bundle is approved.
+4. Let the consuming service or operator workflow execute only the approved
+   changes after the review bundle is approved.
 
 See [`lake-formation-guide.md`](lake-formation-guide.md) for the Lake Formation
 concepts, best practices, and antipatterns that inform this split.
@@ -62,6 +62,6 @@ Do not use `lfguard` as the only control for account security or data access. It
 does not create IAM principals, register data lake locations, configure
 cross-account sharing, or replace Lake Formation administration.
 
-Do not use `lfguard apply --execute` without reviewing the generated plan and
-running it with a principal that has only the permissions needed for the planned
-operation.
+Do not treat lfguard evidence as AWS authorization or approval workflow state.
+The consuming service or operator workflow must use appropriately scoped AWS
+credentials and execute only reviewed changes.

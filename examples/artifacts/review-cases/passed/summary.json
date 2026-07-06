@@ -26,7 +26,7 @@
         "source": "desired_state"
       }
     },
-    "lfguard_version": "0.8.2",
+    "lfguard_version": "0.9.0",
     "truncation": {
       "artifacts": [],
       "truncated": false

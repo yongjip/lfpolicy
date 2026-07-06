@@ -20,7 +20,7 @@ ACCOUNT_ID = "111122223333"
 
 class AwsPermissionTemplateTests(unittest.TestCase):
     def test_template_actions_are_stable_and_unique(self):
-        policy = iam_policy_template("additive-apply", include_glue_read=True)
+        policy = iam_policy_template("read-only", include_glue_read=True)
 
         self.assertEqual(
             iam_policy_actions(policy),
@@ -33,18 +33,18 @@ class AwsPermissionTemplateTests(unittest.TestCase):
                 "lakeformation:ListPermissions",
                 "lakeformation:GetDataCellsFilter",
                 "lakeformation:ListDataCellsFilter",
-                "lakeformation:CreateLFTag",
-                "lakeformation:CreateLFTagExpression",
-                "lakeformation:UpdateLFTag",
-                "lakeformation:AddLFTagsToResource",
-                "lakeformation:CreateDataCellsFilter",
-                "lakeformation:GrantPermissions",
                 "glue:GetDatabase",
                 "glue:GetDatabases",
                 "glue:GetTable",
                 "glue:GetTables",
             ),
         )
+
+    def test_removed_apply_templates_are_rejected(self):
+        for template in ("additive-apply", "destructive-apply"):
+            with self.subTest(template=template):
+                with self.assertRaisesRegex(ValueError, "Unsupported IAM permission template"):
+                    iam_policy_template(template)
 
     def test_policy_source_arn_normalizes_assumed_role(self):
         self.assertEqual(
@@ -93,7 +93,7 @@ class AwsPermissionCheckerStubberTests(unittest.TestCase):
 
     def test_check_uses_current_assumed_role_and_reports_denied_actions(self):
         checker = AWSIAMPermissionChecker(self.iam, self.sts)
-        actions = ("lakeformation:ListPermissions", "lakeformation:GrantPermissions")
+        actions = ("lakeformation:ListPermissions", "lakeformation:GetDataCellsFilter")
 
         self.sts_stubber.add_response(
             "get_caller_identity",
@@ -114,7 +114,7 @@ class AwsPermissionCheckerStubberTests(unittest.TestCase):
                         "EvalDecision": "allowed",
                     },
                     {
-                        "EvalActionName": "lakeformation:GrantPermissions",
+                        "EvalActionName": "lakeformation:GetDataCellsFilter",
                         "EvalResourceName": "*",
                         "EvalDecision": "implicitDeny",
                     },
@@ -128,12 +128,12 @@ class AwsPermissionCheckerStubberTests(unittest.TestCase):
             },
         )
 
-        report = checker.check(actions, template="additive-apply")
+        report = checker.check(actions, template="read-only")
 
         self.assertFalse(report.allowed)
         self.assertEqual(report.principal_arn, "arn:aws:iam::111122223333:role/LfguardApply")
         self.assertEqual(report.caller_arn, "arn:aws:sts::111122223333:assumed-role/LfguardApply/session")
-        self.assertEqual(report.denied_actions, ("lakeformation:GrantPermissions",))
+        self.assertEqual(report.denied_actions, ("lakeformation:GetDataCellsFilter",))
         self.assertEqual(report.to_dict()["summary"], {"total": 2, "allowed": 1, "denied": 1})
         self.iam_stubber.assert_no_pending_responses()
         self.sts_stubber.assert_no_pending_responses()

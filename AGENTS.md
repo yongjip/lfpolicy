@@ -27,8 +27,9 @@ it as an automatic approval workflow or a Terraform/CDK replacement.
   decisions must use `recommended_action`, `hard_block`, and review `status`.
 - `review/explain.json` is planned grant-change evidence. It is not an
   effective-access explanation. Use `explain-batch` for access decisions.
-- `apply` must stay explicit and conservative. Do not add automatic apply or
-  approval workflow behavior without a direct product decision.
+- Do not add an apply command, AWS write execution helpers, or approval
+  workflow behavior. Consuming services own grants, revokes, IAM write roles,
+  and approval orchestration.
 - Do not make consuming-service IAM role design, approval identity checks, or
   runtime credential separation an `lfguard` package responsibility. `lfguard`
   may document that AWS authorization is enforced by AWS and that consuming
@@ -48,6 +49,6 @@ it as an automatic approval workflow or a Terraform/CDK replacement.
   temporary review bundle output.
 - Keep docs and examples aligned with the advisory posture: explain risk and
   recommended action; reserve "blocked" language for hard blocks.
-- Keep the product boundary explicit: `lfguard` emits advisory evidence and
-  optional explicit apply commands; service IAM architecture and approval
-  orchestration belong to the consuming service.
+- Keep the product boundary explicit: `lfguard` emits advisory evidence;
+  service IAM architecture, grant/revoke execution, and approval orchestration
+  belong to the consuming service.

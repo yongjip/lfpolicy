@@ -30,7 +30,7 @@ Before filing a feature request, check these boundary docs:
 - [`docs/architecture.md`](docs/architecture.md)
 
 Feature requests are a good fit when they improve review, lint, audit, explain,
-plan, explicit apply, or narrow Lake Formation modeling without moving service
+plan, review bundles, or narrow Lake Formation modeling without moving service
 or workflow ownership into `lfguard`.
 
 If a request mixes in-scope and out-of-scope behavior, split it into smaller
@@ -43,7 +43,7 @@ issues before filing. Maintainers: triage every request with
 - Keep audit and plan logic deterministic and AWS-free.
 - Keep boto3 calls in the adapter layer.
 - Default plans must remain conservative: no revokes or removals unless the user explicitly enables them.
-- Add tests for every planner, audit, or apply behavior change.
+- Add tests for every planner, audit, review, explain, or adapter behavior change.
 - Prefer JSON-compatible public payloads so CLI output can be consumed by CI systems.
 
 ## Release Checks

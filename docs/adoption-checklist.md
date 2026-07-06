@@ -1,8 +1,8 @@
 # Adoption Checklist
 
 Use this checklist when introducing `lfguard` to a Lake Formation environment.
-Start offline, then add CI, then decide whether controlled apply belongs in your
-workflow.
+Start offline, then add CI, then decide how consuming services will use review
+evidence in their own approval and execution workflows.
 
 ## 1. Run the Offline Demo
 
@@ -157,32 +157,26 @@ lfguard plan \
   --fail-on-changes
 ```
 
-## 6. Review Apply Behavior
+## 6. Review Execution Boundary
 
-Run live apply without `--execute` first. This is a dry run:
+Write a review bundle before any consuming service executes Lake Formation
+changes:
 
 ```bash
-lfguard apply \
+lfguard review \
   --desired policy/desired.json \
-  --profile sandbox \
-  --region us-east-1 \
-  --output markdown \
-  --output-file artifacts/lfguard-apply-dry-run.md
+  --current-snapshot snapshots/sandbox-current.json \
+  --output-dir artifacts/review \
+  --force
 ```
 
-Execute only after reviewing the plan and confirming the IAM/Lake Formation
-permissions are intentionally scoped:
+If a service executes grants or revokes after review, keep its AWS write
+credentials, approval checks, audit persistence, and rollback behavior outside
+the lfguard package contract. Use lfguard's read-only IAM template only for live
+inventory evidence:
 
 ```bash
-lfguard permissions --template additive-apply --output-file iam/lfguard-additive-apply.json
-```
-
-```bash
-lfguard apply \
-  --desired policy/desired.json \
-  --profile sandbox \
-  --region us-east-1 \
-  --execute
+lfguard permissions --template read-only --output-file iam/lfguard-read-only.json
 ```
 
 ## 7. Separate Destructive Changes
@@ -205,10 +199,10 @@ Before production use, confirm:
 
 - `policy.py` and generated desired state are reviewed and owned by the right
   platform or data governance team.
-- CI stores audit, plan, or apply reports as artifacts.
-- The AWS principal used by automation has only the needed read or apply
+- CI stores audit, plan, review, or explain reports as artifacts.
+- The AWS principal used by lfguard automation has only the needed read
   permissions.
-- Dry-run output is reviewed before any `--execute` run.
+- External execution uses only reviewed plan evidence and selected change IDs.
 - Destructive flags are not enabled in routine additive workflows.
 
 For operational examples, see [`recipes.md`](recipes.md),

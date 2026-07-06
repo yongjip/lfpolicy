@@ -10,7 +10,7 @@ Use a Python-native policy builder as the source of truth for permission groups.
 Generate normal `DesiredState` JSON or YAML from it.
 
 ```text
-policy.py -> generated desired.json -> lfguard check/audit/plan/apply
+policy.py -> generated desired.json -> lfguard check/audit/plan/review
 ```
 
 Do not build a large YAML DSL. YAML is still useful as the generated review

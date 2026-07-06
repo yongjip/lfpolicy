@@ -1,9 +1,10 @@
 # AWS API Coverage
 
-`lfguard` uses AWS APIs only when live inventory or execution is requested.
+`lfguard` uses AWS APIs only when live inventory or import is requested.
 Most commands are fully offline: `sample`, `bootstrap`, `init`, `schema`,
 `doctor`, `permissions`, `completion`, `check`, `validate`, `lint`, and
-`summary` never call AWS. The `audit`, `plan`, and `apply` commands also stay
+`summary` never call AWS. The `audit`, `plan`, `review`, `explain`, and
+`explain-batch` commands also stay
 offline when `--current-snapshot` is provided.
 
 The live adapter is intentionally small and uses only the Lake Formation client
@@ -15,9 +16,11 @@ These commands load live state when `--current-snapshot` is omitted:
 
 - `lfguard audit`
 - `lfguard plan`
-- `lfguard apply`
+- `lfguard review`
+- `lfguard explain`
+- `lfguard explain-batch`
 
-`lfguard snapshot` always loads live state.
+`lfguard snapshot` and `lfguard import` load live state.
 
 Live inventory is scoped by the desired-state file. `lfguard` asks AWS only for
 the LF-Tags, resources, principals, and grants referenced by the desired state.
@@ -53,53 +56,20 @@ needs human review before becoming owned desired state.
 `NextToken` paging otherwise. Import does not crawl Glue databases and tables
 directly.
 
-## Apply
+## Planned Change Evidence
 
-`lfguard apply` is a dry run unless `--execute` is provided. With `--execute`,
-the adapter calls AWS for the changes present in the computed plan, or for the
-selected changes in a saved JSON plan passed with `--plan`.
-
-| Plan action | boto3 Lake Formation method | IAM action |
-| --- | --- | --- |
-| `lf_tag.create` | `create_lf_tag` | `lakeformation:CreateLFTag` |
-| `lf_tag.add_values` | `update_lf_tag` with `TagValuesToAdd` | `lakeformation:UpdateLFTag` |
-| `lf_tag.delete` | `delete_lf_tag` | `lakeformation:DeleteLFTag` |
-| `lf_tag.remove_values` | `update_lf_tag` with `TagValuesToDelete` | `lakeformation:UpdateLFTag` |
-| `lf_tag_expression.create` | `create_lf_tag_expression` | `lakeformation:CreateLFTagExpression` |
-| `lf_tag_expression.update` | `update_lf_tag_expression` | `lakeformation:UpdateLFTagExpression` |
-| `lf_tag_expression.delete` | `delete_lf_tag_expression` | `lakeformation:DeleteLFTagExpression` |
-| `data_cells_filter.create` | `create_data_cells_filter` | `lakeformation:CreateDataCellsFilter` |
-| `data_cells_filter.update` | `update_data_cells_filter` | `lakeformation:UpdateDataCellsFilter` |
-| `data_cells_filter.delete` | `delete_data_cells_filter` | `lakeformation:DeleteDataCellsFilter` |
-| `resource_tag.add_values` | `add_lf_tags_to_resource` | `lakeformation:AddLFTagsToResource` |
-| `resource_tag.remove_values` | `remove_lf_tags_from_resource` | `lakeformation:RemoveLFTagsFromResource` |
-| `grant.add_permissions` | `grant_permissions` | `lakeformation:GrantPermissions` |
-| `grant.revoke_permissions` | `revoke_permissions` | `lakeformation:RevokePermissions` |
-
-Destructive actions are not planned or applied unless the matching `--allow-*`
-flag is supplied:
-
-- `lf_tag.remove_values` requires `--allow-lf-tag-value-removals`;
-- `lf_tag.delete` requires `--allow-lf-tag-deletes`;
-- `lf_tag_expression.update` requires `--allow-lf-tag-expression-updates`;
-- `lf_tag_expression.delete` requires `--allow-lf-tag-expression-deletes`;
-- `data_cells_filter.update` requires `--allow-data-cells-filter-updates`;
-- `data_cells_filter.delete` requires `--allow-data-cells-filter-deletes`;
-- `resource_tag.remove_values` requires `--allow-resource-tag-removals`;
-- `grant.revoke_permissions` requires `--allow-permission-revokes`.
-
-`lf_tag.delete` is a direct delete request only. It does not recursively detach
-resource LF-Tags, named expressions, or grants on the caller's behalf; those
-removals should stay explicit in the reviewed plan.
+`lfguard plan` and `lfguard review` may include `aws_api` metadata for planned
+changes. That metadata is evidence for humans, services, CI, and tickets; it is
+not an instruction that lfguard will execute. AWS write execution belongs to the
+consuming service or operator workflow.
 
 ## Catalog IDs
 
-Pass `--catalog-id` to add a Glue Data Catalog ID to live inventory and apply
+Pass `--catalog-id` to add a Glue Data Catalog ID to live inventory and import
 requests. Resource-level `catalog_id` values in state files are also preserved
 when rendering Lake Formation resource payloads. LF-Tag definitions can also
 carry `catalog_id`; those scoped definitions override the adapter default for
-`get_lf_tag`, `create_lf_tag`, `delete_lf_tag`, and `update_lf_tag` request
-shapes.
+`get_lf_tag` request shapes.
 Data cells filter definitions use `catalog_id` as the AWS `TableCatalogId`.
 
 ## Error Handling
@@ -108,14 +78,10 @@ During inventory, missing LF-Tags or resources are treated as absent current
 state when AWS returns a not-found style error. Other boto3 exceptions are
 raised and the CLI exits with status `2`.
 
-During apply, AWS responses are returned in JSON output under each result's
-`response` field. Failed AWS calls are not swallowed; the command exits with an
-error so automation can stop immediately.
-
 ## Related Docs
 
 - [`aws-permissions.md`](aws-permissions.md): starter IAM policies for read-only
-  and apply roles.
+  lfguard roles.
 - [`safety-model.md`](safety-model.md): conservative defaults and destructive
   change handling.
 - [`state-format.md`](state-format.md): resource shapes rendered into AWS Lake

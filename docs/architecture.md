@@ -1,6 +1,6 @@
 # Architecture
 
-`lfguard` keeps policy comparison separate from live AWS execution. The core
+`lfguard` keeps policy comparison separate from consuming-service execution. The core
 package is small enough to audit and is structured around deterministic models,
 pure audit and planning functions, and an optional boto3 adapter.
 
@@ -26,8 +26,8 @@ pure audit and planning functions, and an optional boto3 adapter.
 - `lakeformation_guard.io` reads JSON or optional YAML state files.
 - `lakeformation_guard.cli` handles command parsing, report rendering, file
   output, and exit codes.
-- `lakeformation_guard.aws` is the optional boto3 integration for live
-  inventory and apply operations.
+- `lakeformation_guard.aws` is the optional boto3 integration for read-only live
+  inventory and import operations.
 - `lakeformation_guard.schema` provides the JSON Schema used by the `schema`
   command and editor or CI validation.
 
@@ -35,7 +35,8 @@ The `lakeformation_guard.policy` module sits above these boundaries rather than
 replacing them. It compiles Python-native tag keys, resource tag assignments,
 permission groups, safe permission templates, and IAM role bindings into the
 existing `DesiredState` model. The generated desired state still passes the same
-schema, lint, audit, plan, and apply workflow as hand-authored JSON or YAML.
+schema, lint, audit, plan, review, and explain workflows as hand-authored JSON
+or YAML.
 
 For requests that want to stretch `lfguard` into a broader service SDK, see
 [`library-embedding-boundary.md`](library-embedding-boundary.md).
@@ -51,7 +52,8 @@ Most workflows follow the same path:
 5. Run `audit()` for drift findings, `plan()` for reviewable changes, or
    `explain()` for one effective-access question.
 6. Render text, JSON, Markdown, or SARIF output.
-7. Optionally pass the plan to the AWS adapter for dry-run or execution.
+7. Optionally pass reviewed plan evidence to the consuming service that owns AWS
+   write execution.
 
 The audit, planner, and explain layers do not know whether current state came
 from a file, AWS, or another provider. This keeps CI snapshot workflows and
@@ -69,15 +71,11 @@ The safety model is enforced in several places:
 - Permission revokes, named LF-Tag expression updates/deletes, resource tag
   removals, and LF-Tag value removals require explicit planner options and CLI
   flags.
-- `Plan.executable_changes()` excludes destructive changes unless explicitly
-  allowed.
-- `lfguard apply` is a dry run unless `--execute` is provided.
-- Saved-plan apply can be limited by change ID, action type, and safety budgets
-  before any AWS call is made.
+- Review summaries expose `recommended_action`, `hard_block`, and blocking
+  reasons for consuming workflows.
 - Risky desired grants can be allowed only through scoped exceptions with reason,
   ticket, owner, approver, and expiry metadata.
-- The boto3 adapter applies only actions represented by planner `Change`
-  objects.
+- The boto3 adapter is read-only; consuming services own grant/revoke execution.
 
 See [`safety-model.md`](safety-model.md) for production usage patterns and
 destructive-change review guidance.
@@ -119,7 +117,7 @@ from lakeformation_guard import CurrentState, DesiredState, PlanOptions, audit, 
 ```
 
 Use `lakeformation_guard.aws.AWSLakeFormationAdapter` only for live inventory or
-apply workflows. Internal helper functions and CLI rendering helpers are not
+import workflows. Internal helper functions and CLI rendering helpers are not
 part of the stable public API.
 
 Use `CurrentStateProvider` when a downstream system already has current state in

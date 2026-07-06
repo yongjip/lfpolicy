@@ -39,7 +39,7 @@ review/
 ```json
 {
   "schema_version": "lfguard.review.manifest.v1",
-  "lfguard_version": "0.8.2",
+  "lfguard_version": "0.9.0",
   "status": "review_required",
   "inputs": {
     "desired": {
@@ -79,7 +79,7 @@ guidance for services and LLM agents.
   "blocking_reasons": [],
   "evidence": {
     "generated_at": "2026-07-01T00:00:00Z",
-    "lfguard_version": "0.8.2",
+    "lfguard_version": "0.9.0",
     "inputs": {
       "desired": {
         "source": "desired_state",
@@ -153,8 +153,7 @@ Checked-in review bundle fixtures are available under
 
 ## Audit Reports
 
-Use audit reports when you want to detect drift without proposing or applying
-changes.
+Use audit reports when you want to detect drift without proposing remediation.
 
 ```bash
 lfguard audit \
@@ -584,69 +583,26 @@ Plan safety has these meanings:
 - `destructive`: removals or revokes. These are omitted by default and appear
   only when a matching `--allow-*` planning flag is supplied.
 
-Change IDs are stable within a saved plan file and are intended for selective
-apply:
+Change IDs are stable within a saved plan file and are intended for review,
+approval evidence, and consuming-service execution boundaries:
 
-```bash
-lfguard apply --plan plan.json --only change_001 --execute
-lfguard apply --plan plan.json --only-action grant.add_permissions --max-changes 10 --execute
+```json
+{
+  "reviewed_plan": "plan.json",
+  "approved_change_ids": ["change_001"],
+  "approved_actions": ["grant.add_permissions"]
+}
 ```
 
 Markdown plan reports include the same safety summary and change list for pull
 request review.
 
-## Apply Reports
+## Execution Boundary
 
-`lfguard apply` defaults to dry-run mode and renders the computed plan. With
-`--execute --output json`, the report includes the plan plus per-change execution
-results:
-
-```json
-{
-  "plan": {
-    "schema_version": "lfguard.plan.v1",
-    "summary": {
-      "total": 1,
-      "safe": 1,
-      "destructive": 0
-    },
-    "changes": [
-      {
-        "id": "change_001",
-        "action": "lf_tag.create",
-        "target": "lf_tag:sensitivity",
-        "reason": "LF-Tag is missing",
-        "destructive": false,
-        "risk": "safe",
-        "principal": null,
-        "resource": null,
-        "before": null,
-        "after": {
-          "tag_key": "sensitivity",
-          "tag_values": ["internal"]
-        },
-        "requires_flag": null,
-        "aws_api": "create_lf_tag",
-        "payload": {
-          "tag_key": "sensitivity",
-          "tag_values": ["internal"]
-        }
-      }
-    ]
-  },
-  "results": [
-    {
-      "action": "lf_tag.create",
-      "target": "lf_tag:sensitivity",
-      "applied": true,
-      "response": {}
-    }
-  ]
-}
-```
-
-Even with `--execute`, destructive changes are applied only when the matching
-allow flag is present.
+`lfguard` does not emit apply reports in 0.9.0 and later because it does not
+execute AWS writes. Store `review/summary.json`, `review/manifest.json`,
+`plan.json`, and selected change IDs when an external service needs compact
+approval or audit evidence.
 
 ## GitHub Actions
 

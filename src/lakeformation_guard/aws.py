@@ -1,8 +1,7 @@
-"""Optional boto3 adapter for live Lake Formation inventory and apply."""
+"""Optional boto3 adapter for live Lake Formation inventory and import."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from .models import (
@@ -15,7 +14,6 @@ from .models import (
     ResourceRef,
     ResourceTagAssignment,
 )
-from .planner import Change, Plan
 from .state_index import (
     data_cells_filter_definition_key,
     data_cells_filter_resource_key,
@@ -28,26 +26,8 @@ from .state_index import (
 RESOURCE_TAGGABLE_KINDS = {"database", "table", "table_with_columns"}
 
 
-@dataclass(frozen=True)
-class ApplyResult:
-    """Result of applying or dry-running a single change."""
-
-    action: str
-    target: str
-    applied: bool
-    response: Mapping[str, Any]
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "action": self.action,
-            "target": self.target,
-            "applied": self.applied,
-            "response": dict(self.response),
-        }
-
-
 class AWSLakeFormationAdapter:
-    """Thin boto3-backed adapter for Lake Formation operations."""
+    """Thin boto3-backed adapter for read-only Lake Formation operations."""
 
     def __init__(self, lakeformation_client: Any, *, catalog_id: Optional[str] = None) -> None:
         self.lakeformation = lakeformation_client
@@ -116,15 +96,6 @@ class AWSLakeFormationAdapter:
             resource_tags=tuple(resource_tags),
             grants=tuple(grants),
         )
-
-    def apply(self, change_plan: Plan, *, dry_run: bool = True, allow_destructive: bool = False) -> List[ApplyResult]:
-        results: List[ApplyResult] = []
-        for change in change_plan.executable_changes(allow_destructive=allow_destructive):
-            if dry_run:
-                results.append(ApplyResult(change.action, change.target, False, {"dry_run": True}))
-                continue
-            results.append(self._apply_change(change))
-        return results
 
     def _load_lf_tags(self, desired: DesiredState) -> Iterable[LFTagDefinition]:
         for tag in desired.lf_tags:
@@ -363,107 +334,6 @@ class AWSLakeFormationAdapter:
             if not next_token:
                 break
 
-    def _apply_change(self, change: Change) -> ApplyResult:
-        action = change.action
-        payload = dict(change.payload)
-        if action == "lf_tag.create":
-            response = self.lakeformation.create_lf_tag(**self._with_catalog_id({
-                "catalog_id": payload.get("catalog_id"),
-                "TagKey": payload["tag_key"],
-                "TagValues": payload["tag_values"],
-            }))
-        elif action == "lf_tag.delete":
-            response = self.lakeformation.delete_lf_tag(**self._with_catalog_id({
-                "catalog_id": payload.get("catalog_id"),
-                "TagKey": payload["tag_key"],
-            }))
-        elif action == "lf_tag.add_values":
-            response = self.lakeformation.update_lf_tag(**self._with_catalog_id({
-                "catalog_id": payload.get("catalog_id"),
-                "TagKey": payload["tag_key"],
-                "TagValuesToAdd": payload["tag_values"],
-            }))
-        elif action == "lf_tag.remove_values":
-            response = self.lakeformation.update_lf_tag(**self._with_catalog_id({
-                "catalog_id": payload.get("catalog_id"),
-                "TagKey": payload["tag_key"],
-                "TagValuesToDelete": payload["tag_values"],
-            }))
-        elif action == "lf_tag_expression.create":
-            response = self.lakeformation.create_lf_tag_expression(**self._with_catalog_id({
-                "Name": payload["name"],
-                "Description": payload.get("description", ""),
-                "Expression": _expression_pairs(payload["expression"]),
-                "catalog_id": payload.get("catalog_id"),
-            }))
-        elif action == "lf_tag_expression.update":
-            response = self.lakeformation.update_lf_tag_expression(**self._with_catalog_id({
-                "Name": payload["name"],
-                "Description": payload.get("description", ""),
-                "Expression": _expression_pairs(payload["expression"]),
-                "catalog_id": payload.get("catalog_id"),
-            }))
-        elif action == "lf_tag_expression.delete":
-            response = self.lakeformation.delete_lf_tag_expression(**self._with_catalog_id({
-                "Name": payload["name"],
-                "catalog_id": payload.get("catalog_id"),
-            }))
-        elif action == "data_cells_filter.create":
-            definition = DataCellsFilterDefinition.from_dict(payload)
-            response = self.lakeformation.create_data_cells_filter(
-                TableData=_data_cells_filter_table_data(definition, fallback_catalog_id=self.catalog_id)
-            )
-        elif action == "data_cells_filter.update":
-            definition = DataCellsFilterDefinition.from_dict(payload)
-            response = self.lakeformation.update_data_cells_filter(
-                TableData=_data_cells_filter_table_data(definition, fallback_catalog_id=self.catalog_id)
-            )
-        elif action == "data_cells_filter.delete":
-            definition = DataCellsFilterDefinition.from_dict(payload)
-            response = self.lakeformation.delete_data_cells_filter(
-                **_data_cells_filter_get_request(
-                    catalog_id=definition.catalog_id or self.catalog_id,
-                    database_name=definition.database_name,
-                    table_name=definition.table_name,
-                    name=definition.name,
-                )
-            )
-        elif action == "resource_tag.add_values":
-            resource = ResourceRef.from_dict(payload["resource"])
-            response = self.lakeformation.add_lf_tags_to_resource(**self._with_catalog_id({
-                "catalog_id": resource.catalog_id,
-                "Resource": to_lf_resource(resource),
-                "LFTags": _lf_tag_pairs(payload["tags"], catalog_id=resource.catalog_id),
-            }))
-        elif action == "resource_tag.remove_values":
-            resource = ResourceRef.from_dict(payload["resource"])
-            response = self.lakeformation.remove_lf_tags_from_resource(**self._with_catalog_id({
-                "catalog_id": resource.catalog_id,
-                "Resource": to_lf_resource(resource),
-                "LFTags": _lf_tag_pairs(payload["tags"], catalog_id=resource.catalog_id),
-            }))
-        elif action == "grant.add_permissions":
-            resource = ResourceRef.from_dict(payload["resource"])
-            response = self.lakeformation.grant_permissions(**self._with_catalog_id({
-                "catalog_id": resource.catalog_id,
-                "Principal": {"DataLakePrincipalIdentifier": payload["principal"]},
-                "Resource": to_lf_resource(resource),
-                "Permissions": payload.get("permissions", ()),
-                "PermissionsWithGrantOption": payload.get("grantable_permissions", ()),
-            }))
-        elif action == "grant.revoke_permissions":
-            resource = ResourceRef.from_dict(payload["resource"])
-            response = self.lakeformation.revoke_permissions(**self._with_catalog_id({
-                "catalog_id": resource.catalog_id,
-                "Principal": {"DataLakePrincipalIdentifier": payload["principal"]},
-                "Resource": to_lf_resource(resource),
-                "Permissions": payload.get("permissions", ()),
-                "PermissionsWithGrantOption": payload.get("grantable_permissions", ()),
-            }))
-        else:
-            raise ValueError("Unsupported change action: {}".format(action))
-        return ApplyResult(action=change.action, target=change.target, applied=True, response=response or {})
-
     def _with_catalog_id(self, kwargs: Mapping[str, Any]) -> Dict[str, Any]:
         request = dict(kwargs)
         payload_catalog_id = request.pop("catalog_id", None)
@@ -675,34 +545,6 @@ def _resource_for_lf_tag_lookup(resource: ResourceRef) -> ResourceRef:
     return resource
 
 
-def _lf_tag_pairs(
-    tags: Mapping[str, Iterable[str]],
-    *,
-    catalog_id: Optional[str] = None,
-) -> List[Dict[str, Any]]:
-    pairs = []
-    for key, values in sorted(tags.items()):
-        pair: Dict[str, Any] = {"TagKey": key, "TagValues": list(values)}
-        if catalog_id:
-            pair["CatalogId"] = catalog_id
-        pairs.append(pair)
-    return pairs
-
-
-def _expression_pairs(raw: Any) -> List[Dict[str, Any]]:
-    if isinstance(raw, Mapping):
-        return _lf_tag_pairs(raw)
-    pairs = []
-    for item in raw:
-        pairs.append(
-            {
-                "TagKey": item.get("key") or item.get("TagKey"),
-                "TagValues": item.get("values") or item.get("TagValues", ()),
-            }
-        )
-    return pairs
-
-
 def _expression_definition_from_response(
     raw: Mapping[str, Any],
     *,
@@ -740,30 +582,6 @@ def _data_cells_filter_get_request(
         "Name": name,
     }
     return {key: value for key, value in request.items() if value not in (None, "")}
-
-
-def _data_cells_filter_table_data(
-    definition: DataCellsFilterDefinition,
-    *,
-    fallback_catalog_id: Optional[str] = None,
-) -> Dict[str, Any]:
-    table_data: Dict[str, Any] = {
-        "TableCatalogId": definition.catalog_id or fallback_catalog_id,
-        "DatabaseName": definition.database_name,
-        "TableName": definition.table_name,
-        "Name": definition.name,
-    }
-    if definition.row_filter:
-        table_data["RowFilter"] = {"FilterExpression": definition.row_filter}
-    elif definition.all_rows:
-        table_data["RowFilter"] = {"AllRowsWildcard": {}}
-    if definition.columns:
-        table_data["ColumnNames"] = list(definition.columns)
-    elif definition.excluded_columns:
-        table_data["ColumnWildcard"] = {"ExcludedColumnNames": list(definition.excluded_columns)}
-    if definition.version_id:
-        table_data["VersionId"] = definition.version_id
-    return {key: value for key, value in table_data.items() if value not in (None, "")}
 
 
 def _data_cells_filter_definition_from_response(

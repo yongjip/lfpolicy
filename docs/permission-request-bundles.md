@@ -99,27 +99,24 @@ Reviewers should approve exact plan-local change IDs from the saved plan:
 }
 ```
 
-If the plan contains unrelated changes, do not apply the full plan. Apply only
-the reviewed IDs from the saved plan:
+If the plan contains unrelated changes, do not hand the full plan to an
+executor. Pass only the reviewed IDs from the saved plan to the consuming
+service:
 
-```bash
-lfguard apply \
-  --plan artifacts/requests/DATA-1042-plan.json \
-  --only change_003 \
-  --max-changes 1 \
-  --max-destructive 0 \
-  --execute
+```json
+{
+  "reviewed_plan": "artifacts/requests/DATA-1042-plan.json",
+  "approved_change_ids": ["change_003"]
+}
 ```
 
 For a batch of approved request changes, keep the reviewed IDs explicit:
 
-```bash
-lfguard apply \
-  --plan artifacts/requests/request-batch-plan.json \
-  --only change_003,change_007,change_011 \
-  --max-changes 3 \
-  --max-destructive 0 \
-  --execute
+```json
+{
+  "reviewed_plan": "artifacts/requests/request-batch-plan.json",
+  "approved_change_ids": ["change_003", "change_007", "change_011"]
+}
 ```
 
 ## Boundaries

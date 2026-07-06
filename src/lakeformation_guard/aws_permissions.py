@@ -1,4 +1,4 @@
-"""AWS IAM permission templates and preflight checks for live lfguard use."""
+"""AWS IAM permission templates and preflight checks for live read-only lfguard use."""
 
 from __future__ import annotations
 
@@ -133,51 +133,24 @@ class AWSIAMPermissionChecker:
 def iam_policy_template(template: str, *, include_glue_read: bool = False) -> Dict[str, Any]:
     """Return the starter IAM policy for a live lfguard workflow template."""
 
-    statements = []
-    if template in {"read-only", "additive-apply", "destructive-apply"}:
-        statements.append(
-            _iam_statement(
-                "ReadLakeFormationState",
-                (
-                    "lakeformation:GetLFTag",
-                    "lakeformation:ListLFTags",
-                    "lakeformation:GetLFTagExpression",
-                    "lakeformation:ListLFTagExpressions",
-                    "lakeformation:GetResourceLFTags",
-                    "lakeformation:ListPermissions",
-                    "lakeformation:GetDataCellsFilter",
-                    "lakeformation:ListDataCellsFilter",
-                ),
-            )
+    if template != "read-only":
+        raise ValueError("Unsupported IAM permission template: {}".format(template))
+
+    statements = [
+        _iam_statement(
+            "ReadLakeFormationState",
+            (
+                "lakeformation:GetLFTag",
+                "lakeformation:ListLFTags",
+                "lakeformation:GetLFTagExpression",
+                "lakeformation:ListLFTagExpressions",
+                "lakeformation:GetResourceLFTags",
+                "lakeformation:ListPermissions",
+                "lakeformation:GetDataCellsFilter",
+                "lakeformation:ListDataCellsFilter",
+            ),
         )
-    if template in {"additive-apply", "destructive-apply"}:
-        statements.append(
-            _iam_statement(
-                "ApplyAdditiveLakeFormationChanges",
-                (
-                    "lakeformation:CreateLFTag",
-                    "lakeformation:CreateLFTagExpression",
-                    "lakeformation:UpdateLFTag",
-                    "lakeformation:AddLFTagsToResource",
-                    "lakeformation:CreateDataCellsFilter",
-                    "lakeformation:GrantPermissions",
-                ),
-            )
-        )
-    if template == "destructive-apply":
-        statements.append(
-            _iam_statement(
-                "ApplyDestructiveLakeFormationChanges",
-                (
-                    "lakeformation:RemoveLFTagsFromResource",
-                    "lakeformation:UpdateLFTagExpression",
-                    "lakeformation:DeleteLFTagExpression",
-                    "lakeformation:UpdateDataCellsFilter",
-                    "lakeformation:DeleteDataCellsFilter",
-                    "lakeformation:RevokePermissions",
-                ),
-            )
-        )
+    ]
     if include_glue_read:
         statements.append(
             _iam_statement(

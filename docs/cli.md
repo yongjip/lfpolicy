@@ -12,7 +12,7 @@ Start with the core workflow:
    evidence, and summaries.
 2. `explain-batch` answers operational access questions from a snapshot.
 3. `check`, `audit`, and `plan` run focused validation, drift, or change checks.
-4. `apply` dry-runs by default and executes only with `--execute`.
+4. Consuming services use the evidence to make approval and execution decisions.
 
 Everything else is supporting workflow. Use `sample`, `init`, `generate`,
 `bootstrap`, `schema`, `doctor`, `permissions`, `completion`, `validate`,
@@ -27,7 +27,6 @@ setup or review friction. They are not the reason to adopt the package.
 | `audit` | Report drift between desired and current state. | Only when `--current-snapshot` is omitted |
 | `plan` | Produce a conservative change plan. | Only when `--current-snapshot` is omitted |
 | `review` | Write lint, audit, plan, planned grant evidence, and summaries to one directory. | Only when `--current-snapshot` is omitted |
-| `apply` | Dry-run or execute a Lake Formation change plan. | Yes when live state is loaded or `--execute` is used |
 | `explain` | Explain current access for one principal and resource. | Only when `--current-snapshot` is omitted |
 | `explain-batch` | Explain multiple access requests from one current-state snapshot. | Only when `--current-snapshot` is omitted |
 | `init` | Generate a starter desired-state policy file. | No |
@@ -50,7 +49,7 @@ State-aware commands use these options:
 
 - `--desired PATH`: desired state JSON/YAML file.
 - `--current-snapshot PATH`: current state JSON/YAML file. When omitted,
-  `audit`, `plan`, `review`, `explain`, `explain-batch`, and `apply` load live
+  `audit`, `plan`, `review`, `explain`, and `explain-batch` load live
   AWS state through `boto3`.
 - `--current-cache PATH`: read or write a JSON current-state cache when live AWS
   state would otherwise be loaded. Cache hits avoid constructing the AWS
@@ -65,10 +64,10 @@ State-aware commands use these options:
 - `--catalog-id ID`: Glue Data Catalog ID.
 - `--output text|json|markdown|sarif`: output format where supported. `audit`
   and `lint` support SARIF; `permissions`, `lint`, `summary`, `audit`,
-  `explain`, `explain-batch`, `plan`, and `apply` support Markdown.
+  `explain`, `explain-batch`, and `plan` support Markdown.
 - `--output-file PATH`: write the command report to a file instead of stdout
   where supported. `doctor`, `permissions`, `completion`, `check`, `validate`,
-  `lint`, `summary`, `audit`, `explain`, `explain-batch`, `plan`, and `apply`
+  `lint`, `summary`, `audit`, `explain`, `explain-batch`, and `plan`
   support this for reports; `init`, `schema`, and `snapshot` use it for generated files.
   `import` uses `--output` for the generated desired-state path and `--format`
   for JSON/YAML.
@@ -113,7 +112,7 @@ Report files and GitHub summaries are written before `check --fail-on-findings`,
 `plan --fail-on-changes` return exit code `1`.
 
 See [`report-formats.md`](report-formats.md) for JSON and Markdown payload
-examples for check, summary, audit, explain, plan, and apply reports.
+examples for check, summary, audit, explain, review, and plan reports.
 
 ## `review`
 
@@ -359,18 +358,15 @@ workflow has the selected permissions:
 
 ```bash
 lfguard permissions --template read-only --output-file iam/lfguard-read-only.json
-lfguard permissions --template additive-apply --include-glue-read
-lfguard permissions --template destructive-apply --output markdown
 lfguard permissions --check --template read-only --profile prod --output json
-lfguard permissions --check --template additive-apply \
-  --principal-arn arn:aws:iam::111122223333:role/LfguardApply
+lfguard permissions --check --template read-only \
+  --principal-arn arn:aws:iam::111122223333:role/LfguardReadOnly
 ```
 
 Useful options:
 
-- `--template read-only|additive-apply|destructive-apply`: choose the IAM
-  policy template. `additive-apply` omits revoke and tag-removal actions;
-  `destructive-apply` includes them for separately reviewed workflows.
+- `--template read-only`: choose the read-only IAM policy template. Consuming
+  services own AWS write IAM role design and execution permissions.
 - `--include-glue-read`: add common Glue Data Catalog read actions.
 - `--check`: call AWS STS and IAM policy simulation to verify the selected
   template against the current caller or `--principal-arn`.
@@ -584,7 +580,7 @@ lfguard plan \
   --fail-on-changes
 ```
 
-Save a reviewed JSON plan for later selective apply:
+Save a reviewed JSON plan for external execution review:
 
 ```bash
 lfguard plan --desired desired.json --output json --output-file plan.json
@@ -700,64 +696,10 @@ Data-cells-filter import is also bounded. `lfguard` lists filters only for
 tables discovered through imported grants, even when `data-cells-filters` is
 requested without including `grants` in the generated file.
 
-## `apply`
+## Execution Boundary
 
-Dry-run by default:
-
-```bash
-lfguard apply \
-  --desired policy/desired.json \
-  --profile prod \
-  --region ap-northeast-2
-```
-
-Save the dry-run report:
-
-```bash
-lfguard apply \
-  --desired policy/desired.json \
-  --profile prod \
-  --region ap-northeast-2 \
-  --output markdown \
-  --output-file artifacts/lfguard-apply-dry-run.md
-```
-
-Execute additive changes:
-
-```bash
-lfguard apply \
-  --desired policy/desired.json \
-  --profile prod \
-  --region ap-northeast-2 \
-  --execute
-```
-
-Save executed results:
-
-```bash
-lfguard apply \
-  --desired policy/desired.json \
-  --profile prod \
-  --region ap-northeast-2 \
-  --execute \
-  --output json \
-  --output-file artifacts/lfguard-apply.json
-```
-
-Apply a reviewed saved plan without recomputing current state:
-
-```bash
-lfguard apply --plan plan.json --only change_001 --execute
-lfguard apply --plan plan.json --only-action grant.add_permissions --max-changes 10 --execute
-```
-
-Saved plans must be JSON reports from `lfguard plan --output json`. Use
-`--only` for comma-separated change IDs or `--only-action` for comma-separated
-action names; the two selectors cannot be combined. `--max-changes` and
-`--max-destructive` fail before AWS calls if the selected plan exceeds the
-budget.
-
-Even during execution, destructive changes require the same explicit allow flags
-used by `plan`. For saved plans, each destructive change requires its exact
-matching flag, such as `--allow-permission-revokes` for
-`grant.revoke_permissions`.
+`lfguard` has no `apply` command in 0.9.0 and later. `plan` and `review` emit
+planned change evidence, including `aws_api` metadata, but AWS write execution
+belongs to the consuming service or operator workflow. Use `recommended_action`,
+`hard_block`, `status`, and plan change metadata to decide whether an external
+workflow may proceed.

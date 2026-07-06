@@ -8,14 +8,15 @@ assignments, and grants against current state, then reports drift or produces a
 conservative change plan.
 
 It is most useful when Lake Formation access should move through pull requests,
-CI checks, and reviewed apply steps instead of one-off console changes or
-bespoke boto3 scripts.
+CI checks, service approvals, and reviewed execution paths instead of one-off
+console changes or bespoke boto3 scripts.
 
 ## Is it safe to run against production?
 
 The audit, check, validate, lint, plan, sample, bootstrap, schema, permissions,
-completion, and doctor commands do not mutate AWS state. `lfguard apply` is
-also a dry run unless `--execute` is provided.
+completion, review, explain, explain-batch, snapshot, import, and doctor
+commands do not mutate AWS state. `lfguard` has no apply command in 0.9.0 and
+later.
 
 By default, plans are additive only. Permission revokes, resource tag removals,
 and LF-Tag value removals require explicit allow flags, so destructive changes
@@ -32,7 +33,7 @@ lfguard plan \
   --current-snapshot lfguard-demo/current-snapshot.json
 ```
 
-Live AWS inventory and apply workflows require the optional AWS extra:
+Live AWS inventory workflows require the optional AWS extra:
 
 ```bash
 python -m pip install "lfguard[aws]"
@@ -55,7 +56,7 @@ No. `lfguard` focuses on a deliberately small guardrail surface:
   location, and LF-Tag policy resources.
 
 See [`aws-api-coverage.md`](aws-api-coverage.md) for the exact boto3 calls used
-for live inventory and apply.
+for live inventory and import.
 
 ## How should teams adopt it?
 
@@ -65,4 +66,6 @@ with `lfguard generate`, then add a CI job that runs
 `lfguard check --fail-on-findings`, `lfguard audit`, or
 `lfguard plan --fail-on-changes` against a current-state snapshot.
 
-Use live `lfguard apply --execute` only after reviewing the generated plan.
+Use `lfguard review` and `plan` as advisory evidence. If a consuming service
+executes grants or revokes, it owns approval checks, AWS write credentials, and
+audit persistence.

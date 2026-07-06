@@ -1,8 +1,8 @@
 # Testing
 
 `lfguard` uses layered tests because Lake Formation behavior is split between
-pure policy logic, boto3 request shapes, emulator coverage, and real AWS
-service semantics.
+pure policy logic, read-only boto3 request shapes, and real AWS service
+semantics.
 
 ## Default Test Suite
 
@@ -16,20 +16,6 @@ python -m unittest discover -s tests
 The default suite includes pure model, policy, planner, CLI, and botocore
 `Stubber` tests. Stubber validates that the adapter sends request parameters
 that match the Lake Formation botocore service model without contacting AWS.
-
-## Moto Emulator Tests
-
-Moto tests are optional and skipped unless Moto is installed:
-
-```bash
-python -m pip install -e ".[test,mock-aws]"
-python -m unittest tests.test_aws_adapter_moto
-```
-
-Use these as local smoke tests for simple round trips such as "apply a plan,
-reload current state, then audit is clean." Do not treat Moto as proof of Lake
-Formation semantics. Emulator coverage can lag or differ from AWS, especially
-for LF-Tag inheritance, column overrides, and invalid permission combinations.
 
 ## Live AWS Contract Tests
 

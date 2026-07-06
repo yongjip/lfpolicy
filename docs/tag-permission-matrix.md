@@ -176,7 +176,7 @@ models them.
 | LF-Tag policy - database | Database permissions on databases matching an LF-Tag expression. | Supported as `lf_tag_policy` with `resource_type=DATABASE`. |
 | LF-Tag policy - table | Table permissions on tables/views/columns matching an LF-Tag expression. | Supported as `lf_tag_policy` with `resource_type=TABLE`. |
 | LF-Tag values | `ASSOCIATE`, `DESCRIBE`, and grant-with-LF-Tag-expression permissions. | Not modeled as desired grants. Use native Lake Formation administration for LF-Tag permission delegation. |
-| LF-Tags themselves | `ALTER`, `DROP`. | `lfguard` can create/update LF-Tag definitions during apply, but does not model administrative LF-Tag delegation grants. |
+| LF-Tags themselves | `ALTER`, `DROP`. | `lfguard` models LF-Tag definitions as desired state and plan evidence, but does not model administrative LF-Tag delegation grants or execute writes. |
 | Data filters / cell filters | `SELECT`, `DESCRIBE`, `DROP` on filtered table resources. | `data_cells_filter` grants and `data_cells_filters` definitions are supported, including row filters and included or excluded columns. |
 | Resource links | `DESCRIBE`, `DROP`. | Not modeled separately. |
 
@@ -233,7 +233,7 @@ That last rule is deliberately preventive. If a table has
 key to `sensitivity=confidential`, an `internal` LF-Tag grant with `SELECT` can
 become partial-column `SELECT`. Combining that with table-level mutation
 permissions for the same LF-Tag policy creates the partial-column `SELECT`
-illegal permission combinations this project blocks before apply.
+illegal permission combinations this project blocks before external execution.
 
 It reports errors for policy that can be valid but must be explicit: mutating
 permissions, grant option, and named database/table grants. Use scoped

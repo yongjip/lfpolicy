@@ -6,8 +6,7 @@ they affect production access.
 
 ## Default Behavior
 
-By default, `lfguard plan` and dry-run `lfguard apply` propose additive changes
-only:
+By default, `lfguard plan` and `lfguard review` propose additive changes only:
 
 - create missing LF-Tag definitions;
 - add missing LF-Tag values;
@@ -23,18 +22,18 @@ depend on.
 
 Destructive changes are included only when the matching flag is supplied:
 
-- `--allow-lf-tag-deletes`: plan or apply LF-Tag deletes.
-- `--allow-lf-tag-value-removals`: plan or apply LF-Tag value removals.
-- `--allow-lf-tag-expression-updates`: plan or apply named LF-Tag expression
+- `--allow-lf-tag-deletes`: plan LF-Tag deletes.
+- `--allow-lf-tag-value-removals`: plan LF-Tag value removals.
+- `--allow-lf-tag-expression-updates`: plan named LF-Tag expression
   body or description updates.
-- `--allow-lf-tag-expression-deletes`: plan or apply named LF-Tag expression
+- `--allow-lf-tag-expression-deletes`: plan named LF-Tag expression
   deletes.
-- `--allow-resource-tag-removals`: plan or apply LF-Tag assignment removals.
-- `--allow-permission-revokes`: plan or apply Lake Formation permission revokes.
+- `--allow-resource-tag-removals`: plan LF-Tag assignment removals.
+- `--allow-permission-revokes`: plan Lake Formation permission revokes.
 
-Use these flags in a separate workflow from routine additive changes. For
-production environments, require human review of the generated plan before
-executing destructive changes.
+Use these flags in a separate review workflow from routine additive changes. For
+production environments, require human review of the generated plan before a
+consuming service executes destructive changes.
 
 ## Audit Severity
 
@@ -47,21 +46,19 @@ executing destructive changes.
 `--fail-on-severity error` when unmanaged extras should remain visible in the
 report but should not block a merge.
 
-## Apply Safety
+## Execution Boundary
 
-`lfguard apply` is a dry run unless `--execute` is provided. With `--execute`,
-the AWS adapter applies the computed plan in order. Destructive changes still
-require the same explicit `--allow-*` flags used by `plan`.
+`lfguard` has no AWS mutation command in 0.9.0 and later. It emits advisory
+evidence: lint findings, audit findings, plan changes, review summaries,
+recommended actions, and `hard_block` markers. The consuming service or operator
+workflow owns approval, AWS write credentials, grant/revoke execution, and audit
+storage.
 
-For reviewed JSON plans, use `lfguard apply --plan plan.json` to avoid
-recomputing current state during execution. Limit production rollouts with
-`--only`, `--only-action`, `--max-changes`, and `--max-destructive`; budget
-failures stop before any AWS call is made.
-
-Apply does not bypass AWS authorization. The IAM principal must already have the
-Lake Formation permissions needed for each operation. See
-[`aws-permissions.md`](aws-permissions.md) for starter IAM policy shapes and
-[`aws-api-coverage.md`](aws-api-coverage.md) for the exact live AWS calls.
+Plan evidence does not bypass AWS authorization. If an external workflow chooses
+to execute a reviewed change, its IAM principal must already have the required
+Lake Formation write permissions. See [`aws-permissions.md`](aws-permissions.md)
+for lfguard's read-only IAM policy shape and [`aws-api-coverage.md`](aws-api-coverage.md)
+for the exact read-only AWS calls lfguard makes.
 
 ## Snapshot Scope
 
@@ -79,9 +76,10 @@ Use separate roles and workflows:
 
 - Read-only CI role: validate desired state, capture live snapshots, audit
   drift, and publish reports.
-- Additive apply role: execute reviewed additive plans on a controlled cadence.
-- Destructive maintenance role: execute revokes and removals only during
-  scheduled governance maintenance with explicit approval.
+- Service execution role: owned outside lfguard, executes approved grants or
+  revokes according to the consuming service's workflow.
+- Destructive maintenance workflow: owned outside lfguard, executes revokes and
+  removals only during scheduled governance maintenance with explicit approval.
 
 For authoring, keep column-filtered reader intent separate from edit and create
 intent. Reader permission groups may use column-narrowing filters such as

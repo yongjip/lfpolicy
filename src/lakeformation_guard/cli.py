@@ -111,8 +111,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return _cmd_snapshot(args)
         if args.command == "import":
             return _cmd_import(args)
-        if args.command == "apply":
-            return _cmd_apply(args)
     except (StateFormatError, ValueError, RuntimeError) as exc:
         print("error: {}".format(exc), file=sys.stderr)
         return 2
@@ -123,7 +121,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="lfguard",
-        description="Audit, plan, and conservatively apply AWS Lake Formation LF-Tag guardrails.",
+        description="Review, audit, plan, and explain AWS Lake Formation LF-Tag governance evidence.",
     )
     parser.add_argument("--version", action="version", version="lfguard {}".format(__version__))
     subparsers = parser.add_subparsers(dest="command")
@@ -249,7 +247,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     permissions_parser.add_argument(
         "--template",
-        choices=("read-only", "additive-apply", "destructive-apply"),
+        choices=("read-only",),
         default="read-only",
         help="IAM policy template to emit. Defaults to read-only.",
     )
@@ -430,29 +428,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write Markdown adoption review notes for the imported scaffold.",
     )
     import_parser.add_argument("--force", action="store_true", help="Overwrite the output file if it already exists.")
-
-    apply_parser = subparsers.add_parser("apply", help="Dry-run or execute a Lake Formation change plan.")
-    apply_parser.add_argument("--desired", help="Desired state JSON/YAML file.")
-    apply_parser.add_argument(
-        "--current-snapshot",
-        help="Current state JSON/YAML snapshot. When omitted, live AWS state is loaded with boto3.",
-    )
-    apply_parser.add_argument("--plan", help="Saved JSON plan from lfguard plan --output json.")
-    _add_aws_args(apply_parser)
-    _add_current_cache_args(apply_parser)
-    _add_output_arg(apply_parser, markdown=True)
-    _add_report_output_file_arg(apply_parser)
-    _add_github_summary_arg(apply_parser)
-    _add_plan_option_args(apply_parser)
-    apply_parser.add_argument("--only", help="Apply only comma-separated change IDs from the plan.")
-    apply_parser.add_argument("--only-action", help="Apply only comma-separated action types from the plan.")
-    apply_parser.add_argument("--max-changes", type=int, help="Fail before AWS calls when selected changes exceed this count.")
-    apply_parser.add_argument(
-        "--max-destructive",
-        type=int,
-        help="Fail before AWS calls when selected destructive changes exceed this count.",
-    )
-    apply_parser.add_argument("--execute", action="store_true", help="Apply the computed plan. Defaults to dry-run.")
 
     return parser
 
@@ -860,41 +835,6 @@ def _cmd_import(args: argparse.Namespace) -> int:
             "import review notes",
         )
         print("Wrote import review notes to {}.".format(review_notes_path))
-    return 0
-
-
-def _cmd_apply(args: argparse.Namespace) -> int:
-    change_plan = _load_apply_plan(args)
-    change_plan = _filter_apply_plan(change_plan, args)
-    budget_error = _apply_budget_error(change_plan, args)
-    if budget_error:
-        print("error: {}".format(budget_error), file=sys.stderr)
-        return 1
-    if not args.execute:
-        if args.github_summary:
-            _append_github_summary(_render_plan_markdown(change_plan, prefix="Dry run: no changes applied."))
-        _emit_output(
-            _render_plan(change_plan, args.output, prefix="Dry run: no changes applied."),
-            args.output_file,
-            label="apply report",
-        )
-        return 0
-
-    _validate_destructive_allowances(change_plan, args)
-    adapter = _aws_adapter(args)
-    results = adapter.apply(
-        change_plan,
-        dry_run=False,
-        allow_destructive=any(change.destructive for change in change_plan.changes),
-    )
-    applied_count = sum(1 for result in results if result.applied)
-    if args.github_summary:
-        _append_github_summary(_render_plan_markdown(change_plan, prefix="Applied {} change(s).".format(applied_count)))
-    _emit_output(
-        _render_apply(change_plan, results, args.output, applied_count=applied_count),
-        args.output_file,
-        label="apply report",
-    )
     return 0
 
 
@@ -1340,6 +1280,13 @@ def _parse_optional_csv(value: Optional[str]) -> Tuple[str, ...]:
     return _parse_csv_option(value, "--permissions")
 
 
+def _parse_csv_option(value: str, option_name: str) -> Tuple[str, ...]:
+    values = tuple(item.strip() for item in value.split(",") if item.strip())
+    if not values:
+        raise RuntimeError("{} requires at least one value".format(option_name))
+    return values
+
+
 def _desired_with_explain_scope(desired: DesiredState, principal: str, resource: ResourceRef) -> DesiredState:
     resource_tags = list(desired.resource_tags)
     existing_tag_resources = {assignment.resource for assignment in resource_tags}
@@ -1637,114 +1584,6 @@ def _plan_options(args: argparse.Namespace) -> PlanOptions:
     )
 
 
-def _has_destructive_allowance(args: argparse.Namespace) -> bool:
-    return bool(
-        args.allow_lf_tag_deletes
-        or args.allow_lf_tag_value_removals
-        or args.allow_lf_tag_expression_updates
-        or args.allow_lf_tag_expression_deletes
-        or args.allow_data_cells_filter_updates
-        or args.allow_data_cells_filter_deletes
-        or args.allow_resource_tag_removals
-        or args.allow_permission_revokes
-    )
-
-
-def _load_apply_plan(args: argparse.Namespace) -> Plan:
-    if args.plan:
-        if (
-            args.desired
-            or args.current_snapshot
-            or args.current_cache
-            or args.refresh_current_cache
-            or args.current_cache_max_age is not None
-        ):
-            raise RuntimeError(
-                "--plan cannot be combined with --desired, --current-snapshot, or current cache options"
-            )
-        return _load_plan_file(args.plan)
-    if not args.desired:
-        raise RuntimeError("apply requires --desired or --plan")
-    desired = load_desired(args.desired)
-    current = _load_current(args, desired)
-    return plan(desired, current, _plan_options(args))
-
-
-def _load_plan_file(path: str) -> Plan:
-    plan_path = Path(path)
-    if plan_path.suffix.lower() not in {"", ".json"}:
-        raise StateFormatError("{} must be a JSON plan file".format(plan_path))
-    try:
-        data = json.loads(plan_path.read_text(encoding="utf-8"))
-    except OSError as exc:
-        raise StateFormatError("Could not read {}: {}".format(plan_path, exc)) from exc
-    except ValueError as exc:
-        raise StateFormatError("Could not parse {}: {}".format(plan_path, exc)) from exc
-    if not isinstance(data, Mapping):
-        raise StateFormatError("{} must contain a JSON object".format(plan_path))
-    return Plan.from_dict(data)
-
-
-def _filter_apply_plan(change_plan: Plan, args: argparse.Namespace) -> Plan:
-    if args.only and args.only_action:
-        raise RuntimeError("--only cannot be combined with --only-action")
-    if args.only:
-        selected_ids = _parse_csv_option(args.only, "--only")
-        available_ids = {change.id for change in change_plan.changes}
-        missing_ids = sorted(change_id for change_id in selected_ids if change_id not in available_ids)
-        if missing_ids:
-            raise RuntimeError("Unknown change id(s): {}".format(", ".join(missing_ids)))
-        return Plan(tuple(change for change in change_plan.changes if change.id in selected_ids))
-    if args.only_action:
-        selected_actions = _parse_csv_option(args.only_action, "--only-action")
-        filtered = tuple(change for change in change_plan.changes if change.action in selected_actions)
-        if not filtered:
-            raise RuntimeError("No changes matched --only-action")
-        return Plan(filtered)
-    return change_plan
-
-
-def _parse_csv_option(value: str, option_name: str) -> Tuple[str, ...]:
-    values = tuple(item.strip() for item in value.split(",") if item.strip())
-    if not values:
-        raise RuntimeError("{} requires at least one value".format(option_name))
-    return values
-
-
-def _apply_budget_error(change_plan: Plan, args: argparse.Namespace) -> Optional[str]:
-    if args.max_changes is not None:
-        if args.max_changes < 0:
-            raise RuntimeError("--max-changes must be greater than or equal to 0")
-        if len(change_plan.changes) > args.max_changes:
-            return "selected plan has {} change(s), exceeding --max-changes {}".format(
-                len(change_plan.changes),
-                args.max_changes,
-            )
-    if args.max_destructive is not None:
-        if args.max_destructive < 0:
-            raise RuntimeError("--max-destructive must be greater than or equal to 0")
-        destructive_count = len(change_plan.destructive_changes)
-        if destructive_count > args.max_destructive:
-            return "selected plan has {} destructive change(s), exceeding --max-destructive {}".format(
-                destructive_count,
-                args.max_destructive,
-            )
-    return None
-
-
-def _validate_destructive_allowances(change_plan: Plan, args: argparse.Namespace) -> None:
-    for change in change_plan.destructive_changes:
-        required_flag = change.requires_flag
-        if required_flag and not getattr(args, _flag_dest(required_flag), False):
-            raise RuntimeError(
-                "{} requires {} before execute".format(change.id or change.target, required_flag)
-            )
-
-
-def _flag_dest(flag: str) -> str:
-    return flag[2:].replace("-", "_")
-
-
 def _parse_import_include(raw: str) -> Tuple[str, ...]:
     supported = {"lf-tags", "lf-tag-expressions", "data-cells-filters", "resource-tags", "grants"}
     includes = tuple(item.strip() for item in raw.split(",") if item.strip())
@@ -1812,7 +1651,7 @@ def _render_import_review_notes(
             "- [ ] Add `ownership` and `ignore` rules before adopting mixed managed/unmanaged accounts.",
             "- [ ] Add scoped exceptions with owner, reason, expiry, and approval metadata for intentional risky grants.",
             "- [ ] Convert repeated permission patterns to `policy.py` when request volume makes raw JSON hard to maintain.",
-            "- [ ] Run `lfguard check`, `summary`, `audit`, and `plan` before using apply.",
+            "- [ ] Run `lfguard check`, `summary`, `audit`, and `plan` before any consuming service executes changes.",
             "",
             "## Suggested Commands",
             "",
@@ -2023,7 +1862,7 @@ def _doctor_report(required_extras: Optional[Iterable[str]] = None) -> dict:
                 "boto3",
                 "boto3",
                 extra="aws",
-                purpose="live AWS snapshot and apply workflows",
+                purpose="live AWS snapshot and import workflows",
             ),
             "PyYAML": _dependency_status(
                 "yaml",
@@ -2187,7 +2026,6 @@ _COMPLETION_COMMANDS = (
     "explain-batch",
     "snapshot",
     "import",
-    "apply",
 )
 
 
@@ -2351,34 +2189,6 @@ _COMPLETION_OPTIONS = {
         "--format",
         "--review-notes",
         "--force",
-        "--help",
-    ),
-    "apply": (
-        "--desired",
-        "--current-snapshot",
-        "--plan",
-        "--profile",
-        "--region",
-        "--catalog-id",
-        "--current-cache",
-        "--refresh-current-cache",
-        "--current-cache-max-age",
-        "--output",
-        "--output-file",
-        "--github-summary",
-        "--allow-lf-tag-deletes",
-        "--allow-lf-tag-value-removals",
-        "--allow-lf-tag-expression-updates",
-        "--allow-lf-tag-expression-deletes",
-        "--allow-data-cells-filter-updates",
-        "--allow-data-cells-filter-deletes",
-        "--allow-resource-tag-removals",
-        "--allow-permission-revokes",
-        "--only",
-        "--only-action",
-        "--max-changes",
-        "--max-destructive",
-        "--execute",
         "--help",
     ),
 }
@@ -3211,9 +3021,9 @@ def _bootstrap_pull_request_template(desired_path: str) -> str:
 - [ ] `lfguard check --desired {desired_path} --fail-on-findings` passes.
 - [ ] `lfguard summary --desired {desired_path} --output markdown` was reviewed for changed LF-Tag keys, resources, principals, and permissions.
 - [ ] If a current-state snapshot is included, `lfguard audit` findings are understood and intentional.
-- [ ] If a plan is included, every `lfguard plan` change was reviewed before apply.
+- [ ] If a plan is included, every `lfguard plan` change was reviewed before a consuming service executes it.
 - [ ] Destructive flags such as `--allow-permission-revokes`, `--allow-resource-tag-removals`, and `--allow-lf-tag-value-removals` are used only in a separately approved workflow.
-- [ ] Live AWS roles and IAM policies are scoped to the intended read or apply operation.
+- [ ] Live AWS roles and IAM policies are scoped to the intended read-only lfguard workflow.
 
 ## Notes
 
@@ -3397,7 +3207,7 @@ lfguard summary --desired {desired_path}
    file, schema, workflow, pre-commit configuration, and any generated review or
    editor files.
 3. {live_drift_next_step}
-4. Review every `lfguard plan` before using `lfguard apply --execute`.
+4. Hand reviewed plan evidence to the consuming service that owns AWS write execution.
 """.format(
         desired_path=desired_path,
         editor_files=editor_files,
@@ -3968,12 +3778,6 @@ def _render_plan_markdown(change_plan: Plan, *, prefix: Optional[str] = None) ->
             )
         )
     return "\n".join(lines) + "\n"
-
-
-def _render_apply(change_plan: Plan, results: Iterable[Any], output: str, *, applied_count: int) -> str:
-    if output == "json":
-        return dumps_json({"plan": change_plan.to_dict(), "results": [result.to_dict() for result in results]})
-    return _render_plan(change_plan, output, prefix="Applied {} change(s).".format(applied_count))
 
 
 def _print_findings(findings: Iterable[AuditFinding], output: str) -> None:

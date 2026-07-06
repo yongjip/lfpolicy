@@ -45,8 +45,8 @@ Read `review/summary.json` first.
 4. If `recommended_action` is `review_required`, summarize the plan, lint, and
    audit evidence for a human reviewer.
 5. If `recommended_action` is `inform`, show the finding only as context.
-6. Do not run `lfguard apply` from a review bundle alone. Apply requires a
-   separate explicit approval decision and the normal lfguard apply flags.
+6. Do not execute AWS writes from a review bundle alone. `lfguard` has no apply
+   command in 0.9.0 and later; consuming services own approval and execution.
 
 Recommended review summary handling:
 
@@ -158,7 +158,7 @@ warnings, not hidden.
 ## Do Not
 
 - Do not infer approval from `passed`, `review_required`, or `approval_required`.
-- Do not run apply automatically from any JSON report.
+- Do not trigger AWS write execution automatically from any JSON report.
 - Do not use severity alone for workflow decisions.
 - Do not describe review planned-grant evidence as effective-access evidence.
 - Do not hide `hard_block` findings behind a generic summary.

@@ -100,10 +100,12 @@ provider context are acceptable for the workflow.
 
 ## Apply Boundary
 
-Do not run `lfguard apply` automatically from service approval flows. `apply`
-is an explicit operator-controlled execution path after review and approval. If
-a service already owns grant/revoke execution, keep that execution path separate
-from the lfguard advisory wrapper.
+`lfguard` has no apply command in 0.9.0 and later. Do not build service
+approval flows around private lfguard Python internals or assumed write
+execution helpers. If a service grants or revokes permissions after reviewing
+lfguard evidence, keep that execution path separate from the lfguard advisory
+wrapper and make the service own AWS write IAM roles, approval identity checks,
+audit persistence, and rollback behavior.
 
 ## Fixtures
 

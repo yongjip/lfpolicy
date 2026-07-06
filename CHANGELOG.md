@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.9.0
+
+- Breaking: removes `lfguard apply`, saved-plan apply filtering, apply budgets,
+  and the boto3 adapter write execution API.
+- Removes additive and destructive apply IAM templates from `lfguard
+  permissions`; `read-only` is now the only lfguard-owned template.
+- Keeps plan JSON and `Change.aws_api` as advisory evidence for consuming
+  services, CI, tickets, and approval systems that own AWS write execution.
+- Repositions current product documentation around review bundles, audit,
+  plan preview, explain-batch diagnosis, import, snapshot, and read-only live
+  inventory.
+
 ## 0.8.2
 
 - Adds top-level `hard_block` to `review/summary.json` so services can consume

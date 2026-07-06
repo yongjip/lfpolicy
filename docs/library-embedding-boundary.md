@@ -15,8 +15,7 @@ replies, see [`request-screening.md`](request-screening.md).
 - Keep advisory evidence as the center of the product.
 - Keep desired/current state, lint, audit, explain, review, and plan
   deterministic and reviewable.
-- Keep `apply` explicit, conservative, and separate from approval workflow
-  orchestration.
+- Keep AWS write execution outside `lfguard`.
 - Keep service IAM layout, approval identity, runtime credentials, customer
   language, and request-state ownership outside `lfguard`.
 
@@ -31,7 +30,7 @@ Choose the smallest integration that solves the problem:
    `plan()`, `explain()`, providers, and the policy builder.
 3. Scoped live AWS helpers:
    use `lakeformation_guard.aws.AWSLakeFormationAdapter` only when a caller
-   explicitly needs live inventory or explicit apply helpers and accepts that
+   explicitly needs read-only live inventory or import helpers and accepts that
    this is not the primary service integration contract.
 
 ## Changes That Fit Core
@@ -42,10 +41,8 @@ These requests usually belong in `lfguard`:
   supported LF resources.
 - Small normalization and parsing fixes that make desired/current state inputs
   more robust without changing the product boundary.
-- Conservative apply improvements that keep destructive behavior explicit behind
-  planner options and CLI flags.
 - Narrow boto3 adapter coverage expansions for already modeled Lake Formation
-  operations.
+  read operations.
 - Documentation for multi-catalog usage, cache scoping, and provider context.
 
 ## Changes Usually Kept Outside Core
@@ -55,7 +52,7 @@ These requests are usually declined or redirected:
 - Per-request imperative convenience helpers such as `grant()`, `revoke()`,
   `upsert_*()`, or `convert_to_*()` that are designed around one HTTP handler
   rather than reviewed desired state and plans.
-- Automatic apply flows, rollback engines, or HTTP-response-oriented execution
+- AWS write flows, rollback engines, or HTTP-response-oriented execution
   orchestration that turn `lfguard` into a service mutation runtime.
 - Dynamic desired-state expansion from live AWS at plan time, such as "all
   current values of this LF-Tag key". Desired policy should stay explicit and
@@ -74,8 +71,8 @@ an explicit review scope:
   the scope is catalog-specific.
 - Keep one cache file or provider context per `(profile, region, catalog_id)`
   tuple.
-- Run review or apply once per reviewed catalog scope, or save a plan and apply
-  only the approved change IDs.
+- Run review once per reviewed catalog scope, or save a plan and hand only the
+  approved change IDs to the consuming service.
 
 Example CLI pattern:
 

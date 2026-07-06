@@ -42,8 +42,8 @@ permissions for the command you are running.
 
 Read-only inventory commands need permissions such as `lakeformation:GetLFTag`,
 `lakeformation:GetResourceLFTags`, and `lakeformation:ListPermissions`.
-Executed apply operations also need the matching create, update, grant, remove,
-or revoke permissions. See [`aws-permissions.md`](aws-permissions.md).
+If a consuming service executes grants or revokes after review, that service
+owns the matching AWS write permissions. See [`aws-permissions.md`](aws-permissions.md).
 
 ## A plan shows no changes
 

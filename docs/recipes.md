@@ -3,7 +3,7 @@
 These workflows are intended to keep Lake Formation changes reviewable and
 conservative.
 
-The core recipes are `check`, `audit`, `plan`, and dry-run `apply`. Setup
+The core recipes are `check`, `audit`, `plan`, `review`, and `explain-batch`. Setup
 helpers such as `doctor`, `completion`, `bootstrap`, `schema`, and
 `permissions` are included only when they remove real friction from that core
 workflow.
@@ -64,21 +64,11 @@ report artifacts for the desired policy without calling AWS.
 
 ## Generate IAM Policy Starters
 
-Generate IAM policy JSON before wiring live AWS snapshot or apply jobs:
+Generate IAM policy JSON before wiring live AWS snapshot or import jobs:
 
 ```bash
 lfguard permissions --template read-only --include-glue-read \
   --output-file iam/lfguard-read-only.json
-
-lfguard permissions --template additive-apply \
-  --output-file iam/lfguard-additive-apply.json
-```
-
-Keep destructive permissions separate from routine automation:
-
-```bash
-lfguard permissions --template destructive-apply \
-  --output-file iam/lfguard-destructive-apply.json
 ```
 
 For day-to-day policy repositories, edit the generated `policy.py`, then
@@ -177,7 +167,7 @@ lfguard check \
 
 ## Lint Desired Policy
 
-Run this before snapshot, audit, plan, or apply when you want to catch
+Run this before snapshot, audit, plan, or review when you want to catch
 undefined LF-Tag keys and values in the desired policy:
 
 ```bash
@@ -318,49 +308,34 @@ lfguard plan \
   --output-file artifacts/lfguard-plan.md
 ```
 
-## Apply Additive Changes
+## Review Planned Changes
 
-Run a dry run against live AWS first:
+Write a review bundle against a reviewed snapshot:
 
 ```bash
-lfguard apply \
+lfguard review \
   --desired policy/desired.json \
-  --profile prod \
-  --region ap-northeast-2
+  --current-snapshot snapshots/prod-current.json \
+  --output-dir artifacts/review \
+  --force
 ```
 
-Save the dry-run as a review artifact:
+For live current state, use a read-only role and cache repeated inventory reads:
 
 ```bash
-lfguard apply \
-  --desired policy/desired.json \
-  --profile prod \
-  --region ap-northeast-2 \
-  --output markdown \
-  --output-file artifacts/lfguard-apply-dry-run.md
-```
-
-Execute only after reviewing the plan:
-
-```bash
-lfguard apply \
+lfguard review \
   --desired policy/desired.json \
   --profile prod \
   --region ap-northeast-2 \
-  --execute
+  --current-cache .lfguard/prod-current-cache.json \
+  --output-dir artifacts/review \
+  --force
 ```
 
-For change records, write the executed plan and adapter responses as JSON:
-
-```bash
-lfguard apply \
-  --desired policy/desired.json \
-  --profile prod \
-  --region ap-northeast-2 \
-  --execute \
-  --output json \
-  --output-file artifacts/lfguard-apply.json
-```
+The bundle contains `summary.json`, `lint.json`, `audit.json`, `plan.json`, and
+planned grant evidence. If another service executes Lake Formation writes, pass
+that service the reviewed plan and selected change IDs; `lfguard` itself does
+not execute AWS writes.
 
 ## Review Destructive Operations Separately
 

@@ -43,7 +43,7 @@ The efficient pattern is:
 1. Define a small LF-Tag vocabulary.
 2. Assign LF-Tags to databases, tables, or columns.
 3. Grant principals access through LF-Tag expressions.
-4. Review drift and planned changes before applying anything.
+4. Review drift and planned changes before any external execution.
 
 This keeps policy growth closer to `principals + resources` instead of
 `principals * resources`.
@@ -81,8 +81,7 @@ named versus LF-TBAC grant behavior, and permission/resource combinations, see
 
 - Keep IAM administration and Lake Formation policy review separate.
 - Use read-only automation for snapshot, audit, plan, and report workflows.
-- Use a separate additive apply role for creating LF-Tags, adding tag values,
-  assigning tags, and granting permissions.
+- Keep the service write role separate from lfguard's read-only review role.
 - Keep revokes and removals in a separate destructive maintenance workflow.
 - Prefer LF-Tag policy grants for databases and tables. Keep named grants as
   documented exceptions.
@@ -141,14 +140,16 @@ named versus LF-TBAC grant behavior, and permission/resource combinations, see
 5. Run `lfguard check --desired policy/desired.json --fail-on-findings`.
 6. Capture a scoped non-production snapshot with `lfguard snapshot`.
 7. Run `lfguard audit` and `lfguard plan` from that snapshot in CI.
-8. Apply additive changes only after reviewing the plan.
+8. Execute additive changes through the consuming service only after reviewing
+   the plan.
 9. Move revokes and tag removals to a separate approved workflow.
 
 Start with the smallest workflow that answers today's question:
 
 - Use `lfguard check` when you only need local policy validation.
 - Use `lfguard audit` when you need to know whether current state drifted.
-- Use `lfguard plan` when you need to review the exact changes before apply.
+- Use `lfguard plan` when you need to review the exact changes before external
+  execution.
 - Use `lfguard bootstrap --output-dir lfguard-policy` when you want a minimal
   starter repository.
 

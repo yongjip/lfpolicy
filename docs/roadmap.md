@@ -10,19 +10,20 @@ The first release focuses on the core guardrail loop:
 
 - Offline desired/current state files in JSON and optional YAML.
 - Importable `lint_desired()`, `audit()`, and `plan()` APIs.
-- A short `lfguard` CLI with validation, lint, audit, plan, snapshot, and apply
-  workflows.
+- A short `lfguard` CLI with validation, lint, audit, plan, review, snapshot,
+  and explain workflows.
 - Conservative planning defaults that omit revokes and removals unless explicitly
   allowed.
-- Optional boto3 integration for scoped Lake Formation inventory and execution.
+- Optional boto3 integration for scoped read-only Lake Formation inventory.
 - Text, JSON, Markdown, and SARIF reports for local review and CI artifacts.
 
 ## Current Direction
 
 Recent releases added adoption controls, named LF-Tag expressions, import
-scaffolding, stable plan JSON, selective apply, safety budgets, a small
-current-state provider interface, effective-access explanations, cache-backed
-live workflows, and data cells filter modeling.
+scaffolding, stable plan JSON, review bundles, a small current-state provider
+interface, effective-access explanations, cache-backed live workflows, and data
+cells filter modeling. Version 0.9.0 removed lfguard-owned AWS write execution
+to keep the package advisory-only.
 
 ## Near-Term Priorities
 
@@ -41,8 +42,8 @@ The most useful next improvements are:
   desired-state file.
 - Additional report examples for pull request comments and scheduled governance
   reviews.
-- More adapter tests around AWS pagination, not-found handling, and destructive
-  apply paths.
+- More adapter tests around AWS pagination, not-found handling, and read-only
+  import paths.
 - Prune, hide, or avoid convenience features unless real users show they reduce
   review or operations friction.
 

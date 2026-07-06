@@ -15,7 +15,7 @@ when a request is accepted, narrowed, or declined.
 
 | If the request mainly does this... | Label | Maintainer action |
 | --- | --- | --- |
-| Improves review, lint, audit, explain, plan, explicit apply, or narrow Lake Formation modeling inside the existing product boundary | `triage:fits-core` | Keep the issue open, refine scope if needed, and implement or queue it normally |
+| Improves review, lint, audit, explain, plan evidence, or narrow Lake Formation modeling inside the existing product boundary | `triage:fits-core` | Keep the issue open, refine scope if needed, and implement or queue it normally |
 | Targets a valid `lfguard` goal, but the current shape is too broad, mixed, or not reviewable yet | `triage:needs-reframe` | Ask for a narrower follow-up or split issues before implementation |
 | Pushes `lfguard` into request-time mutation helpers, approval workflow ownership, dynamic desired-state expansion, broad discovery SDK behavior, or service-owned orchestration | `triage:out-of-scope` | Reply with the boundary rationale and close as not planned |
 
@@ -28,7 +28,8 @@ Answer these before accepting a request:
   and reviewable?
 - If live AWS behavior is involved, is this a narrow adapter addition rather
   than broad browse or discovery coverage?
-- Does destructive behavior stay explicit behind planner options and CLI flags?
+- Does destructive behavior stay explicit behind planner options and review
+  evidence instead of write execution helpers?
 - Does the request avoid taking ownership of service IAM layout, approval
   identity, workflow state, or request-time execution semantics?
 
@@ -61,6 +62,6 @@ split it into separate issues so we can evaluate the in-scope part cleanly.
 
 This request is outside the `lfguard` product boundary. We are keeping
 `lfguard` focused on advisory evidence, deterministic review and planning, and
-explicit apply. Request-time orchestration, broad service SDK behavior, and
-service-owned workflow semantics belong in the consuming service or a raw boto3
-wrapper.
+service-owned execution boundaries. Request-time orchestration, broad service
+SDK behavior, and service-owned workflow semantics belong in the consuming
+service or a raw boto3 wrapper.

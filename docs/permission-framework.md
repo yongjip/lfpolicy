@@ -1,7 +1,7 @@
 # Permission Framework Concepts
 
 `lfguard` is a strict framework for defining, validating, explaining, planning,
-and safely applying AWS Lake Formation data permissions. It is not a
+and reviewing AWS Lake Formation data permissions. It is not a
 consumer-specific integration layer; approval systems, CI jobs, internal consoles, Jira,
 Slack, and cache-backed inventory systems should integrate through state files,
 providers, and stable JSON reports.
@@ -16,7 +16,8 @@ Use the same lifecycle for every Lake Formation permission change:
 4. Audit current state against desired state.
 5. Plan reviewable changes with deterministic change IDs.
 6. Export audit, explain, or plan JSON as approval evidence.
-7. Apply only reviewed changes, with destructive flags and safety budgets.
+7. Let the consuming service execute only reviewed changes through its own
+   approval and AWS write boundary.
 
 ## Rigid Invariants
 
@@ -28,8 +29,8 @@ Some issues are treated as hard policy defects rather than workflow preferences:
 - Dangerous grants such as broad principals, `ALL`/`SUPER`, mutating
   permissions, grant option, and named database/table grants require explicit
   exceptions or lint configuration.
-- Destructive apply operations require exact CLI flags and can be capped with
-  `--max-destructive`.
+- Destructive planned operations require exact planning flags and should be
+  routed through a separate approval path.
 - Expired exceptions do not suppress lint findings.
 
 ## Exceptions
@@ -88,7 +89,7 @@ come from:
 - an internal API, database, or cache that emits the same model.
 
 This boundary keeps integrations outside the core while preserving the same
-lint, audit, explain, plan, and apply semantics.
+lint, audit, explain, plan, and review semantics.
 
 ## Stable Evidence
 
@@ -107,7 +108,7 @@ schema-version changes as integration events.
 ## Operating Guides
 
 - [`ci-evidence-workflows.md`](ci-evidence-workflows.md): CI artifact sets,
-  drift gates, plan review, access explanation, and apply dry-run evidence.
+  drift gates, plan review, access explanation, and review bundle evidence.
 - [`terraform-cdk-coexistence.md`](terraform-cdk-coexistence.md): ownership
   boundaries between infrastructure tools and `lfguard`.
 - [`import-adoption-recipes.md`](import-adoption-recipes.md): practical import,

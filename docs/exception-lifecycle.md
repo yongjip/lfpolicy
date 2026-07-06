@@ -59,7 +59,8 @@ Example:
 2. Review: run `lfguard lint` and confirm only the intended finding is
    suppressed.
 3. Evidence: attach the `lfguard review` bundle to the approval record.
-4. Apply: use additive apply for grants and keep destructive cleanup separate.
+4. Execute: let the consuming service grant approved access and keep destructive
+   cleanup separate.
 5. Monitor: run scheduled CI so expired exceptions start failing lint.
 6. Remove: delete the exception and revoke or replace the grant through a
    reviewed destructive plan.

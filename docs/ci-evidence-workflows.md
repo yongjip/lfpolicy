@@ -1,9 +1,10 @@
 # CI Evidence Workflows
 
 Use `lfguard` CI output as evidence that a Lake Formation policy change was
-reviewed, compared with current state, and safe to apply. The goal is not only
-to fail a job. The goal is to leave artifacts that another reviewer or approval
-system can inspect without opening the AWS console.
+reviewed, compared with current state, and ready for a consuming service's
+approval and execution path. The goal is not only to fail a job. The goal is to
+leave artifacts that another reviewer or approval system can inspect without
+opening the AWS console.
 
 ## Evidence Bundle
 
@@ -14,7 +15,6 @@ For a normal permission pull request, keep these artifacts:
 | Generated desired state | `lfguard generate policy.py --output-file policy/desired.json --check` | Proves reviewed Python policy and committed desired JSON are in sync. |
 | Review bundle | `lfguard review --desired policy/desired.json --current-snapshot snapshots/prod-current.json --output-dir artifacts/review` | Stable lint, audit, plan, planned grant evidence, input hashes, and summary status for approval systems. |
 | Batch explain JSON | `lfguard explain-batch --requests access-requests.json --current-snapshot snapshots/prod-current.json --output json` | Answers operational access questions without opening the AWS console. |
-| Apply dry run | `lfguard apply ... --output markdown` | Shows what live apply would do before `--execute` is allowed. |
 
 Store JSON for machines and Markdown for reviewers. SARIF is useful when the
 repository already uses GitHub Code Scanning.
@@ -90,19 +90,19 @@ lfguard plan \
   --fail-on-changes
 ```
 
-For controlled rollout, save the plan and apply only reviewed IDs:
+For controlled rollout, save the plan and pass reviewed change IDs to the
+consuming service that owns AWS write execution:
 
-```bash
-lfguard apply \
-  --plan artifacts/lfguard-plan.json \
-  --only change_001,change_002 \
-  --max-changes 2 \
-  --max-destructive 0 \
-  --execute
+```json
+{
+  "reviewed_plan": "artifacts/lfguard-plan.json",
+  "approved_change_ids": ["change_001", "change_002"],
+  "executor": "consuming-service"
+}
 ```
 
-This keeps the apply step tied to the reviewed plan instead of recomputing a
-different change set later.
+This keeps external execution tied to the reviewed plan instead of recomputing a
+different change set later. `lfguard` itself does not execute the changes.
 
 ## Explain Evidence
 

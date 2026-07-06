@@ -8,7 +8,8 @@
 planning AWS Lake Formation data permissions. It compares a desired LF-Tag and
 permission policy against current state, reports drift, produces a conservative
 change plan, and writes stable evidence that services, LLM agents, pull
-requests, Jira tickets, and audit logs can attach before anything is applied.
+requests, Jira tickets, and audit logs can attach before a consuming service
+executes any AWS write.
 
 The import package is `lakeformation_guard`; the CLI command is `lfguard`.
 
@@ -24,8 +25,7 @@ The import package is `lakeformation_guard`; the CLI command is `lfguard`.
 - Python-native permission groups that generate reviewable desired state.
 - Offline audit and plan workflows from JSON or YAML snapshots.
 - Offline effective-access explanations from JSON or YAML snapshots.
-- Live AWS inventory and controlled apply workflows through the optional
-  `boto3` adapter.
+- Read-only live AWS inventory through the optional `boto3` adapter.
 - Live AWS import for starter desired-state scaffolds.
 
 By default, plans only add missing definitions, tag assignments, and permissions.
@@ -37,8 +37,9 @@ values, are omitted unless the matching allow flag is set.
 `lfguard` is deliberately scoped to Lake Formation policy guardrails. It does
 not create IAM principals, register data lake locations, configure
 cross-account sharing, crawl the whole Glue Data Catalog, or replace Terraform,
-CloudFormation, CDK, or IAM administration. Live inventory is scoped by the
-desired-state file so drift checks stay focused and reviewable.
+CloudFormation, CDK, IAM administration, or the consuming service's grant/revoke
+execution path. Live inventory is scoped by the desired-state file so drift
+checks stay focused and reviewable.
 
 ## Why use it
 
@@ -65,7 +66,6 @@ desired-state file so drift checks stay focused and reviewable.
 | 2 | `lfguard explain-batch` | Answer operational access questions from a reviewed snapshot. |
 | 3 | `lfguard check` | Validate and lint desired policy before AWS access. |
 | 4 | `lfguard audit` / `lfguard plan` | Run focused drift or plan checks when a full bundle is not needed. |
-| 5 | `lfguard apply` | Optional; dry-run by default and execute only after review. |
 
 Everything else is supporting workflow: Python policy generation, sample files,
 repository bootstrap, schema export, install diagnostics, IAM policy starters,
@@ -372,7 +372,8 @@ Core commands:
 lfguard check --desired desired.json --current-snapshot current.json --fail-on-findings
 lfguard audit --desired desired.json --current-snapshot current.json --fail-on-findings
 lfguard plan --desired desired.json --current-snapshot current.json
-lfguard apply --desired desired.json --profile prod --region ap-northeast-2
+lfguard review --desired desired.json --current-snapshot current.json --output-dir review/ --force
+lfguard explain-batch --requests access-requests.json --current-snapshot current.json --output json
 ```
 
 Starter and support commands:
@@ -461,7 +462,7 @@ for change in change_plan.changes:
     print(change.action, change.target)
 ```
 
-## Live AWS apply
+## Live AWS Inventory
 
 The live adapter only depends on `boto3` when you instantiate it:
 
@@ -473,7 +474,6 @@ desired = DesiredState.from_file("desired.json")
 adapter = AWSLakeFormationAdapter.from_boto3(profile_name="prod", region_name="ap-northeast-2")
 current = adapter.load_current_state_for(desired)
 change_plan = plan(desired, current, PlanOptions())
-adapter.apply(change_plan, dry_run=False)
 ```
 
 For repeated live reads, keep caching outside the planner by wrapping the live
@@ -498,18 +498,18 @@ Cache entries are keyed by both desired-state scope and provider context. Use
 explicit `provider_context` for custom providers. Keep separate cache files for
 stage/prod, regions, and catalogs.
 
-Use an IAM principal with the minimum Lake Formation permissions required for the
-actions you intend to run. The package does not bypass AWS authorization and does
-not turn destructive changes on by default. Use `lfguard permissions` to
-generate starter IAM policies and `lfguard permissions --check` to preflight the
-role before live inventory or apply workflows.
+Use an IAM principal with the minimum Lake Formation read permissions required
+for live inventory. The package does not bypass AWS authorization. Use
+`lfguard permissions` to generate a read-only starter IAM policy and
+`lfguard permissions --check` to preflight the role before live inventory,
+snapshot, import, review, audit, plan, or explain workflows.
 
 ## Release and Trust
 
 The repository includes GitHub Actions for CI and PyPI Trusted Publishing. See
 [`docs/publishing.md`](docs/publishing.md) for the release path and the exact
 PyPI publisher settings. The latest release notes are in
-[`docs/release-notes/v0.8.2.md`](docs/release-notes/v0.8.2.md), with prior
+[`docs/release-notes/v0.9.0.md`](docs/release-notes/v0.9.0.md), with prior
 release notes under [`docs/release-notes/`](docs/release-notes/).
 
 ## More docs
@@ -526,13 +526,13 @@ release notes under [`docs/release-notes/`](docs/release-notes/).
 - [`docs/schemas/`](docs/schemas/): JSON Schemas for stable report contracts.
 - [`docs/finding-catalog.md`](docs/finding-catalog.md): stable finding and
   plan action metadata for service UI and workflow mapping.
-- [`docs/recipes.md`](docs/recipes.md): audit-only, CI, and controlled apply
-  workflows.
+- [`docs/recipes.md`](docs/recipes.md): audit-only, CI, review, and
+  explanation workflows.
 - [`docs/ci-evidence-workflows.md`](docs/ci-evidence-workflows.md): artifact
-  sets and gates for pull requests, drift checks, plans, explains, and dry-run
-  apply evidence.
+  sets and gates for pull requests, drift checks, plans, explains, and review
+  bundles.
 - [`docs/adoption-checklist.md`](docs/adoption-checklist.md): step-by-step
-  rollout from offline demo to CI and controlled apply.
+  rollout from offline demo to CI and advisory service integration.
 - [`docs/import-adoption-recipes.md`](docs/import-adoption-recipes.md):
   practical import, ownership, data cells filter, and environment promotion
   recipes.
@@ -551,13 +551,13 @@ release notes under [`docs/release-notes/`](docs/release-notes/).
   Python-native permission group authoring layer with reader, editor,
   table creator, and database creator templates.
 - [`docs/report-formats.md`](docs/report-formats.md): JSON and Markdown report
-  shapes for audits, explains, plans, applies, and CI artifacts.
+  shapes for audits, explains, plans, reviews, and CI artifacts.
 - [`docs/architecture.md`](docs/architecture.md): package boundaries, data
   flow, public API, and AWS adapter responsibilities.
 - [`docs/roadmap.md`](docs/roadmap.md): release scope, near-term priorities,
   non-goals, and good first contribution areas.
 - [`docs/safety-model.md`](docs/safety-model.md): conservative defaults,
-  destructive-change flags, apply behavior, and production patterns.
+  destructive-change flags, review behavior, and production patterns.
 - [`docs/positioning.md`](docs/positioning.md): where `lfguard` fits next to
   Terraform, CloudFormation, CDK, raw boto3, and console workflows.
 - [`docs/terraform-cdk-coexistence.md`](docs/terraform-cdk-coexistence.md):
@@ -567,7 +567,7 @@ release notes under [`docs/release-notes/`](docs/release-notes/).
 - [`docs/schema.json`](docs/schema.json): JSON Schema for desired/current state
   files.
 - [`docs/aws-api-coverage.md`](docs/aws-api-coverage.md): exact boto3 Lake
-  Formation calls used for live inventory and apply.
+  Formation calls used for live inventory and import.
 - [`docs/faq.md`](docs/faq.md): answers for safety, AWS credentials, scope, and
   adoption questions.
 - [`docs/troubleshooting.md`](docs/troubleshooting.md): common install, AWS,
@@ -576,7 +576,7 @@ release notes under [`docs/release-notes/`](docs/release-notes/).
   and Code Scanning workflows using GitHub OIDC, job summaries, SARIF, and
   uploaded report artifacts.
 - [`docs/aws-permissions.md`](docs/aws-permissions.md): suggested minimum IAM
-  permissions and preflight checks for read-only and apply roles.
+  permissions and preflight checks for read-only lfguard roles.
 - [`docs/testing.md`](docs/testing.md): default tests, botocore Stubber
   contract tests, Moto emulator tests, and opt-in live AWS contract tests.
 - [`examples/README.md`](examples/README.md): offline files, commands,

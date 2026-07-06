@@ -19,7 +19,7 @@ These files let you try `lfguard` without AWS credentials:
 - `access-requests.json` and `access-current-snapshot.json`: batch access
   diagnosis inputs for service adapter tests.
 - `artifacts/`: checked-in report fixtures for audit, plan, review bundles,
-  explain, explain-batch, and apply dry-run evidence.
+  explain, and explain-batch evidence.
 - `github-actions/lakeformation-drift.yml`: a copyable GitHub Actions workflow
   for scheduled or manually dispatched drift checks against live AWS state. It
   expects `policy.py` and generated `policy/desired.json` in the policy
@@ -47,7 +47,6 @@ Markdown evidence a pull request or scheduled governance job would attach:
 - `artifacts/review-bundle/`
 - `artifacts/review-cases/`
 - `artifacts/explain-batch-cases/`
-- `artifacts/lfguard-apply-dry-run.md`
 
 If you installed `lfguard` from PyPI and do not have this repository checked
 out, generate the same kind of local demo files with:
@@ -110,8 +109,8 @@ The request records include ticket, requester, owner, approver, review date,
 target table, requested permissions, and evidence path metadata. After
 generating desired state, use [`../docs/permission-request-bundles.md`](../docs/permission-request-bundles.md)
 for the review workflow: write request-specific `explain` and `plan` artifacts,
-approve exact plan-local change IDs, and apply only those IDs with
-`lfguard apply --plan ... --only change_003 --max-changes 1 --max-destructive 0 --execute`.
+approve exact plan-local change IDs, and pass those IDs to the consuming
+service that owns AWS write execution.
 
 ## Review Exceptions
 
