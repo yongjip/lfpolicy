@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
+from .aws_requests import boto3_kwargs_for
 from .models import (
     CurrentState,
     DataCellsFilterDefinition,

@@ -78,6 +78,21 @@ Bundles are conveniences over the same state model; review still happens against
 generated grants, plans, audits, and explanations. No bundle grants `ALL`,
 `SUPER`, grant option, or broad-principal access.
 
+Filtered bundles can opt into named LF-Tag expression generation:
+
+```python
+policy.group("analytics", reader().where(domain="sales")).as_named_expression(
+    "AnalyticsReaders"
+)
+```
+
+The compiled desired state contains one `lf_tag_expressions` definition and
+LF-Tag policy grants that reference it by `expression_name`. This is a pure
+authoring convenience; `lfguard` still emits evidence and does not execute AWS
+permission changes. Because the same named expression is used for the database
+and table grants, all filter keys in a named-expression group must be
+database-assignable.
+
 ## Provider Boundary
 
 The core framework consumes `DesiredState` and `CurrentState`. Current state can

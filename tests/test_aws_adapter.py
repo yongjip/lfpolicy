@@ -1,6 +1,6 @@
 import unittest
 
-from lakeformation_guard import DesiredState
+from lakeformation_guard import Change, DesiredState, boto3_kwargs_for
 from lakeformation_guard.aws import AWSLakeFormationAdapter, from_lf_resource, to_lf_resource
 from lakeformation_guard.models import ResourceRef
 
@@ -43,6 +43,86 @@ class FakeLakeFormation:
 
 
 class AwsAdapterTests(unittest.TestCase):
+    def test_boto3_kwargs_for_grant_change_returns_inert_request_data(self):
+        change = Change(
+            action="grant.add_permissions",
+            target="principal -> named expression",
+            reason="missing permissions",
+            payload={
+                "principal": "arn:aws:iam::111122223333:role/Analyst",
+                "resource": {
+                    "kind": "lf_tag_policy",
+                    "catalog_id": "222222222222",
+                    "resource_type": "TABLE",
+                    "expression_name": "AnalyticsReaders",
+                },
+                "permissions": ["DESCRIBE", "SELECT"],
+                "grantable_permissions": ["SELECT"],
+            },
+        )
+
+        request = boto3_kwargs_for(change)
+
+        self.assertEqual(request["method"], "grant_permissions")
+        self.assertEqual(
+            request["kwargs"],
+            {
+                "CatalogId": "222222222222",
+                "Principal": {
+                    "DataLakePrincipalIdentifier": "arn:aws:iam::111122223333:role/Analyst",
+                },
+                "Resource": {
+                    "LFTagPolicy": {
+                        "CatalogId": "222222222222",
+                        "ResourceType": "TABLE",
+                        "ExpressionName": "AnalyticsReaders",
+                    }
+                },
+                "Permissions": ["DESCRIBE", "SELECT"],
+                "PermissionsWithGrantOption": ["SELECT"],
+            },
+        )
+
+    def test_boto3_kwargs_for_accepts_plan_change_mapping(self):
+        request = boto3_kwargs_for(
+            {
+                "action": "lf_tag.create",
+                "target": "lf_tag:catalog=222222222222:key=domain",
+                "reason": "missing LF-Tag",
+                "payload": {
+                    "catalog_id": "222222222222",
+                    "tag_key": "domain",
+                    "tag_values": ["sales"],
+                },
+            }
+        )
+
+        self.assertEqual(
+            request,
+            {
+                "method": "create_lf_tag",
+                "kwargs": {
+                    "CatalogId": "222222222222",
+                    "TagKey": "domain",
+                    "TagValues": ["sales"],
+                },
+            },
+        )
+
+    def test_boto3_kwargs_for_rejects_unknown_change_action(self):
+        with self.assertRaisesRegex(ValueError, "Unsupported change action"):
+            boto3_kwargs_for(
+                Change(
+                    action="unknown.action",
+                    target="target",
+                    reason="reason",
+                    payload={},
+                )
+            )
+
+    def test_adapter_does_not_reintroduce_apply_execution_api(self):
+        self.assertFalse(hasattr(AWSLakeFormationAdapter, "apply"))
+
     def test_lf_tag_policy_resource_conversion(self):
         resource = ResourceRef.from_dict(
             {

@@ -32,6 +32,11 @@ Choose the smallest integration that solves the problem:
    use `lakeformation_guard.aws.AWSLakeFormationAdapter` only when a caller
    explicitly needs read-only live inventory or import helpers and accepts that
    this is not the primary service integration contract.
+4. Request-shaped plan evidence:
+   use `lakeformation_guard.aws.boto3_kwargs_for(change)` only to marshal an
+   already reviewed planned `Change` into inert `{method, kwargs}` data. The
+   consuming service still owns the client, credentials, approval, retries,
+   rollback, audit storage, and actual AWS write decision.
 
 ## Changes That Fit Core
 
@@ -43,6 +48,8 @@ These requests usually belong in `lfguard`:
   more robust without changing the product boundary.
 - Narrow boto3 adapter coverage expansions for already modeled Lake Formation
   read operations.
+- Pure, stateless request-shape marshalling for already planned changes, when
+  no boto3 client is constructed and no request is sent.
 - Documentation for multi-catalog usage, cache scoping, and provider context.
 
 ## Changes Usually Kept Outside Core

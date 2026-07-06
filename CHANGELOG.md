@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Adds `LakePolicy` named-expression compilation for filtered permission
+  groups via `as_named_expression(...)`, producing reusable
+  `lf_tag_expressions` plus `ExpressionName` LF-Tag policy grants without AWS
+  execution.
+- Adds `boto3_kwargs_for(change)` as a public, stateless marshaller that turns
+  a planned `Change` into inert Lake Formation `{method, kwargs}` request
+  evidence without constructing a client or calling AWS.
+
 ## 0.9.0
 
 - Breaking: removes `lfguard apply`, saved-plan apply filtering, apply budgets,

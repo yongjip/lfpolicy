@@ -241,6 +241,15 @@ policy.group("dataconsumer", reader().where({"data-domain": "sales"}))
 policy.tag_table("sales_curated", "customers", tags={"data-domain": "sales"})
 ```
 
+Use `as_named_expression(...)` when a filtered group should compile to a
+reusable named LF-Tag expression plus grants by `ExpressionName`:
+
+```python
+policy.group("analytics", reader().where(domain="sales")).as_named_expression(
+    "AnalyticsReaders"
+)
+```
+
 Useful options:
 
 - `policy.py`: Python file to load.

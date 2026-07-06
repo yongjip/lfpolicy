@@ -2,6 +2,7 @@
 
 from .audit import AuditFinding, audit
 from ._version import __version__
+from .aws_requests import boto3_kwargs_for
 from .aws_permissions import (
     AWSIAMPermissionChecker,
     IAMActionCheck,
@@ -32,6 +33,7 @@ from .models import (
 )
 from .policy import (
     LakePolicy,
+    NamedLFTagExpression,
     PermissionIntent,
     PermissionGroup,
     PermissionTemplate,
@@ -87,6 +89,7 @@ __all__ = [
     "LakePolicy",
     "LazyCurrentStateProvider",
     "LintFinding",
+    "NamedLFTagExpression",
     "Plan",
     "PlanOptions",
     "PermissionIntent",
@@ -108,6 +111,7 @@ __all__ = [
     "admin",
     "audit",
     "aws_current_state_provider_context",
+    "boto3_kwargs_for",
     "data_location_access",
     "database_creator",
     "desired_state_fingerprint",

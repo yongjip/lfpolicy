@@ -241,6 +241,145 @@ class PolicyAuthoringTests(unittest.TestCase):
         )
         self.assertEqual(desired.grants[1].permissions, ("DESCRIBE", "SELECT"))
 
+    def test_group_can_compile_named_lf_tag_expression_grants(self):
+        policy = LakePolicy()
+        policy.tag_key(
+            "domain",
+            values=["sales", "finance"],
+            assignable_to=[TagAssignmentScope.DATABASE, TagAssignmentScope.TABLE],
+        )
+        policy.group("analytics", reader().where(domain="sales")).as_named_expression(
+            name="AnalyticsReaders",
+            description="Reusable analytics reader expression",
+        )
+        policy.bind_role("arn:aws:iam::111122223333:role/Analyst", "analytics")
+
+        desired = policy.to_desired_state()
+
+        self.assertEqual(len(desired.lf_tag_expressions), 1)
+        self.assertEqual(
+            desired.lf_tag_expressions[0].to_dict(),
+            {
+                "name": "AnalyticsReaders",
+                "expression": {"domain": ["sales"]},
+                "description": "Reusable analytics reader expression",
+            },
+        )
+        self.assertEqual(
+            [grant.resource.to_dict() for grant in desired.grants],
+            [
+                {
+                    "kind": "lf_tag_policy",
+                    "resource_type": "DATABASE",
+                    "expression_name": "AnalyticsReaders",
+                },
+                {
+                    "kind": "lf_tag_policy",
+                    "resource_type": "TABLE",
+                    "expression_name": "AnalyticsReaders",
+                },
+            ],
+        )
+        self.assertFalse(lint_desired(desired))
+
+    def test_intent_can_compile_named_lf_tag_expression_grants(self):
+        policy = LakePolicy()
+        policy.tag_key(
+            "domain",
+            catalog_id="222222222222",
+            values=["sales"],
+            assignable_to=[TagAssignmentScope.DATABASE, TagAssignmentScope.TABLE],
+        )
+        policy.group(
+            "analytics",
+            reader(catalog_id="222222222222")
+            .where(domain="sales")
+            .as_named_expression("AnalyticsReaders"),
+        )
+        policy.bind_role("arn:aws:iam::111122223333:role/Analyst", "analytics")
+
+        desired = policy.to_desired_state()
+
+        self.assertEqual(
+            desired.lf_tag_expressions[0].to_dict(),
+            {
+                "name": "AnalyticsReaders",
+                "expression": {"domain": ["sales"]},
+                "catalog_id": "222222222222",
+            },
+        )
+        self.assertEqual(
+            {grant.resource.catalog_id for grant in desired.grants},
+            {"222222222222"},
+        )
+        self.assertEqual(
+            {grant.resource.expression_name for grant in desired.grants},
+            {"AnalyticsReaders"},
+        )
+        self.assertFalse(lint_desired(desired))
+
+    def test_matching_named_lf_tag_expression_groups_dedupe_definition(self):
+        policy = LakePolicy()
+        policy.tag_key(
+            "domain",
+            values=["sales"],
+            assignable_to=[TagAssignmentScope.DATABASE, TagAssignmentScope.TABLE],
+        )
+        policy.group("analytics_a", reader().where(domain="sales")).as_named_expression("AnalyticsReaders")
+        policy.group("analytics_b", reader().where(domain="sales")).as_named_expression("AnalyticsReaders")
+        policy.bind_role(
+            "arn:aws:iam::111122223333:role/Analyst",
+            ["analytics_a", "analytics_b"],
+        )
+
+        desired = policy.to_desired_state()
+
+        self.assertEqual(len(desired.lf_tag_expressions), 1)
+        self.assertEqual(desired.lf_tag_expressions[0].name, "AnalyticsReaders")
+
+    def test_named_lf_tag_expression_groups_reject_conflicting_definitions(self):
+        policy = LakePolicy()
+        policy.tag_key(
+            "domain",
+            values=["sales", "finance"],
+            assignable_to=[TagAssignmentScope.DATABASE, TagAssignmentScope.TABLE],
+        )
+        policy.group("analytics", reader().where(domain="sales")).as_named_expression("SharedReaders")
+        policy.group("finance", reader().where(domain="finance")).as_named_expression("SharedReaders")
+
+        with self.assertRaises(PolicyValidationError) as context:
+            policy.validate()
+
+        self.assertIn(
+            "POLICY_NAMED_EXPRESSION_CONFLICT",
+            {finding.code for finding in context.exception.findings},
+        )
+
+    def test_named_lf_tag_expression_groups_require_database_assignable_filters(self):
+        policy = LakePolicy()
+        policy.tag_key(
+            "domain",
+            values=["sales"],
+            assignable_to=[TagAssignmentScope.DATABASE, TagAssignmentScope.TABLE],
+        )
+        policy.tag_key(
+            "sensitivity",
+            values=["internal"],
+            assignable_to=[TagAssignmentScope.TABLE],
+        )
+        policy.group(
+            "analytics",
+            reader().where(domain="sales", sensitivity="internal"),
+        ).as_named_expression("AnalyticsReaders")
+
+        with self.assertRaises(PolicyValidationError) as context:
+            policy.validate()
+
+        self.assertIn(
+            "POLICY_NAMED_EXPRESSION_DATABASE_SCOPE_UNSUPPORTED",
+            {finding.code for finding in context.exception.findings},
+        )
+
     def test_to_desired_state_generates_resource_tag_assignments(self):
         policy = LakePolicy()
         _define_common_tags(policy)

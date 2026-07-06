@@ -267,6 +267,19 @@ policy.group("dataconsumer", reader().where({"data-domain": "sales"}))
 policy.tag_database("sales_curated", tags={"data-domain": "sales"})
 ```
 
+When a service uses named LF-Tag expressions as the canonical object, compile a
+filtered bundle into one reusable expression and grant it by `ExpressionName`:
+
+```python
+policy.group("analytics", reader().where(domain="sales")).as_named_expression(
+    "AnalyticsReaders"
+)
+```
+
+This emits `lf_tag_expressions.AnalyticsReaders` and LF-Tag policy grants that
+reference `expression_name: "AnalyticsReaders"`. It is still advisory desired
+state generation only; the consuming service owns any AWS write execution.
+
 ```bash
 lfguard generate policy.py --output-file policy/desired.json --force
 lfguard generate policy.py --output-file policy/desired.json --check

@@ -1,6 +1,6 @@
 import unittest
 
-from lakeformation_guard import DesiredState
+from lakeformation_guard import Change, DesiredState, boto3_kwargs_for
 from lakeformation_guard.aws import AWSLakeFormationAdapter
 
 try:
@@ -29,6 +29,175 @@ class AwsAdapterStubberTests(unittest.TestCase):
         self.stubber = Stubber(self.client)
         self.stubber.activate()
         self.addCleanup(self.stubber.deactivate)
+
+    def test_boto3_kwargs_for_uses_botocore_validated_request_shapes(self):
+        changes = (
+            Change(
+                action="lf_tag.create",
+                target="lf_tag:catalog=111122223333:key=domain",
+                reason="missing LF-Tag",
+                payload={"catalog_id": CATALOG_ID, "tag_key": "domain", "tag_values": ["sales"]},
+            ),
+            Change(
+                action="lf_tag.add_values",
+                target="lf_tag:catalog=111122223333:key=domain",
+                reason="missing value",
+                payload={"catalog_id": CATALOG_ID, "tag_key": "domain", "tag_values": ["finance"]},
+            ),
+            Change(
+                action="lf_tag.remove_values",
+                target="lf_tag:catalog=111122223333:key=domain",
+                reason="extra value",
+                payload={"catalog_id": CATALOG_ID, "tag_key": "domain", "tag_values": ["legacy"]},
+                destructive=True,
+            ),
+            Change(
+                action="lf_tag.delete",
+                target="lf_tag:catalog=111122223333:key=legacy",
+                reason="extra LF-Tag",
+                payload={"catalog_id": CATALOG_ID, "tag_key": "legacy"},
+                destructive=True,
+            ),
+            Change(
+                action="lf_tag_expression.create",
+                target="lf_tag_expression:catalog=111122223333:name=sales_tables",
+                reason="missing expression",
+                payload={
+                    "catalog_id": CATALOG_ID,
+                    "name": "sales_tables",
+                    "description": "Sales tables",
+                    "expression": [{"key": "domain", "values": ["sales"]}],
+                },
+            ),
+            Change(
+                action="lf_tag_expression.update",
+                target="lf_tag_expression:catalog=111122223333:name=sales_tables",
+                reason="expression drift",
+                payload={
+                    "catalog_id": CATALOG_ID,
+                    "name": "sales_tables",
+                    "expression": {"domain": ["finance"]},
+                },
+                destructive=True,
+            ),
+            Change(
+                action="lf_tag_expression.delete",
+                target="lf_tag_expression:catalog=111122223333:name=legacy",
+                reason="extra expression",
+                payload={"catalog_id": CATALOG_ID, "name": "legacy"},
+                destructive=True,
+            ),
+            Change(
+                action="data_cells_filter.create",
+                target="data_cells_filter:catalog=111122223333:database=analytics:table=orders:name=orders_public",
+                reason="missing filter",
+                payload={
+                    "catalog_id": CATALOG_ID,
+                    "database": "analytics",
+                    "table": "orders",
+                    "name": "orders_public",
+                    "row_filter": "country = 'US'",
+                    "columns": ["order_id", "status"],
+                },
+            ),
+            Change(
+                action="data_cells_filter.update",
+                target="data_cells_filter:catalog=111122223333:database=analytics:table=orders:name=orders_public",
+                reason="filter drift",
+                payload={
+                    "catalog_id": CATALOG_ID,
+                    "database": "analytics",
+                    "table": "orders",
+                    "name": "orders_public",
+                    "all_rows": True,
+                    "excluded_columns": ["notes"],
+                    "version_id": "v1",
+                },
+                destructive=True,
+            ),
+            Change(
+                action="data_cells_filter.delete",
+                target="data_cells_filter:catalog=111122223333:database=analytics:table=orders:name=orders_legacy",
+                reason="extra filter",
+                payload={
+                    "catalog_id": CATALOG_ID,
+                    "database": "analytics",
+                    "table": "orders",
+                    "name": "orders_legacy",
+                },
+                destructive=True,
+            ),
+            Change(
+                action="resource_tag.add_values",
+                target="table:catalog=111122223333:database=analytics:table=orders",
+                reason="missing assignment",
+                payload={
+                    "resource": {
+                        "kind": "table",
+                        "catalog_id": CATALOG_ID,
+                        "database": "analytics",
+                        "table": "orders",
+                    },
+                    "tags": {"domain": ["sales"]},
+                },
+            ),
+            Change(
+                action="resource_tag.remove_values",
+                target="table:catalog=111122223333:database=analytics:table=orders",
+                reason="extra assignment",
+                payload={
+                    "resource": {
+                        "kind": "table",
+                        "catalog_id": CATALOG_ID,
+                        "database": "analytics",
+                        "table": "orders",
+                    },
+                    "tags": {"domain": ["legacy"]},
+                },
+                destructive=True,
+            ),
+            Change(
+                action="grant.add_permissions",
+                target="principal -> table_with_columns",
+                reason="missing column-wildcard permissions",
+                payload={
+                    "principal": PRINCIPAL,
+                    "resource": {
+                        "kind": "table_with_columns",
+                        "catalog_id": CATALOG_ID,
+                        "database": "analytics",
+                        "table": "orders",
+                        "column_wildcard": True,
+                        "excluded_columns": ["internal_notes"],
+                    },
+                    "permissions": ["SELECT"],
+                    "grantable_permissions": [],
+                },
+            ),
+            Change(
+                action="grant.revoke_permissions",
+                target="principal -> lf_tag_expression",
+                reason="extra expression stewardship",
+                payload={
+                    "principal": PRINCIPAL,
+                    "resource": {
+                        "kind": "lf_tag_expression",
+                        "catalog_id": CATALOG_ID,
+                        "expression_name": "sales_tables",
+                    },
+                    "permissions": ["GRANT_WITH_LF_TAG_EXPRESSION"],
+                    "grantable_permissions": [],
+                },
+                destructive=True,
+            ),
+        )
+
+        for change in changes:
+            request = boto3_kwargs_for(change)
+            self.stubber.add_response(request["method"], {}, request["kwargs"])
+            getattr(self.client, request["method"])(**request["kwargs"])
+
+        self.stubber.assert_no_pending_responses()
 
     def test_load_current_state_uses_scoped_inventory_requests_and_pagination(self):
         adapter = AWSLakeFormationAdapter(self.client, catalog_id=CATALOG_ID)

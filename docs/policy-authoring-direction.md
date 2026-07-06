@@ -134,6 +134,33 @@ The builder rejects a resource assignment when the tag key is undefined, the
 value is not in the tag definition, or the tag key is not assignable to that
 resource level.
 
+## Named LF-Tag Expressions
+
+Some services treat a named LF-Tag expression as the reusable governance object:
+define the expression once, then grant principals by `ExpressionName`. Use
+`as_named_expression(...)` on a filtered permission group when that shape is the
+desired contract:
+
+```python
+policy.group("analytics", reader().where(domain="sales")).as_named_expression(
+    name="AnalyticsReaders",
+    description="Reusable analytics reader expression",
+)
+policy.bind_role("arn:aws:iam::111122223333:role/Analyst", "analytics")
+```
+
+The compile step emits both:
+
+- `lf_tag_expressions.AnalyticsReaders` with the group's declared filter; and
+- database/table LF-Tag policy grants whose resources reference
+  `expression_name: "AnalyticsReaders"`.
+
+This remains pure desired-state authoring. It does not call AWS and does not
+change the service boundary: the consuming service owns approval, IAM
+credentials, audit storage, and any eventual grant execution. Since one named
+expression backs both the database and table grants, every filter key in that
+group must be assignable to databases.
+
 ## Import to Python Migration
 
 Use `lfguard import` as a scaffold, then convert only the owned surface into

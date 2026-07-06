@@ -23,6 +23,7 @@ from .models import (
     DesiredState,
     Grant,
     LFTagDefinition,
+    LFTagExpressionDefinition,
     LFTagKeyMetadata,
     ResourceRef,
     ResourceTagAssignment,
@@ -64,6 +65,7 @@ TEnum = TypeVar("TEnum", bound=Enum)
 
 __all__ = [
     "LakePolicy",
+    "NamedLFTagExpression",
     "PermissionGroup",
     "PermissionIntent",
     "PermissionTemplate",
@@ -149,6 +151,22 @@ class TagKey:
 
 
 @dataclass(frozen=True)
+class NamedLFTagExpression:
+    """Configuration for compiling a group filter into a reusable named expression."""
+
+    name: str
+    description: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "name",
+            _clean_name(self.name, field_name="named LF-Tag expression"),
+        )
+        object.__setattr__(self, "description", _optional_str(self.description))
+
+
+@dataclass(frozen=True)
 class PermissionIntent:
     """A permission template plus its LF-Tag filter expression."""
 
@@ -157,6 +175,7 @@ class PermissionIntent:
     resource: Optional[ResourceRef] = None
     permissions: Tuple[str, ...] = field(default_factory=tuple)
     catalog_id: Optional[str] = None
+    named_expression: Optional[NamedLFTagExpression] = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -176,6 +195,11 @@ class PermissionIntent:
         object.__setattr__(self, "filters", normalized)
         object.__setattr__(self, "permissions", _permission_tuple(self.permissions))
         object.__setattr__(self, "catalog_id", _optional_str(self.catalog_id))
+        if self.named_expression is not None and not isinstance(
+            self.named_expression,
+            NamedLFTagExpression,
+        ):
+            raise ValueError("named_expression must be created by as_named_expression()")
 
     def where(
         self,
@@ -193,12 +217,30 @@ class PermissionIntent:
             resource=self.resource,
             permissions=self.permissions,
             catalog_id=self.catalog_id,
+            named_expression=self.named_expression,
         )
 
     def where_tags(self, filters: Mapping[str, Any]) -> "PermissionIntent":
         """Return a copy with tag filters from a mapping."""
 
         return self.where(filters)
+
+    def as_named_expression(
+        self,
+        name: str,
+        *,
+        description: Optional[str] = None,
+    ) -> "PermissionIntent":
+        """Return a copy that compiles the LF-Tag filter as a named expression."""
+
+        return PermissionIntent(
+            permission_template=self.permission_template,
+            filters=self.filters,
+            resource=self.resource,
+            permissions=self.permissions,
+            catalog_id=self.catalog_id,
+            named_expression=NamedLFTagExpression(name=name, description=description),
+        )
 
     def in_catalog(self, catalog_id: str) -> "PermissionIntent":
         """Return a copy scoped to a Glue Data Catalog."""
@@ -209,6 +251,7 @@ class PermissionIntent:
             resource=_resource_with_catalog(self.resource, catalog_id),
             permissions=self.permissions,
             catalog_id=catalog_id,
+            named_expression=self.named_expression,
         )
 
 
@@ -218,6 +261,7 @@ class PermissionGroup:
 
     name: str
     intent: PermissionIntent
+    _owner: Optional["LakePolicy"] = field(default=None, compare=False, repr=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "name", _clean_name(self.name, field_name="permission group"))
@@ -227,6 +271,23 @@ class PermissionGroup:
                 "producer(), table_creator(), database_creator(), steward(), "
                 "admin(), or data_location_access()"
             )
+
+    def as_named_expression(
+        self,
+        name: str,
+        *,
+        description: Optional[str] = None,
+    ) -> "PermissionGroup":
+        """Compile this group's LF-Tag filter into a reusable named expression."""
+
+        group = PermissionGroup(
+            name=self.name,
+            intent=self.intent.as_named_expression(name, description=description),
+            _owner=self._owner,
+        )
+        if self._owner is not None:
+            self._owner._groups[self.name] = group
+        return group
 
 
 @dataclass(frozen=True)
@@ -312,7 +373,7 @@ class LakePolicy:
     def group(self, name: str, intent: PermissionIntent) -> PermissionGroup:
         """Define a permission group from a safe permission template."""
 
-        group = PermissionGroup(name=name, intent=intent)
+        group = PermissionGroup(name=name, intent=intent, _owner=self)
         if group.name in self._groups:
             raise ValueError("permission group {!r} is already defined".format(group.name))
         self._groups[group.name] = group
@@ -399,6 +460,7 @@ class LakePolicy:
         findings = []
         for group in self.groups:
             findings.extend(self._group_validation_findings(group))
+        findings.extend(self._named_expression_validation_findings())
 
         for resource, tags in sorted(
             self._resource_tag_values.items(),
@@ -427,11 +489,89 @@ class LakePolicy:
                     )
         return tuple(findings)
 
+    def _named_expression_validation_findings(self) -> Tuple[PolicyValidationFinding, ...]:
+        findings = []
+        seen: Dict[Tuple[Optional[str], str], Tuple[str, Tuple[Any, ...], Optional[str]]] = {}
+        for group in self.groups:
+            named_expression = group.intent.named_expression
+            if named_expression is None:
+                continue
+            path_prefix = "groups.{}.named_expression".format(group.name)
+            if group.intent.permission_template in {
+                PermissionTemplate.DATABASE_CREATOR,
+                PermissionTemplate.STEWARD,
+                PermissionTemplate.ADMIN,
+                PermissionTemplate.DATA_LOCATION_ACCESS,
+            }:
+                findings.append(
+                    PolicyValidationFinding(
+                        code="POLICY_NAMED_EXPRESSION_UNSUPPORTED",
+                        path=path_prefix,
+                        message=(
+                            "{} permission group {!r} cannot compile a filter into a named LF-Tag expression"
+                        ).format(group.intent.permission_template.value, group.name),
+                        suggestion=(
+                            "Use as_named_expression(...) only on filtered bundles "
+                            "such as reader(), producer(), editor(), or table_creator()."
+                        ),
+                    )
+                )
+                continue
+            expression = _expression_items(group.intent.filters)
+            conflict_key = (group.intent.catalog_id, named_expression.name)
+            current = (group.name, expression, named_expression.description)
+            previous = seen.get(conflict_key)
+            if previous is not None and previous[1:] != current[1:]:
+                findings.append(
+                    PolicyValidationFinding(
+                        code="POLICY_NAMED_EXPRESSION_CONFLICT",
+                        path=path_prefix,
+                        message=(
+                            "permission group {!r} defines named LF-Tag expression {!r} differently from group {!r}"
+                        ).format(group.name, named_expression.name, previous[0]),
+                        suggestion="Use a unique expression name or make every group with the same name compile to the same LF-Tag expression body.",
+                    )
+                )
+            else:
+                seen[conflict_key] = current
+            for tag_key in group.intent.filters:
+                definition = self._tag_key_definition(tag_key, group.intent.catalog_id)
+                if definition is None:
+                    continue
+                if TagAssignmentScope.DATABASE not in definition.assignable_to:
+                    findings.append(
+                        PolicyValidationFinding(
+                            code="POLICY_NAMED_EXPRESSION_DATABASE_SCOPE_UNSUPPORTED",
+                            path="{}.filters.{}".format(path_prefix, tag_key),
+                            message=(
+                                "named LF-Tag expression group {!r} uses tag key {!r}, but that key cannot be assigned to databases"
+                            ).format(group.name, tag_key),
+                            suggestion=(
+                                "Either make the tag key database-assignable or leave "
+                                "this group inline so lfguard can keep the database "
+                                "grant narrowed to database-compatible filters."
+                            ),
+                        )
+                    )
+        return tuple(findings)
+
     def to_desired_state(self) -> DesiredState:
         """Compile the high-level policy into normal lfguard desired state."""
 
         self.validate()
+        lf_tag_expressions = []
         grants = []
+        for group in self.groups:
+            named_expression = group.intent.named_expression
+            if named_expression is not None:
+                lf_tag_expressions.append(
+                    LFTagExpressionDefinition(
+                        name=named_expression.name,
+                        expression=_expression_items(group.intent.filters),
+                        description=named_expression.description,
+                        catalog_id=group.intent.catalog_id,
+                    )
+                )
         for binding in self.bindings:
             for group_name in binding.groups:
                 group = self._groups[group_name]
@@ -439,6 +579,7 @@ class LakePolicy:
 
         desired = DesiredState(
             lf_tags=tuple(LFTagDefinition(tag.key, tag.values, catalog_id=tag.catalog_id) for tag in self.tag_keys),
+            lf_tag_expressions=tuple(sorted(set(lf_tag_expressions))),
             lf_tag_key_metadata=tuple(
                 LFTagKeyMetadata(tag.key, tuple(scope.value for scope in tag.assignable_to), catalog_id=tag.catalog_id)
                 for tag in self.tag_keys
@@ -742,26 +883,35 @@ class LakePolicy:
             PermissionTemplate.PRODUCER: ("DELETE", "DESCRIBE", "INSERT", "SELECT"),
             PermissionTemplate.TABLE_CREATOR: ("DELETE", "DESCRIBE", "INSERT", "SELECT"),
         }[template]
+        expression_name = (
+            group.intent.named_expression.name
+            if group.intent.named_expression is not None
+            else None
+        )
+        database_resource = ResourceRef(
+            kind="lf_tag_policy",
+            resource_type="DATABASE",
+            expression_name=expression_name,
+            expression=() if expression_name else self._database_filter_items(group),
+            catalog_id=group.intent.catalog_id,
+        )
+        table_resource = ResourceRef(
+            kind="lf_tag_policy",
+            resource_type="TABLE",
+            expression_name=expression_name,
+            expression=() if expression_name else _expression_items(group.intent.filters),
+            catalog_id=group.intent.catalog_id,
+        )
 
         return (
             Grant(
                 principal=principal,
-                resource=ResourceRef(
-                    kind="lf_tag_policy",
-                    resource_type="DATABASE",
-                    expression=self._database_filter_items(group),
-                    catalog_id=group.intent.catalog_id,
-                ),
+                resource=database_resource,
                 permissions=database_permissions,
             ),
             Grant(
                 principal=principal,
-                resource=ResourceRef(
-                    kind="lf_tag_policy",
-                    resource_type="TABLE",
-                    expression=_expression_items(group.intent.filters),
-                    catalog_id=group.intent.catalog_id,
-                ),
+                resource=table_resource,
                 permissions=table_permissions,
             ),
         )

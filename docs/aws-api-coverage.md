@@ -63,6 +63,21 @@ changes. That metadata is evidence for humans, services, CI, and tickets; it is
 not an instruction that lfguard will execute. AWS write execution belongs to the
 consuming service or operator workflow.
 
+Library consumers that already own approval and AWS write execution can call
+`lakeformation_guard.aws.boto3_kwargs_for(change)` to render one planned
+`Change` into inert Lake Formation request evidence:
+
+```python
+from lakeformation_guard.aws import boto3_kwargs_for
+
+request = boto3_kwargs_for(change)
+# {"method": "...", "kwargs": {...}}
+```
+
+The helper is stateless: it creates no boto3 client, sends no request, reads no
+credentials, and performs no retry or rollback. It is the request-shaped
+counterpart to plan evidence, not an lfguard execution path.
+
 ## Catalog IDs
 
 Pass `--catalog-id` to add a Glue Data Catalog ID to live inventory and import
