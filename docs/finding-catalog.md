@@ -96,6 +96,7 @@ change the meaning of existing `recommended_action`, `hard_block`, `status`, or
 | <a id="grant-revoke-permissions"></a>`grant.revoke_permissions` | Revoke permissions | grant | `block` | true |
 | <a id="lf-tag-add-values"></a>`lf_tag.add_values` | Add LF-Tag values | lf_tag | `review_required` | false |
 | <a id="lf-tag-create"></a>`lf_tag.create` | Create LF-Tag | lf_tag | `review_required` | false |
+| <a id="lf-tag-delete"></a>`lf_tag.delete` | Delete LF-Tag | lf_tag | `block` | true |
 | <a id="lf-tag-remove-values"></a>`lf_tag.remove_values` | Remove LF-Tag values | lf_tag | `block` | true |
 | <a id="lf-tag-expression-create"></a>`lf_tag_expression.create` | Create LF-Tag expression | lf_tag_expression | `review_required` | false |
 | <a id="lf-tag-expression-delete"></a>`lf_tag_expression.delete` | Delete LF-Tag expression | lf_tag_expression | `block` | true |

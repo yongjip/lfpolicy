@@ -97,6 +97,39 @@ class PlannerTests(unittest.TestCase):
 
         self.assertEqual(change_plan.changes, ())
 
+    def test_plan_lf_tag_delete_requires_explicit_flag_and_runs_last(self):
+        desired = DesiredState.from_dict({"lf_tags": {"sensitivity": ["internal"]}})
+        current = CurrentState.from_dict(
+            {
+                "lf_tags": {
+                    "domain": ["sales"],
+                    "sensitivity": ["internal"],
+                },
+                "resource_tags": [
+                    {
+                        "resource": {"kind": "database", "database": "analytics"},
+                        "tags": {"domain": ["sales"]},
+                    }
+                ],
+            }
+        )
+
+        default_plan = plan(desired, current)
+        destructive_plan = plan(
+            desired,
+            current,
+            PlanOptions(allow_lf_tag_deletes=True, allow_resource_tag_removals=True),
+        )
+
+        self.assertEqual(default_plan.changes, ())
+        self.assertEqual(
+            [change.action for change in destructive_plan.changes],
+            ["resource_tag.remove_values", "lf_tag.delete"],
+        )
+        self.assertEqual(destructive_plan.changes[1].requires_flag, "--allow-lf-tag-deletes")
+        self.assertEqual(destructive_plan.changes[1].aws_api, "delete_lf_tag")
+        self.assertTrue(all(change.destructive for change in destructive_plan.changes))
+
     def test_plan_lf_tag_expression_create_update_and_delete(self):
         desired = DesiredState.from_dict(
             {

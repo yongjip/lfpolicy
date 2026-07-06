@@ -520,6 +520,9 @@ release notes under [`docs/release-notes/`](docs/release-notes/).
   rules for service workflows and LLM agents consuming lfguard JSON.
 - [`docs/service-integration.md`](docs/service-integration.md): subprocess and
   JSON artifact contract for services that embed lfguard as advisory evidence.
+- [`docs/library-embedding-boundary.md`](docs/library-embedding-boundary.md):
+  what kinds of embedding requests belong in core, and what should stay in the
+  consuming service or raw boto3 wrappers.
 - [`docs/schemas/`](docs/schemas/): JSON Schemas for stable report contracts.
 - [`docs/finding-catalog.md`](docs/finding-catalog.md): stable finding and
   plan action metadata for service UI and workflow mapping.

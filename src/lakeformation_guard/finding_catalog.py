@@ -96,6 +96,7 @@ PLAN_ACTIONS: Mapping[str, Mapping[str, Any]] = {
     "grant.revoke_permissions": _entry("grant.revoke_permissions", "Revoke permissions", "grant", ACTION_BLOCK, key="action"),
     "lf_tag.add_values": _entry("lf_tag.add_values", "Add LF-Tag values", "lf_tag", ACTION_REVIEW_REQUIRED, key="action"),
     "lf_tag.create": _entry("lf_tag.create", "Create LF-Tag", "lf_tag", ACTION_REVIEW_REQUIRED, key="action"),
+    "lf_tag.delete": _entry("lf_tag.delete", "Delete LF-Tag", "lf_tag", ACTION_BLOCK, key="action"),
     "lf_tag.remove_values": _entry("lf_tag.remove_values", "Remove LF-Tag values", "lf_tag", ACTION_BLOCK, key="action"),
     "lf_tag_expression.create": _entry("lf_tag_expression.create", "Create LF-Tag expression", "lf_tag_expression", ACTION_REVIEW_REQUIRED, key="action"),
     "lf_tag_expression.delete": _entry("lf_tag_expression.delete", "Delete LF-Tag expression", "lf_tag_expression", ACTION_BLOCK, key="action"),

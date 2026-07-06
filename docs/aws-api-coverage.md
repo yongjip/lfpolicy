@@ -63,6 +63,7 @@ selected changes in a saved JSON plan passed with `--plan`.
 | --- | --- | --- |
 | `lf_tag.create` | `create_lf_tag` | `lakeformation:CreateLFTag` |
 | `lf_tag.add_values` | `update_lf_tag` with `TagValuesToAdd` | `lakeformation:UpdateLFTag` |
+| `lf_tag.delete` | `delete_lf_tag` | `lakeformation:DeleteLFTag` |
 | `lf_tag.remove_values` | `update_lf_tag` with `TagValuesToDelete` | `lakeformation:UpdateLFTag` |
 | `lf_tag_expression.create` | `create_lf_tag_expression` | `lakeformation:CreateLFTagExpression` |
 | `lf_tag_expression.update` | `update_lf_tag_expression` | `lakeformation:UpdateLFTagExpression` |
@@ -79,6 +80,7 @@ Destructive actions are not planned or applied unless the matching `--allow-*`
 flag is supplied:
 
 - `lf_tag.remove_values` requires `--allow-lf-tag-value-removals`;
+- `lf_tag.delete` requires `--allow-lf-tag-deletes`;
 - `lf_tag_expression.update` requires `--allow-lf-tag-expression-updates`;
 - `lf_tag_expression.delete` requires `--allow-lf-tag-expression-deletes`;
 - `data_cells_filter.update` requires `--allow-data-cells-filter-updates`;
@@ -86,13 +88,18 @@ flag is supplied:
 - `resource_tag.remove_values` requires `--allow-resource-tag-removals`;
 - `grant.revoke_permissions` requires `--allow-permission-revokes`.
 
+`lf_tag.delete` is a direct delete request only. It does not recursively detach
+resource LF-Tags, named expressions, or grants on the caller's behalf; those
+removals should stay explicit in the reviewed plan.
+
 ## Catalog IDs
 
 Pass `--catalog-id` to add a Glue Data Catalog ID to live inventory and apply
 requests. Resource-level `catalog_id` values in state files are also preserved
 when rendering Lake Formation resource payloads. LF-Tag definitions can also
 carry `catalog_id`; those scoped definitions override the adapter default for
-`get_lf_tag`, `create_lf_tag`, and `update_lf_tag` request shapes.
+`get_lf_tag`, `create_lf_tag`, `delete_lf_tag`, and `update_lf_tag` request
+shapes.
 Data cells filter definitions use `catalog_id` as the AWS `TableCatalogId`.
 
 ## Error Handling

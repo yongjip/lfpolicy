@@ -370,6 +370,7 @@ Revokes and removals are not planned unless explicitly allowed:
 lfguard plan \
   --desired policy/desired.json \
   --current-snapshot snapshots/prod-current.json \
+  --allow-lf-tag-deletes \
   --allow-permission-revokes \
   --allow-resource-tag-removals \
   --allow-lf-tag-value-removals

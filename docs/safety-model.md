@@ -23,6 +23,7 @@ depend on.
 
 Destructive changes are included only when the matching flag is supplied:
 
+- `--allow-lf-tag-deletes`: plan or apply LF-Tag deletes.
 - `--allow-lf-tag-value-removals`: plan or apply LF-Tag value removals.
 - `--allow-lf-tag-expression-updates`: plan or apply named LF-Tag expression
   body or description updates.

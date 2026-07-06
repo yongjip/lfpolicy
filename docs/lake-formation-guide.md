@@ -124,7 +124,8 @@ named versus LF-TBAC grant behavior, and permission/resource combinations, see
 - Encoding an OR rule as one LF-Tag expression that actually means AND.
 - Deleting LF-Tag values without first checking resource assignments and grants.
 - Putting `--allow-permission-revokes`, `--allow-resource-tag-removals`, or
-  `--allow-lf-tag-value-removals` into routine CI.
+  `--allow-lf-tag-deletes`, or `--allow-lf-tag-value-removals` into routine
+  CI.
 - Assuming `lfguard snapshot` is full-account discovery.
 - Modeling row or cell data filters in `lfguard` before the package supports
   them.

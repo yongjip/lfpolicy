@@ -592,6 +592,7 @@ lfguard plan --desired desired.json --output json --output-file plan.json
 
 Destructive planning flags:
 
+- `--allow-lf-tag-deletes`
 - `--allow-lf-tag-value-removals`
 - `--allow-lf-tag-expression-updates`
 - `--allow-lf-tag-expression-deletes`

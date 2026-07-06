@@ -47,6 +47,13 @@ class AwsAdapterStubberTests(unittest.TestCase):
                     payload={"tag_key": "domain", "tag_values": ["marketing"]},
                 ),
                 Change(
+                    action="lf_tag.delete",
+                    target="lf_tag:legacy",
+                    reason="tag removed from desired state",
+                    payload={"tag_key": "legacy"},
+                    destructive=True,
+                ),
+                Change(
                     action="lf_tag.remove_values",
                     target="lf_tag:domain",
                     reason="extra value",
@@ -133,6 +140,14 @@ class AwsAdapterStubberTests(unittest.TestCase):
             },
         )
         self.stubber.add_response(
+            "delete_lf_tag",
+            {},
+            {
+                "CatalogId": CATALOG_ID,
+                "TagKey": "legacy",
+            },
+        )
+        self.stubber.add_response(
             "update_lf_tag",
             {},
             {
@@ -204,7 +219,7 @@ class AwsAdapterStubberTests(unittest.TestCase):
 
         results = adapter.apply(change_plan, dry_run=False, allow_destructive=True)
 
-        self.assertEqual(len(results), 7)
+        self.assertEqual(len(results), 8)
         self.assertTrue(all(result.applied for result in results))
         self.stubber.assert_no_pending_responses()
 
@@ -600,6 +615,40 @@ class AwsAdapterStubberTests(unittest.TestCase):
         )
 
         results = adapter.apply(change_plan, dry_run=False)
+
+        self.assertEqual(len(results), 1)
+        self.assertTrue(results[0].applied)
+        self.stubber.assert_no_pending_responses()
+
+    def test_apply_lf_tag_delete_payload_catalog_id_overrides_adapter_default(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id="111111111111")
+        change_plan = Plan.from_dict(
+            {
+                "changes": [
+                    {
+                        "action": "lf_tag.delete",
+                        "target": "lf_tag:catalog=222222222222:key=domain",
+                        "reason": "removed",
+                        "destructive": True,
+                        "payload": {
+                            "catalog_id": "222222222222",
+                            "tag_key": "domain",
+                        },
+                    }
+                ]
+            }
+        )
+
+        self.stubber.add_response(
+            "delete_lf_tag",
+            {},
+            {
+                "CatalogId": "222222222222",
+                "TagKey": "domain",
+            },
+        )
+
+        results = adapter.apply(change_plan, dry_run=False, allow_destructive=True)
 
         self.assertEqual(len(results), 1)
         self.assertTrue(results[0].applied)

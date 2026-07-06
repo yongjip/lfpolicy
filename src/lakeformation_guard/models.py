@@ -85,6 +85,15 @@ def _optional_str(raw: Any) -> Optional[str]:
     return value or None
 
 
+def _optional_catalog_id(raw: Any) -> Optional[str]:
+    value = _optional_str(raw)
+    if value is None:
+        return None
+    if value.lower() in {"none", "null"}:
+        return None
+    return value
+
+
 def _resource_name(raw: Mapping[str, Any], *names: str) -> Optional[str]:
     for name in names:
         if name in raw:
@@ -149,7 +158,7 @@ class ResourceRef:
         object.__setattr__(self, "database_name", _optional_str(self.database_name))
         object.__setattr__(self, "table_name", _optional_str(self.table_name))
         object.__setattr__(self, "location", _optional_str(self.location))
-        object.__setattr__(self, "catalog_id", _optional_str(self.catalog_id))
+        object.__setattr__(self, "catalog_id", _optional_catalog_id(self.catalog_id))
         object.__setattr__(self, "expression_name", _optional_str(self.expression_name))
         object.__setattr__(self, "filter_name", _optional_str(self.filter_name))
         if self.resource_type is not None:
@@ -313,7 +322,7 @@ class LFTagDefinition:
     def __post_init__(self) -> None:
         object.__setattr__(self, "key", self.key.strip())
         object.__setattr__(self, "values", _string_tuple(self.values, field_name="LF-Tag values"))
-        object.__setattr__(self, "catalog_id", _optional_str(self.catalog_id))
+        object.__setattr__(self, "catalog_id", _optional_catalog_id(self.catalog_id))
         if not self.key:
             raise ValueError("LF-Tag key must not be empty")
 
@@ -362,7 +371,7 @@ class LFTagExpressionDefinition:
     def __post_init__(self) -> None:
         object.__setattr__(self, "name", self.name.strip())
         object.__setattr__(self, "description", _optional_str(self.description))
-        object.__setattr__(self, "catalog_id", _optional_str(self.catalog_id))
+        object.__setattr__(self, "catalog_id", _optional_catalog_id(self.catalog_id))
         object.__setattr__(self, "expression", tuple(sorted(self.expression)))
         if not self.name:
             raise ValueError("LF-Tag expression name must not be empty")
@@ -423,7 +432,7 @@ class DataCellsFilterDefinition:
         object.__setattr__(self, "name", self.name.strip())
         object.__setattr__(self, "database_name", self.database_name.strip())
         object.__setattr__(self, "table_name", self.table_name.strip())
-        object.__setattr__(self, "catalog_id", _optional_str(self.catalog_id))
+        object.__setattr__(self, "catalog_id", _optional_catalog_id(self.catalog_id))
         object.__setattr__(self, "row_filter", _optional_str(self.row_filter))
         object.__setattr__(self, "all_rows", bool(self.all_rows))
         object.__setattr__(self, "columns", tuple(sorted({column.strip() for column in self.columns if column.strip()})))
@@ -532,7 +541,7 @@ class LFTagKeyMetadata:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "key", self.key.strip())
-        object.__setattr__(self, "catalog_id", _optional_str(self.catalog_id))
+        object.__setattr__(self, "catalog_id", _optional_catalog_id(self.catalog_id))
         object.__setattr__(
             self,
             "assignable_to",
@@ -672,7 +681,7 @@ class ResourcePattern:
         if kind is not None:
             kind = _normalize_kind(kind)
         object.__setattr__(self, "kind", kind)
-        object.__setattr__(self, "catalog_id", _optional_str(self.catalog_id))
+        object.__setattr__(self, "catalog_id", _optional_catalog_id(self.catalog_id))
         object.__setattr__(self, "database_name", _optional_str(self.database_name))
         object.__setattr__(self, "table_name", _optional_str(self.table_name))
         object.__setattr__(self, "location", _optional_str(self.location))

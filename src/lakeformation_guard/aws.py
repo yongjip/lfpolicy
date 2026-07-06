@@ -372,6 +372,11 @@ class AWSLakeFormationAdapter:
                 "TagKey": payload["tag_key"],
                 "TagValues": payload["tag_values"],
             }))
+        elif action == "lf_tag.delete":
+            response = self.lakeformation.delete_lf_tag(**self._with_catalog_id({
+                "catalog_id": payload.get("catalog_id"),
+                "TagKey": payload["tag_key"],
+            }))
         elif action == "lf_tag.add_values":
             response = self.lakeformation.update_lf_tag(**self._with_catalog_id({
                 "catalog_id": payload.get("catalog_id"),

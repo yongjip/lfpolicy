@@ -37,6 +37,9 @@ permission groups, safe permission templates, and IAM role bindings into the
 existing `DesiredState` model. The generated desired state still passes the same
 schema, lint, audit, plan, and apply workflow as hand-authored JSON or YAML.
 
+For requests that want to stretch `lfguard` into a broader service SDK, see
+[`library-embedding-boundary.md`](library-embedding-boundary.md).
+
 ## Data Flow
 
 Most workflows follow the same path:
@@ -137,6 +140,9 @@ generic bundles such as `reader()`, `producer()`, `steward()`,
 `data_location_access()`, and `admin()` instead of raw grants. See
 [`policy-authoring-direction.md`](policy-authoring-direction.md) for the
 direction and constraints.
+
+See [`library-embedding-boundary.md`](library-embedding-boundary.md) for what
+embedding requests are intentionally kept out of this public API.
 
 ## Extension Points
 

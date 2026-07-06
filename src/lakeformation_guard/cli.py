@@ -1029,6 +1029,7 @@ def _utc_now_iso() -> str:
 
 def _plan_options_payload(args: argparse.Namespace) -> dict:
     return {
+        "allow_lf_tag_deletes": bool(args.allow_lf_tag_deletes),
         "allow_lf_tag_value_removals": bool(args.allow_lf_tag_value_removals),
         "allow_lf_tag_expression_updates": bool(args.allow_lf_tag_expression_updates),
         "allow_lf_tag_expression_deletes": bool(args.allow_lf_tag_expression_deletes),
@@ -1253,6 +1254,7 @@ def _add_github_summary_arg(parser: argparse.ArgumentParser) -> None:
 
 
 def _add_plan_option_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--allow-lf-tag-deletes", action="store_true", help="Plan LF-Tag deletes.")
     parser.add_argument("--allow-lf-tag-value-removals", action="store_true", help="Plan LF-Tag value removals.")
     parser.add_argument("--allow-lf-tag-expression-updates", action="store_true", help="Plan LF-Tag expression updates.")
     parser.add_argument("--allow-lf-tag-expression-deletes", action="store_true", help="Plan LF-Tag expression deletes.")
@@ -1624,6 +1626,7 @@ def _aws_adapter(args: argparse.Namespace) -> AWSLakeFormationAdapter:
 
 def _plan_options(args: argparse.Namespace) -> PlanOptions:
     return PlanOptions(
+        allow_lf_tag_deletes=args.allow_lf_tag_deletes,
         allow_lf_tag_value_removals=args.allow_lf_tag_value_removals,
         allow_lf_tag_expression_updates=args.allow_lf_tag_expression_updates,
         allow_lf_tag_expression_deletes=args.allow_lf_tag_expression_deletes,
@@ -1636,7 +1639,8 @@ def _plan_options(args: argparse.Namespace) -> PlanOptions:
 
 def _has_destructive_allowance(args: argparse.Namespace) -> bool:
     return bool(
-        args.allow_lf_tag_value_removals
+        args.allow_lf_tag_deletes
+        or args.allow_lf_tag_value_removals
         or args.allow_lf_tag_expression_updates
         or args.allow_lf_tag_expression_deletes
         or args.allow_data_cells_filter_updates
@@ -2268,6 +2272,7 @@ _COMPLETION_OPTIONS = {
         "--output",
         "--output-file",
         "--github-summary",
+        "--allow-lf-tag-deletes",
         "--allow-lf-tag-value-removals",
         "--allow-lf-tag-expression-updates",
         "--allow-lf-tag-expression-deletes",
@@ -2287,6 +2292,7 @@ _COMPLETION_OPTIONS = {
         "--current-cache",
         "--refresh-current-cache",
         "--current-cache-max-age",
+        "--allow-lf-tag-deletes",
         "--allow-lf-tag-value-removals",
         "--allow-lf-tag-expression-updates",
         "--allow-lf-tag-expression-deletes",
@@ -2360,6 +2366,7 @@ _COMPLETION_OPTIONS = {
         "--output",
         "--output-file",
         "--github-summary",
+        "--allow-lf-tag-deletes",
         "--allow-lf-tag-value-removals",
         "--allow-lf-tag-expression-updates",
         "--allow-lf-tag-expression-deletes",

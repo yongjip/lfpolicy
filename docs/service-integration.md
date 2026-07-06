@@ -18,6 +18,9 @@ Do not import private `lakeformation_guard.cli` helpers or other implementation
 details from application code. Treat JSON files written by `review` and
 `explain-batch` as the integration contract.
 
+For feature-boundary decisions about direct library embedding, see
+[`library-embedding-boundary.md`](library-embedding-boundary.md).
+
 The consuming service owns runtime AWS credentials. `lfguard` does not bypass
 AWS authorization and should not be treated as the component that designs or
 enforces service IAM role separation.

@@ -4,6 +4,29 @@ from lakeformation_guard.models import DataCellsFilterDefinition, DesiredState, 
 
 
 class ModelTests(unittest.TestCase):
+    def test_catalog_id_sentinels_normalize_to_none(self):
+        resource = ResourceRef.from_dict(
+            {"kind": "table", "database": "analytics", "table": "orders", "catalog_id": " none "}
+        )
+        state = DesiredState.from_dict(
+            {
+                "lf_tags": [
+                    {"key": "domain", "catalog_id": "NULL", "values": ["sales"]},
+                ],
+                "lf_tag_expressions": [
+                    {
+                        "name": "sales_tables",
+                        "catalog_id": "null",
+                        "expression": {"domain": ["sales"]},
+                    }
+                ],
+            }
+        )
+
+        self.assertIsNone(resource.catalog_id)
+        self.assertIsNone(state.lf_tags[0].catalog_id)
+        self.assertIsNone(state.lf_tag_expressions[0].catalog_id)
+
     def test_state_from_dict_normalizes_tags_and_grants(self):
         state = DesiredState.from_dict(
             {

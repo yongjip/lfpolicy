@@ -13,6 +13,10 @@ class FakeLakeFormation:
         self.calls.append(("create_lf_tag", kwargs))
         return {"ok": True}
 
+    def delete_lf_tag(self, **kwargs):
+        self.calls.append(("delete_lf_tag", kwargs))
+        return {"ok": True}
+
     def add_lf_tags_to_resource(self, **kwargs):
         self.calls.append(("add_lf_tags_to_resource", kwargs))
         return {"ok": True}
@@ -115,6 +119,27 @@ class AwsAdapterTests(unittest.TestCase):
 
         self.assertEqual(results, [])
         self.assertEqual(client.calls, [])
+
+    def test_apply_executes_lf_tag_delete(self):
+        change_plan = Plan(
+            (
+                Change(
+                    action="lf_tag.delete",
+                    target="lf_tag:domain",
+                    reason="tag removed from desired state",
+                    payload={"tag_key": "domain"},
+                    destructive=True,
+                ),
+            )
+        )
+        client = FakeLakeFormation()
+        adapter = AWSLakeFormationAdapter(client, catalog_id="111122223333")
+
+        results = adapter.apply(change_plan, dry_run=False, allow_destructive=True)
+
+        self.assertEqual(client.calls, [("delete_lf_tag", {"CatalogId": "111122223333", "TagKey": "domain"})])
+        self.assertEqual(len(results), 1)
+        self.assertTrue(results[0].applied)
 
     def test_lf_tag_policy_resource_conversion(self):
         resource = ResourceRef.from_dict(

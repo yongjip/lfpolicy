@@ -33,6 +33,7 @@ _UNSET = object()
 _ACTION_AWS_API = {
     "lf_tag.create": "create_lf_tag",
     "lf_tag.add_values": "update_lf_tag",
+    "lf_tag.delete": "delete_lf_tag",
     "lf_tag.remove_values": "update_lf_tag",
     "lf_tag_expression.create": "create_lf_tag_expression",
     "lf_tag_expression.update": "update_lf_tag_expression",
@@ -47,6 +48,7 @@ _ACTION_AWS_API = {
 }
 
 _ACTION_REQUIRED_FLAG = {
+    "lf_tag.delete": "--allow-lf-tag-deletes",
     "lf_tag.remove_values": "--allow-lf-tag-value-removals",
     "lf_tag_expression.update": "--allow-lf-tag-expression-updates",
     "lf_tag_expression.delete": "--allow-lf-tag-expression-deletes",
@@ -61,6 +63,7 @@ _ACTION_REQUIRED_FLAG = {
 class PlanOptions:
     """Controls whether destructive drift remediation is included in a plan."""
 
+    allow_lf_tag_deletes: bool = False
     allow_lf_tag_value_removals: bool = False
     allow_lf_tag_expression_updates: bool = False
     allow_lf_tag_expression_deletes: bool = False
@@ -202,6 +205,7 @@ def plan(desired: DesiredState, current: CurrentState, options: PlanOptions = Pl
     changes.extend(_plan_data_cells_filters(desired, current, options))
     changes.extend(_plan_resource_tags(desired, current, options))
     changes.extend(_plan_grants(desired, current, options))
+    changes.extend(_plan_lf_tag_deletes(desired, current, options))
     return Plan(tuple(changes))
 
 
@@ -244,6 +248,25 @@ def _plan_lf_tags(desired: DesiredState, current: CurrentState, options: PlanOpt
                 before=_lf_tag_payload(desired_tag.key, sorted(current_values), desired_tag.catalog_id),
                 after=_lf_tag_payload(desired_tag.key, sorted(current_values - set(extra_values)), desired_tag.catalog_id),
             )
+
+
+def _plan_lf_tag_deletes(desired: DesiredState, current: CurrentState, options: PlanOptions) -> Iterable[Change]:
+    if not options.allow_lf_tag_deletes:
+        return
+    desired_tags = lf_tag_index(desired.lf_tags)
+    current_tags = lf_tag_index(current.lf_tags)
+    for key, current_tag in sorted(current_tags.items(), key=lambda item: lf_tag_sort_key(item[0])):
+        if key in desired_tags:
+            continue
+        yield Change(
+            action="lf_tag.delete",
+            target=current_tag.identity,
+            reason="LF-Tag is not present in desired state",
+            payload=_lf_tag_delete_payload(current_tag.key, current_tag.catalog_id),
+            destructive=True,
+            before=current_tag.to_dict(),
+            after=None,
+        )
 
 
 def _plan_lf_tag_expressions(desired: DesiredState, current: CurrentState, options: PlanOptions) -> Iterable[Change]:
@@ -495,6 +518,13 @@ def _lf_tag_expression_payload(expression: LFTagExpressionDefinition) -> Dict[st
 
 def _lf_tag_payload(key: str, values: Iterable[str], catalog_id: Optional[str]) -> Dict[str, Any]:
     payload: Dict[str, Any] = {"tag_key": key, "tag_values": list(values)}
+    if catalog_id:
+        payload["catalog_id"] = catalog_id
+    return payload
+
+
+def _lf_tag_delete_payload(key: str, catalog_id: Optional[str]) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {"tag_key": key}
     if catalog_id:
         payload["catalog_id"] = catalog_id
     return payload
