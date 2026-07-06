@@ -7,6 +7,9 @@ Formation.
 Use this document when evaluating feature requests from services that want to
 embed `lfguard` as a library.
 
+For the maintainer-side triage procedure, labels, decision table, and canned
+replies, see [`request-screening.md`](request-screening.md).
+
 ## Core Stance
 
 - Keep advisory evidence as the center of the product.

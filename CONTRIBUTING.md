@@ -25,31 +25,18 @@ workflow integrations, or safety-model changes.
 
 Before filing a feature request, check these boundary docs:
 
-- `docs/library-embedding-boundary.md`
-- `docs/service-integration.md`
-- `docs/architecture.md`
+- [`docs/library-embedding-boundary.md`](docs/library-embedding-boundary.md)
+- [`docs/service-integration.md`](docs/service-integration.md)
+- [`docs/architecture.md`](docs/architecture.md)
 
-Requests are a better fit for `lfguard` core when they:
-
-- improve review, lint, audit, explain, plan, or explicit apply behavior;
-- add narrow support for already modeled Lake Formation resources;
-- keep audit and plan deterministic and reviewable;
-- keep service orchestration, approval state, and request-time execution logic
-  outside `lfguard`.
-
-Requests are usually not planned when they:
-
-- turn `lfguard` into a request-time mutation SDK for one HTTP handler;
-- add automatic apply, rollback orchestration, or portal-specific execution
-  semantics;
-- broaden the AWS adapter into full browse, discovery, or control-plane service
-  abstractions;
-- require dynamic desired-state expansion from live AWS at plan time;
-- promote internal helper modules to public API only to stabilize downstream
-  imports.
+Feature requests are a good fit when they improve review, lint, audit, explain,
+plan, explicit apply, or narrow Lake Formation modeling without moving service
+or workflow ownership into `lfguard`.
 
 If a request mixes in-scope and out-of-scope behavior, split it into smaller
-issues before filing.
+issues before filing. Maintainers: triage every request with
+[`docs/request-screening.md`](docs/request-screening.md) and apply one
+`triage:*` label.
 
 ## Design Constraints
 

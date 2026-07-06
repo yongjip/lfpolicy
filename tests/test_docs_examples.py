@@ -13,7 +13,11 @@ class DocumentationExampleTests(unittest.TestCase):
         docs_paths = [
             root / "README.md",
             *sorted((root / ".github").glob("*.md")),
+            *sorted((root / ".github").glob("*.yml")),
+            *sorted((root / ".github").glob("*.yaml")),
             *sorted((root / ".github" / "ISSUE_TEMPLATE").glob("*.md")),
+            *sorted((root / ".github" / "ISSUE_TEMPLATE").glob("*.yml")),
+            *sorted((root / ".github" / "ISSUE_TEMPLATE").glob("*.yaml")),
             *sorted((root / "docs").rglob("*.md")),
             *sorted((root / "examples").glob("*.md")),
             root / "AGENTS.md",
