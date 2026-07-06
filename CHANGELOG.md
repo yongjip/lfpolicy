@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.9.1
+
 - Adds `LakePolicy` named-expression compilation for filtered permission
   groups via `as_named_expression(...)`, producing reusable
   `lf_tag_expressions` plus `ExpressionName` LF-Tag policy grants without AWS
