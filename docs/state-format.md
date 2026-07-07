@@ -111,7 +111,8 @@ Single values may be written as strings anywhere a value list is accepted.
 ## Data Cells Filter Definitions
 
 Use `data_cells_filters` to manage Lake Formation row and column filter
-definitions. The `catalog_id` field maps to AWS `TableCatalogId`.
+definitions. The `catalog_id` field maps to AWS `TableCatalogId` and is
+required for data cells filter review/request evidence.
 
 ```json
 {
@@ -284,7 +285,8 @@ columns except a denied subset:
 ### Data Cells Filter
 
 Data cells filter resources are used for grants on existing Lake Formation row
-and column filters. `catalog_id` maps to the filter's `TableCatalogId`.
+and column filters. `catalog_id` maps to the filter's `TableCatalogId` and must
+be explicit because lfguard does not infer it from runtime AWS credentials.
 
 ```json
 {

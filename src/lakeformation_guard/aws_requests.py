@@ -128,6 +128,11 @@ def _resource_tag_kwargs(payload: Mapping[str, Any]) -> Dict[str, Any]:
 
 def _grant_kwargs(payload: Mapping[str, Any]) -> Dict[str, Any]:
     resource = ResourceRef.from_dict(payload["resource"])
+    if resource.kind == "data_cells_filter":
+        _require_data_cells_filter_table_catalog_id(
+            resource.catalog_id,
+            "Data cells filter grants",
+        )
     return _with_payload_catalog_id(
         {
             "catalog_id": resource.catalog_id,
@@ -188,6 +193,7 @@ def _data_cells_filter_get_request(
     table_name: str,
     name: str,
 ) -> Dict[str, Any]:
+    _require_data_cells_filter_table_catalog_id(catalog_id, "Data cells filter requests")
     request = {
         "TableCatalogId": catalog_id,
         "DatabaseName": database_name,
@@ -198,6 +204,10 @@ def _data_cells_filter_get_request(
 
 
 def _data_cells_filter_table_data(definition: DataCellsFilterDefinition) -> Dict[str, Any]:
+    _require_data_cells_filter_table_catalog_id(
+        definition.catalog_id,
+        "Data cells filter TableData",
+    )
     table_data: Dict[str, Any] = {
         "TableCatalogId": definition.catalog_id,
         "DatabaseName": definition.database_name,
@@ -215,3 +225,12 @@ def _data_cells_filter_table_data(definition: DataCellsFilterDefinition) -> Dict
     if definition.version_id:
         table_data["VersionId"] = definition.version_id
     return {key: value for key, value in table_data.items() if value not in (None, "")}
+
+
+def _require_data_cells_filter_table_catalog_id(catalog_id: Optional[str], context: str) -> None:
+    if not catalog_id:
+        raise ValueError(
+            "{} require TableCatalogId; set catalog_id on the data_cells_filter resource or definition".format(
+                context
+            )
+        )

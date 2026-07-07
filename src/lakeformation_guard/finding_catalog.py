@@ -34,6 +34,7 @@ LINT_FINDINGS: Mapping[str, Mapping[str, Any]] = {
     "BROAD_PRINCIPAL_GRANT": _entry("BROAD_PRINCIPAL_GRANT", "Broad principal grant", "grant_governance", ACTION_APPROVAL_REQUIRED),
     "COLUMN_FILTER_MUTATING_PERMISSION_CONFLICT": _entry("COLUMN_FILTER_MUTATING_PERMISSION_CONFLICT", "Column filter mutation conflict", "grant_governance", ACTION_BLOCK),
     "DATA_CELLS_FILTER_DUPLICATE_IDENTITY": _entry("DATA_CELLS_FILTER_DUPLICATE_IDENTITY", "Duplicate data cells filter identity", "data_cells_filter", ACTION_BLOCK),
+    "DATA_CELLS_FILTER_MISSING_CATALOG_ID": _entry("DATA_CELLS_FILTER_MISSING_CATALOG_ID", "Data cells filter missing catalog ID", "data_cells_filter", ACTION_BLOCK),
     "DESIRED_STATE_EMPTY": _entry("DESIRED_STATE_EMPTY", "Desired state is empty", "desired_state", ACTION_INFORM),
     "GRANTABLE_PERMISSION_REVIEW": _entry("GRANTABLE_PERMISSION_REVIEW", "Grantable permission requires review", "grant_governance", ACTION_APPROVAL_REQUIRED),
     "LF_TAG_CASE_NORMALIZATION": _entry("LF_TAG_CASE_NORMALIZATION", "LF-Tag case normalization", "lf_tag", ACTION_REVIEW_REQUIRED),

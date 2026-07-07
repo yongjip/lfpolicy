@@ -120,6 +120,48 @@ class AwsAdapterTests(unittest.TestCase):
                 )
             )
 
+    def test_boto3_kwargs_for_rejects_data_cells_filter_changes_without_catalog_id(self):
+        for action in (
+            "data_cells_filter.create",
+            "data_cells_filter.update",
+            "data_cells_filter.delete",
+        ):
+            with self.subTest(action=action):
+                with self.assertRaisesRegex(ValueError, "TableCatalogId"):
+                    boto3_kwargs_for(
+                        Change(
+                            action=action,
+                            target="data_cells_filter:database=analytics:table=orders:name=orders_public",
+                            reason="missing filter",
+                            payload={
+                                "database": "analytics",
+                                "table": "orders",
+                                "name": "orders_public",
+                                "all_rows": True,
+                            },
+                        )
+                    )
+
+    def test_boto3_kwargs_for_rejects_data_cells_filter_grants_without_catalog_id(self):
+        with self.assertRaisesRegex(ValueError, "TableCatalogId"):
+            boto3_kwargs_for(
+                Change(
+                    action="grant.add_permissions",
+                    target="principal -> data cells filter",
+                    reason="missing permissions",
+                    payload={
+                        "principal": "arn:aws:iam::111122223333:role/FilteredReader",
+                        "resource": {
+                            "kind": "data_cells_filter",
+                            "database": "analytics",
+                            "table": "orders",
+                            "filter_name": "orders_public",
+                        },
+                        "permissions": ["SELECT"],
+                    },
+                )
+            )
+
     def test_adapter_does_not_reintroduce_apply_execution_api(self):
         self.assertFalse(hasattr(AWSLakeFormationAdapter, "apply"))
 
@@ -198,6 +240,19 @@ class AwsAdapterTests(unittest.TestCase):
 
         self.assertEqual(to_lf_resource(resource), payload)
         self.assertEqual(from_lf_resource(payload), resource)
+
+    def test_data_cells_filter_resource_conversion_rejects_missing_catalog_id(self):
+        resource = ResourceRef.from_dict(
+            {
+                "kind": "data_cells_filter",
+                "database": "analytics",
+                "table": "orders",
+                "filter_name": "orders_public",
+            }
+        )
+
+        with self.assertRaisesRegex(ValueError, "TableCatalogId"):
+            to_lf_resource(resource)
 
     def test_table_with_columns_resource_conversion_preserves_column_wildcard(self):
         resource = ResourceRef.from_dict(

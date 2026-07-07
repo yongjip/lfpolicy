@@ -3230,6 +3230,7 @@ def _sample_desired_state() -> dict:
         "data_cells_filters": [
             {
                 "name": "orders_public",
+                "catalog_id": "111122223333",
                 "database": "analytics",
                 "table": "orders",
                 "row_filter": "country = 'US'",
@@ -3266,6 +3267,7 @@ def _sample_desired_state() -> dict:
                 "principal": "arn:aws:iam::111122223333:role/FilteredAnalyst",
                 "resource": {
                     "kind": "data_cells_filter",
+                    "catalog_id": "111122223333",
                     "database": "analytics",
                     "table": "orders",
                     "filter_name": "orders_public",
@@ -3285,6 +3287,7 @@ def _sample_current_state() -> dict:
         "data_cells_filters": [
             {
                 "name": "orders_public",
+                "catalog_id": "111122223333",
                 "database": "analytics",
                 "table": "orders",
                 "row_filter": "country = 'US'",

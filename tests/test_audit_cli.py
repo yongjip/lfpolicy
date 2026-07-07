@@ -2588,6 +2588,52 @@ policy.group("dataconsumer", reader().where(domain="finance"))
 
         self.assertEqual(lint_desired(desired), ())
 
+    def test_lint_flags_data_cells_filter_definition_without_catalog_id(self):
+        desired = DesiredState.from_dict(
+            {
+                "data_cells_filters": [
+                    {
+                        "name": "orders_public",
+                        "database": "analytics",
+                        "table": "orders",
+                        "row_filter": "country = 'US'",
+                        "columns": ["order_id"],
+                    }
+                ],
+            }
+        )
+
+        findings = lint_desired(desired)
+
+        self.assertEqual([finding.code for finding in findings], ["DATA_CELLS_FILTER_MISSING_CATALOG_ID"])
+        self.assertEqual(findings[0].to_dict()["recommended_action"], "block")
+        self.assertTrue(findings[0].to_dict()["hard_block"])
+        self.assertIn("TableCatalogId", findings[0].message)
+
+    def test_lint_flags_data_cells_filter_grant_without_catalog_id(self):
+        desired = DesiredState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "arn:aws:iam::111122223333:role/FilteredReader",
+                        "resource": {
+                            "kind": "data_cells_filter",
+                            "database": "analytics",
+                            "table": "orders",
+                            "filter_name": "orders_public",
+                        },
+                        "permissions": ["SELECT"],
+                    }
+                ],
+            }
+        )
+
+        findings = lint_desired(desired)
+
+        self.assertEqual([finding.code for finding in findings], ["DATA_CELLS_FILTER_MISSING_CATALOG_ID"])
+        self.assertEqual(findings[0].details["resource"]["kind"], "data_cells_filter")
+        self.assertEqual(findings[0].to_dict()["recommended_action"], "block")
+
     def test_lint_flags_data_cells_filter_mutating_grants(self):
         desired = DesiredState.from_dict(
             {

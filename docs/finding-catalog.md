@@ -30,6 +30,7 @@ change the meaning of existing `recommended_action`, `hard_block`, `status`, or
 | <a id="broad-principal-grant"></a>`BROAD_PRINCIPAL_GRANT` | Broad principal grant | grant_governance | `approval_required` | false |
 | <a id="column-filter-mutating-permission-conflict"></a>`COLUMN_FILTER_MUTATING_PERMISSION_CONFLICT` | Column filter mutation conflict | grant_governance | `block` | true |
 | <a id="data-cells-filter-duplicate-identity"></a>`DATA_CELLS_FILTER_DUPLICATE_IDENTITY` | Duplicate data cells filter identity | data_cells_filter | `block` | true |
+| <a id="data-cells-filter-missing-catalog-id"></a>`DATA_CELLS_FILTER_MISSING_CATALOG_ID` | Data cells filter missing catalog ID | data_cells_filter | `block` | true |
 | <a id="desired-state-empty"></a>`DESIRED_STATE_EMPTY` | Desired state is empty | desired_state | `inform` | false |
 | <a id="grantable-permission-review"></a>`GRANTABLE_PERMISSION_REVIEW` | Grantable permission requires review | grant_governance | `approval_required` | false |
 | <a id="lf-tag-case-normalization"></a>`LF_TAG_CASE_NORMALIZATION` | LF-Tag case normalization | lf_tag | `review_required` | false |
@@ -61,6 +62,12 @@ change the meaning of existing `recommended_action`, `hard_block`, `status`, or
 | <a id="resource-tag-multiple-values"></a>`RESOURCE_TAG_MULTIPLE_VALUES` | Resource tag has multiple values | resource_tag | `block` | true |
 | <a id="resource-tag-scope-unsupported"></a>`RESOURCE_TAG_SCOPE_UNSUPPORTED` | Resource tag scope unsupported | resource_tag | `block` | true |
 | <a id="resource-tag-value-undefined"></a>`RESOURCE_TAG_VALUE_UNDEFINED` | Resource tag value is undefined | resource_tag | `block` | true |
+
+`DATA_CELLS_FILTER_MISSING_CATALOG_ID` means the desired state defines a data
+cells filter, or a grant on a data cells filter, without an explicit
+`catalog_id`. AWS Lake Formation requires `TableCatalogId` for data cells
+filter request shapes; lfguard does not infer it from STS or runtime
+credentials.
 
 ## Audit Findings
 

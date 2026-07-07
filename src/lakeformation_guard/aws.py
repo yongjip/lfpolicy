@@ -403,13 +403,13 @@ def to_lf_resource(resource: ResourceRef) -> Dict[str, Any]:
     if resource.kind == "data_location":
         return {"DataLocation": _catalog_scoped({"ResourceArn": resource.location}, resource)}
     if resource.kind == "data_cells_filter":
+        _require_data_cells_filter_table_catalog_id(resource.catalog_id)
         filter_resource = {
+            "TableCatalogId": resource.catalog_id,
             "DatabaseName": resource.database_name,
             "TableName": resource.table_name,
             "Name": resource.filter_name,
         }
-        if resource.catalog_id:
-            filter_resource["TableCatalogId"] = resource.catalog_id
         return {
             "DataCellsFilter": {
                 key: value
@@ -576,6 +576,7 @@ def _data_cells_filter_get_request(
     table_name: str,
     name: str,
 ) -> Dict[str, Any]:
+    _require_data_cells_filter_table_catalog_id(catalog_id)
     request = {
         "TableCatalogId": catalog_id,
         "DatabaseName": database_name,
@@ -583,6 +584,13 @@ def _data_cells_filter_get_request(
         "Name": name,
     }
     return {key: value for key, value in request.items() if value not in (None, "")}
+
+
+def _require_data_cells_filter_table_catalog_id(catalog_id: Optional[str]) -> None:
+    if not catalog_id:
+        raise ValueError(
+            "Data cells filter resources require TableCatalogId; set catalog_id on the data_cells_filter resource"
+        )
 
 
 def _data_cells_filter_definition_from_response(

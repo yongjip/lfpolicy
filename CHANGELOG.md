@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.9.2
+
+- Adds `DATA_CELLS_FILTER_MISSING_CATALOG_ID` as a hard-blocking lint finding
+  for data cells filter definitions and grants that omit `catalog_id`, because
+  AWS requires `TableCatalogId` for data cells filter request shapes.
+- Makes `boto3_kwargs_for(change)` fail fast with a clear `ValueError` instead
+  of returning invalid data cells filter request evidence without
+  `TableCatalogId`.
+
 ## 0.9.1
 
 - Adds `LakePolicy` named-expression compilation for filtered permission

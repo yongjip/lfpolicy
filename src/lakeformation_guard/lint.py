@@ -130,6 +130,7 @@ def lint_desired(desired: DesiredState) -> Tuple[LintFinding, ...]:
     findings.extend(_lint_duplicate_lf_tag_key_metadata_keys(duplicate_metadata_keys))
     findings.extend(_lint_lf_tag_definitions(tag_values))
     findings.extend(_lint_duplicate_lf_tag_expression_keys(duplicate_expression_keys))
+    findings.extend(_lint_data_cells_filter_catalog_ids(desired.data_cells_filters))
     findings.extend(_lint_duplicate_data_cells_filter_keys(duplicate_filter_keys))
     for expression in desired.lf_tag_expressions:
         findings.extend(_lint_lf_tag_expression_definition(expression, tag_values))
@@ -445,6 +446,23 @@ def _lint_duplicate_data_cells_filter_keys(
     return findings
 
 
+def _lint_data_cells_filter_catalog_ids(data_cells_filters: Iterable[Any]) -> List[LintFinding]:
+    findings: List[LintFinding] = []
+    for filter_definition in data_cells_filters:
+        if filter_definition.catalog_id:
+            continue
+        findings.append(
+            LintFinding(
+                code="DATA_CELLS_FILTER_MISSING_CATALOG_ID",
+                severity="error",
+                target=filter_definition.identity,
+                message="Data cells filters must set catalog_id because AWS requires TableCatalogId",
+                details=filter_definition.to_dict(),
+            )
+        )
+    return findings
+
+
 def _named_lf_tag_expression_defined(
     expression_index: Mapping[LFTagExpressionKey, Any],
     catalog_id: Optional[str],
@@ -461,6 +479,19 @@ def _lint_grant(
     config: GuardrailConfig,
 ) -> List[LintFinding]:
     findings = _lint_grant_governance(grant, tag_assignment_scopes, expression_index, config)
+    if grant.resource.kind == "data_cells_filter" and not grant.resource.catalog_id:
+        findings.append(
+            LintFinding(
+                code="DATA_CELLS_FILTER_MISSING_CATALOG_ID",
+                severity="error",
+                target=_grant_target(grant),
+                message="Data cells filter grants must set resource.catalog_id because AWS requires TableCatalogId",
+                details={
+                    "principal": grant.principal,
+                    "resource": grant.resource.to_dict(),
+                },
+            )
+        )
     if grant.resource.kind != "lf_tag_policy":
         return findings
     if grant.resource.expression_name:
