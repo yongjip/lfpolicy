@@ -1,6 +1,6 @@
 import unittest
 
-from lakeformation_guard.models import DataCellsFilterDefinition, DesiredState, LFTagKeyMetadata, PolicyException, ResourceRef
+from lfpolicy.models import DataCellsFilterDefinition, DesiredState, LFTagKeyMetadata, PolicyException, ResourceRef
 
 
 class ModelTests(unittest.TestCase):

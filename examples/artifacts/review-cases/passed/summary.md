@@ -1,4 +1,4 @@
-# lfguard review
+# lfpolicy review
 
 - Status: `passed`
 - Recommended action: `inform`

@@ -1,6 +1,6 @@
 # Adoption Checklist
 
-Use this checklist when introducing `lfguard` to a Lake Formation environment.
+Use this checklist when introducing `lfpolicy` to a Lake Formation environment.
 Start offline, then add CI, then decide how consuming services will use review
 evidence in their own approval and execution workflows.
 
@@ -9,14 +9,14 @@ evidence in their own approval and execution workflows.
 Install the base package and generate sample files:
 
 ```bash
-python -m pip install lfguard
-lfguard sample --output-dir lfguard-demo
-lfguard check \
-  --desired lfguard-demo/desired.json \
-  --current-snapshot lfguard-demo/current-snapshot.json
-lfguard plan \
-  --desired lfguard-demo/desired.json \
-  --current-snapshot lfguard-demo/current-snapshot.json
+python -m pip install lfpolicy
+lfpolicy sample --output-dir lfpolicy-demo
+lfpolicy check \
+  --desired lfpolicy-demo/desired.json \
+  --current-snapshot lfpolicy-demo/current-snapshot.json
+lfpolicy plan \
+  --desired lfpolicy-demo/desired.json \
+  --current-snapshot lfpolicy-demo/current-snapshot.json
 ```
 
 This proves the CLI works without AWS credentials.
@@ -25,7 +25,7 @@ When adopting an existing account, use `import` to create a reviewed starter
 file instead of treating live state as automatically owned:
 
 ```bash
-lfguard import \
+lfpolicy import \
   --catalog-id 123456789012 \
   --include lf-tags,lf-tag-expressions,resource-tags,grants \
   --output policy/imported-desired.json
@@ -47,8 +47,8 @@ For YAML policy repositories, generate a YAML demo after installing the YAML
 extra:
 
 ```bash
-python -m pip install "lfguard[yaml]"
-lfguard sample --output-dir lfguard-demo-yaml --format yaml
+python -m pip install "lfpolicy[yaml]"
+lfpolicy sample --output-dir lfpolicy-demo-yaml --format yaml
 ```
 
 ## 2. Draft Policy
@@ -57,17 +57,17 @@ Create a starter policy repository and replace the example names in `policy.py`
 with sanitized values from your environment:
 
 ```bash
-lfguard bootstrap --output-dir lfguard-policy
-cd lfguard-policy
-lfguard generate policy.py --output-file policy/desired.json --force
+lfpolicy bootstrap --output-dir lfpolicy-policy
+cd lfpolicy-policy
+lfpolicy generate policy.py --output-file policy/desired.json --force
 ```
 
 Use JSON first unless your repository already standardizes on YAML. Add the YAML
 extra when needed and generate `policy/desired.yaml` instead:
 
 ```bash
-python -m pip install "lfguard[yaml]"
-lfguard generate policy.py --output-file policy/desired.yaml --force
+python -m pip install "lfpolicy[yaml]"
+lfpolicy generate policy.py --output-file policy/desired.yaml --force
 ```
 
 ## 3. Check Policy Locally
@@ -75,7 +75,7 @@ lfguard generate policy.py --output-file policy/desired.yaml --force
 Run the offline check before connecting to AWS:
 
 ```bash
-lfguard check --desired policy/desired.json --fail-on-findings
+lfpolicy check --desired policy/desired.json --fail-on-findings
 ```
 
 Commit `policy.py` and generated desired state only after principal names,
@@ -85,7 +85,7 @@ review rules.
 Generate a compact summary for reviewers:
 
 ```bash
-lfguard summary --desired policy/desired.json --output markdown
+lfpolicy summary --desired policy/desired.json --output markdown
 ```
 
 ## 4. Capture Current State
@@ -94,8 +94,8 @@ Install the AWS extra and capture a scoped snapshot from a non-production
 environment first:
 
 ```bash
-python -m pip install "lfguard[aws]"
-lfguard snapshot \
+python -m pip install "lfpolicy[aws]"
+lfpolicy snapshot \
   --desired policy/desired.json \
   --profile sandbox \
   --region us-east-1 \
@@ -111,7 +111,7 @@ Start with the smallest workflow that gives reviewers useful signal. To generate
 a starter repository layout with an offline policy workflow, run:
 
 ```bash
-lfguard bootstrap --output-dir lfguard-policy
+lfpolicy bootstrap --output-dir lfpolicy-policy
 ```
 
 Add optional scaffolds only when they have an owner and a clear use:
@@ -123,35 +123,35 @@ Add optional scaffolds only when they have an owner and a clear use:
 - `--include-review-template --policy-owner @your-org/data-platform`:
   CODEOWNERS and a Lake Formation policy pull request checklist.
 - `--include-editor-config`: VS Code schema validation from
-  `policy/lfguard.schema.json`.
+  `policy/lfpolicy.schema.json`.
 
 Use check when a workflow should validate local state files and lint desired
 policy before enforcing drift:
 
 ```bash
-lfguard check \
+lfpolicy check \
   --desired policy/desired.json \
   --current-snapshot snapshots/sandbox-current.json \
   --fail-on-findings \
   --output markdown \
-  --output-file artifacts/lfguard-check.md
+  --output-file artifacts/lfpolicy-check.md
 ```
 
 Use audit when drift should be visible as findings:
 
 ```bash
-lfguard audit \
+lfpolicy audit \
   --desired policy/desired.json \
   --current-snapshot snapshots/sandbox-current.json \
   --fail-on-findings \
   --output markdown \
-  --output-file artifacts/lfguard-audit.md
+  --output-file artifacts/lfpolicy-audit.md
 ```
 
 Use plan when a non-empty change plan should block a merge:
 
 ```bash
-lfguard plan \
+lfpolicy plan \
   --desired policy/desired.json \
   --current-snapshot snapshots/sandbox-current.json \
   --fail-on-changes
@@ -163,7 +163,7 @@ Write a review bundle before any consuming service executes Lake Formation
 changes:
 
 ```bash
-lfguard review \
+lfpolicy review \
   --desired policy/desired.json \
   --current-snapshot snapshots/sandbox-current.json \
   --output-dir artifacts/review \
@@ -172,11 +172,11 @@ lfguard review \
 
 If a service executes grants or revokes after review, keep its AWS write
 credentials, approval checks, audit persistence, and rollback behavior outside
-the lfguard package contract. Use lfguard's read-only IAM template only for live
+the lfpolicy package contract. Use lfpolicy's read-only IAM template only for live
 inventory evidence:
 
 ```bash
-lfguard permissions --template read-only --output-file iam/lfguard-read-only.json
+lfpolicy permissions --template read-only --output-file iam/lfpolicy-read-only.json
 ```
 
 ## 7. Separate Destructive Changes
@@ -185,7 +185,7 @@ Keep revokes and removals on a separate approval path. They are omitted unless
 explicitly allowed:
 
 ```bash
-lfguard plan \
+lfpolicy plan \
   --desired policy/desired.json \
   --current-snapshot snapshots/sandbox-current.json \
   --allow-permission-revokes \
@@ -200,7 +200,7 @@ Before production use, confirm:
 - `policy.py` and generated desired state are reviewed and owned by the right
   platform or data governance team.
 - CI stores audit, plan, review, or explain reports as artifacts.
-- The AWS principal used by lfguard automation has only the needed read
+- The AWS principal used by lfpolicy automation has only the needed read
   permissions.
 - External execution uses only reviewed plan evidence and selected change IDs.
 - Destructive flags are not enabled in routine additive workflows.

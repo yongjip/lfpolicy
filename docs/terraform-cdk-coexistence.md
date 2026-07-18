@@ -1,12 +1,12 @@
 # Terraform and CDK Coexistence
 
 Use Terraform, CloudFormation, or CDK for infrastructure provisioning. Use
-`lfguard` for the Lake Formation permission layer when that layer needs review,
+`lfpolicy` for the Lake Formation permission layer when that layer needs review,
 drift checks, explanation, and advisory evidence.
 
 ## Ownership Split
 
-| Surface | Prefer IaC | Prefer lfguard |
+| Surface | Prefer IaC | Prefer lfpolicy |
 | --- | --- | --- |
 | AWS accounts, VPCs, buckets, KMS keys | Yes | No |
 | IAM roles and trust policy | Yes | No |
@@ -21,7 +21,7 @@ drift checks, explanation, and advisory evidence.
 
 The key rule is simple: do not let two tools write the same Lake Formation
 policy surface. If Terraform owns a grant, do not also put that grant in
-`lfguard` desired state. If `lfguard` owns LF-Tag assignments, keep those
+`lfpolicy` desired state. If `lfpolicy` owns LF-Tag assignments, keep those
 assignments out of Terraform.
 
 ## Common Pattern
@@ -32,7 +32,7 @@ assignments out of Terraform.
    database names, table names, and data-location ARNs.
 3. `policy.py` consumes those identifiers from checked-in constants or generated
    environment files.
-4. CI runs `lfguard check`, `audit`, `plan`, and `explain` as policy evidence.
+4. CI runs `lfpolicy check`, `audit`, `plan`, and `explain` as policy evidence.
 5. A separately owned service or operator workflow executes only approved
    changes after review.
 
@@ -48,7 +48,7 @@ RAW_LOCATION = "arn:aws:s3:::finance-lake/raw/"
 Then `policy.py` imports the constants and maps them into permission bundles:
 
 ```python
-from lakeformation_guard.policy import LakePolicy, TagAssignmentScope, data_location_access, producer, reader
+from lfpolicy.policy import LakePolicy, TagAssignmentScope, data_location_access, producer, reader
 from iac_outputs import ANALYST_ROLE, CATALOG_ID, PRODUCER_ROLE, RAW_LOCATION
 
 policy = LakePolicy()
@@ -89,10 +89,10 @@ of truth for the managed surface.
 
 - Keep Lake Formation write execution out of the same job that runs Terraform
   apply unless both plans are reviewed together.
-- Run `lfguard plan --fail-on-changes` after IaC changes that create new roles,
+- Run `lfpolicy plan --fail-on-changes` after IaC changes that create new roles,
   tables, or data locations.
 - Use read-only Lake Formation permissions for CI evidence jobs.
-- Keep consuming-service write credentials separate from lfguard read-only
+- Keep consuming-service write credentials separate from lfpolicy read-only
   evidence jobs.
 - Keep destructive planning flags in a separate review path with explicit
   approval.
@@ -100,7 +100,7 @@ of truth for the managed surface.
 ## When Terraform Should Still Own Grants
 
 Terraform or CDK can own simple static grants when the access pattern changes
-rarely and review evidence is not needed beyond IaC plan output. `lfguard` is
+rarely and review evidence is not needed beyond IaC plan output. `lfpolicy` is
 more valuable when teams need LF-Tag policy validation, access explanation,
 exception metadata, drift reports, review bundles, or planned change evidence.
 

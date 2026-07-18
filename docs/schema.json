@@ -978,6 +978,6 @@
       "type": "array"
     }
   },
-  "title": "lfguard state",
+  "title": "lfpolicy state",
   "type": "object"
 }

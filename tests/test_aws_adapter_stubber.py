@@ -1,7 +1,7 @@
 import unittest
 
-from lakeformation_guard import Change, DesiredState, boto3_kwargs_for
-from lakeformation_guard.aws import AWSLakeFormationAdapter
+from lfpolicy import Change, DesiredState, boto3_kwargs_for
+from lfpolicy.aws import AWSLakeFormationAdapter
 
 try:
     import botocore.session

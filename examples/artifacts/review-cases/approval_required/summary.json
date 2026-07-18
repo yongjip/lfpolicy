@@ -26,7 +26,7 @@
         "source": "desired_state"
       }
     },
-    "lfguard_version": "0.9.2",
+    "lfpolicy_version": "0.10.0",
     "truncation": {
       "artifacts": [],
       "truncated": false
@@ -34,7 +34,7 @@
   },
   "hard_block": false,
   "recommended_action": "approval_required",
-  "schema_version": "lfguard.review.summary.v1",
+  "schema_version": "lfpolicy.review.summary.v1",
   "status": "review_required",
   "summary": {
     "audit": {

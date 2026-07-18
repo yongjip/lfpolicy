@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/yongjip/aws-datalake-guard/docs/schemas/lfguard.review.explain.v1.schema.json",
-  "title": "lfguard review planned grant evidence v1",
+  "$id": "https://github.com/yongjip/aws-datalake-guard/docs/schemas/lfpolicy.review.explain.v1.schema.json",
+  "title": "lfpolicy review planned grant evidence v1",
   "type": "object",
   "required": ["schema_version", "description", "summary", "grant_changes"],
   "properties": {
-    "schema_version": { "const": "lfguard.review.explain.v1" },
+    "schema_version": { "const": "lfpolicy.review.explain.v1" },
     "description": { "type": "string" },
     "summary": {
       "type": "object",

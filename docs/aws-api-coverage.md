@@ -1,6 +1,6 @@
 # AWS API Coverage
 
-`lfguard` uses AWS APIs only when live inventory or import is requested.
+`lfpolicy` uses AWS APIs only when live inventory or import is requested.
 Most commands are fully offline: `sample`, `bootstrap`, `init`, `schema`,
 `doctor`, `permissions`, `completion`, `check`, `validate`, `lint`, and
 `summary` never call AWS. The `audit`, `plan`, `review`, `explain`, and
@@ -14,15 +14,15 @@ from `boto3`.
 
 These commands load live state when `--current-snapshot` is omitted:
 
-- `lfguard audit`
-- `lfguard plan`
-- `lfguard review`
-- `lfguard explain`
-- `lfguard explain-batch`
+- `lfpolicy audit`
+- `lfpolicy plan`
+- `lfpolicy review`
+- `lfpolicy explain`
+- `lfpolicy explain-batch`
 
-`lfguard snapshot` and `lfguard import` load live state.
+`lfpolicy snapshot` and `lfpolicy import` load live state.
 
-Live inventory is scoped by the desired-state file. `lfguard` asks AWS only for
+Live inventory is scoped by the desired-state file. `lfpolicy` asks AWS only for
 the LF-Tags, resources, principals, and grants referenced by the desired state.
 It does not perform full account-wide catalog discovery.
 
@@ -39,7 +39,7 @@ and falls back to manual `NextToken` paging otherwise.
 
 ## Live Import
 
-`lfguard import` performs starter desired-state scaffolding from live AWS state.
+`lfpolicy import` performs starter desired-state scaffolding from live AWS state.
 It is intentionally named import, not sync, because the generated file still
 needs human review before becoming owned desired state.
 
@@ -58,17 +58,17 @@ directly.
 
 ## Planned Change Evidence
 
-`lfguard plan` and `lfguard review` may include `aws_api` metadata for planned
+`lfpolicy plan` and `lfpolicy review` may include `aws_api` metadata for planned
 changes. That metadata is evidence for humans, services, CI, and tickets; it is
-not an instruction that lfguard will execute. AWS write execution belongs to the
+not an instruction that lfpolicy will execute. AWS write execution belongs to the
 consuming service or operator workflow.
 
 Library consumers that already own approval and AWS write execution can call
-`lakeformation_guard.aws.boto3_kwargs_for(change)` to render one planned
+`lfpolicy.aws.boto3_kwargs_for(change)` to render one planned
 `Change` into inert Lake Formation request evidence:
 
 ```python
-from lakeformation_guard.aws import boto3_kwargs_for
+from lfpolicy.aws import boto3_kwargs_for
 
 request = boto3_kwargs_for(change)
 # {"method": "...", "kwargs": {...}}
@@ -76,7 +76,7 @@ request = boto3_kwargs_for(change)
 
 The helper is stateless: it creates no boto3 client, sends no request, reads no
 credentials, and performs no retry or rollback. It is the request-shaped
-counterpart to plan evidence, not an lfguard execution path.
+counterpart to plan evidence, not an lfpolicy execution path.
 
 ## Catalog IDs
 
@@ -96,7 +96,7 @@ raised and the CLI exits with status `2`.
 ## Related Docs
 
 - [`aws-permissions.md`](aws-permissions.md): starter IAM policies for read-only
-  lfguard roles.
+  lfpolicy roles.
 - [`safety-model.md`](safety-model.md): conservative defaults and destructive
   change handling.
 - [`state-format.md`](state-format.md): resource shapes rendered into AWS Lake

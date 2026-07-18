@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/yongjip/aws-datalake-guard/docs/schemas/lfguard.plan.v1.schema.json",
-  "title": "lfguard plan report v1",
+  "$id": "https://github.com/yongjip/aws-datalake-guard/docs/schemas/lfpolicy.plan.v1.schema.json",
+  "title": "lfpolicy plan report v1",
   "type": "object",
   "required": ["schema_version", "summary", "changes"],
   "properties": {
-    "schema_version": { "const": "lfguard.plan.v1" },
+    "schema_version": { "const": "lfpolicy.plan.v1" },
     "summary": {
       "type": "object",
       "required": ["total", "safe", "destructive"],

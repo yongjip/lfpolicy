@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/yongjip/aws-datalake-guard/docs/schemas/lfguard.review.summary.v1.schema.json",
-  "title": "lfguard review summary v1",
+  "$id": "https://github.com/yongjip/aws-datalake-guard/docs/schemas/lfpolicy.review.summary.v1.schema.json",
+  "title": "lfpolicy review summary v1",
   "type": "object",
   "required": ["schema_version", "status", "recommended_action", "action_summary", "blocking_reasons", "summary"],
   "properties": {
-    "schema_version": { "const": "lfguard.review.summary.v1" },
+    "schema_version": { "const": "lfpolicy.review.summary.v1" },
     "status": { "enum": ["passed", "review_required", "blocked"] },
     "recommended_action": { "enum": ["inform", "review_required", "approval_required", "block"] },
     "hard_block": { "type": "boolean" },
@@ -46,10 +46,10 @@
     },
     "evidence": {
       "type": "object",
-      "required": ["generated_at", "lfguard_version", "inputs", "truncation"],
+      "required": ["generated_at", "lfpolicy_version", "inputs", "truncation"],
       "properties": {
         "generated_at": { "type": "string" },
-        "lfguard_version": { "type": "string" },
+        "lfpolicy_version": { "type": "string" },
         "inputs": { "type": "object" },
         "truncation": {
           "type": "object",

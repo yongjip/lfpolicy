@@ -28,7 +28,7 @@
       "source": "desired_state"
     }
   },
-  "lfguard_version": "0.9.2",
+  "lfpolicy_version": "0.10.0",
   "outputs": [
     "summary.md",
     "summary.json",
@@ -46,6 +46,6 @@
     "allow_permission_revokes": false,
     "allow_resource_tag_removals": false
   },
-  "schema_version": "lfguard.review.manifest.v1",
+  "schema_version": "lfpolicy.review.manifest.v1",
   "status": "blocked"
 }

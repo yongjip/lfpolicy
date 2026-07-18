@@ -1,7 +1,7 @@
 # Request Screening
 
 Use this document when maintainers triage feature requests. The goal is to keep
-`lfguard` aligned with its advisory review boundary and to leave a clear record
+`lfpolicy` aligned with its advisory review boundary and to leave a clear record
 when a request is accepted, narrowed, or declined.
 
 ## Required Triage Outcome
@@ -16,14 +16,14 @@ when a request is accepted, narrowed, or declined.
 | If the request mainly does this... | Label | Maintainer action |
 | --- | --- | --- |
 | Improves review, lint, audit, explain, plan evidence, or narrow Lake Formation modeling inside the existing product boundary | `triage:fits-core` | Keep the issue open, refine scope if needed, and implement or queue it normally |
-| Targets a valid `lfguard` goal, but the current shape is too broad, mixed, or not reviewable yet | `triage:needs-reframe` | Ask for a narrower follow-up or split issues before implementation |
-| Pushes `lfguard` into request-time mutation helpers, approval workflow ownership, dynamic desired-state expansion, broad discovery SDK behavior, or service-owned orchestration | `triage:out-of-scope` | Reply with the boundary rationale and close as not planned |
+| Targets a valid `lfpolicy` goal, but the current shape is too broad, mixed, or not reviewable yet | `triage:needs-reframe` | Ask for a narrower follow-up or split issues before implementation |
+| Pushes `lfpolicy` into request-time mutation helpers, approval workflow ownership, dynamic desired-state expansion, broad discovery SDK behavior, or service-owned orchestration | `triage:out-of-scope` | Reply with the boundary rationale and close as not planned |
 
 ## Boundary Questions
 
 Answer these before accepting a request:
 
-- Does this preserve `lfguard` as advisory evidence first, not a service runtime?
+- Does this preserve `lfpolicy` as advisory evidence first, not a service runtime?
 - Can desired state, lint, audit, explain, review, and plan stay deterministic
   and reviewable?
 - If live AWS behavior is involved, is this a narrow adapter addition rather
@@ -48,20 +48,20 @@ Use these docs together when triaging:
 
 ### `triage:fits-core`
 
-This request fits `lfguard` core. It stays inside the advisory review boundary,
-keeps plan and audit behavior deterministic, and does not turn `lfguard` into a
+This request fits `lfpolicy` core. It stays inside the advisory review boundary,
+keeps plan and audit behavior deterministic, and does not turn `lfpolicy` into a
 service-specific mutation runtime.
 
 ### `triage:needs-reframe`
 
-The goal may fit `lfguard`, but the current issue is too broad or mixes
+The goal may fit `lfpolicy`, but the current issue is too broad or mixes
 different kinds of behavior. Please narrow this to one reviewable change or
 split it into separate issues so we can evaluate the in-scope part cleanly.
 
 ### `triage:out-of-scope`
 
-This request is outside the `lfguard` product boundary. We are keeping
-`lfguard` focused on advisory evidence, deterministic review and planning, and
+This request is outside the `lfpolicy` product boundary. We are keeping
+`lfpolicy` focused on advisory evidence, deterministic review and planning, and
 service-owned execution boundaries. Request-time orchestration, broad service
 SDK behavior, and service-owned workflow semantics belong in the consuming
 service or a raw boto3 wrapper.

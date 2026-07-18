@@ -1,6 +1,6 @@
 # Testing
 
-`lfguard` uses layered tests because Lake Formation behavior is split between
+`lfpolicy` uses layered tests because Lake Formation behavior is split between
 pure policy logic, read-only boto3 request shapes, and real AWS service
 semantics.
 
@@ -23,7 +23,7 @@ Live tests are disabled by default. Run them only in a sandbox account:
 
 ```bash
 python -m pip install -e ".[test,aws]"
-LFGUARD_LIVE_AWS=1 \
+LFPOLICY_LIVE_AWS=1 \
 AWS_REGION=us-east-1 \
 python -m unittest tests.test_live_aws_contract
 ```
@@ -31,8 +31,8 @@ python -m unittest tests.test_live_aws_contract
 For the grant-validation test, also provide a disposable principal:
 
 ```bash
-LFGUARD_LIVE_AWS=1 \
-LFGUARD_LIVE_AWS_TEST_PRINCIPAL_ARN=arn:aws:iam::111122223333:role/LfguardContractPrincipal \
+LFPOLICY_LIVE_AWS=1 \
+LFPOLICY_LIVE_AWS_TEST_PRINCIPAL_ARN=arn:aws:iam::111122223333:role/LfpolicyContractPrincipal \
 python -m unittest tests.test_live_aws_contract
 ```
 
@@ -40,11 +40,11 @@ Optional environment variables:
 
 | Variable | Purpose |
 | --- | --- |
-| `LFGUARD_LIVE_AWS` | Must be `1` to enable live tests. |
-| `LFGUARD_LIVE_AWS_PROFILE` | boto3 profile name. |
+| `LFPOLICY_LIVE_AWS` | Must be `1` to enable live tests. |
+| `LFPOLICY_LIVE_AWS_PROFILE` | boto3 profile name. |
 | `AWS_REGION` / `AWS_DEFAULT_REGION` | AWS region for Glue and Lake Formation clients. |
-| `LFGUARD_LIVE_AWS_CATALOG_ID` | Data Catalog account ID; defaults to STS caller account. |
-| `LFGUARD_LIVE_AWS_TEST_PRINCIPAL_ARN` | Disposable role ARN used for grant validation. |
+| `LFPOLICY_LIVE_AWS_CATALOG_ID` | Data Catalog account ID; defaults to STS caller account. |
+| `LFPOLICY_LIVE_AWS_TEST_PRINCIPAL_ARN` | Disposable role ARN used for grant validation. |
 
 Live tests cover only behavior local emulators cannot faithfully prove:
 

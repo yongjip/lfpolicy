@@ -61,7 +61,7 @@
       "title": "Named resource grant requires review"
     }
   ],
-  "schema_version": "lfguard.lint.v1",
+  "schema_version": "lfpolicy.lint.v1",
   "summary": {
     "errors": 3,
     "total": 3,

@@ -1,8 +1,8 @@
 import unittest
 
-from lakeformation_guard import Change, DesiredState, boto3_kwargs_for
-from lakeformation_guard.aws import AWSLakeFormationAdapter, from_lf_resource, to_lf_resource
-from lakeformation_guard.models import ResourceRef
+from lfpolicy import Change, DesiredState, boto3_kwargs_for
+from lfpolicy.aws import AWSLakeFormationAdapter, from_lf_resource, to_lf_resource
+from lfpolicy.models import ResourceRef
 
 
 class FakeLakeFormation:

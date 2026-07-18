@@ -24,68 +24,68 @@ jobs:
           role-to-assume: arn:aws:iam::111122223333:role/LakeFormationReadOnly
           aws-region: ap-northeast-2
 
-      - name: Install lfguard
-        run: python -m pip install "lfguard[aws]"
+      - name: Install lfpolicy
+        run: python -m pip install "lfpolicy[aws]"
 
-      - name: Check lfguard install
-        run: lfguard doctor --require aws
+      - name: Check lfpolicy install
+        run: lfpolicy doctor --require aws
 
       - name: Check generated desired state
-        run: lfguard generate policy.py --output-file policy/desired.json --check
+        run: lfpolicy generate policy.py --output-file policy/desired.json --check
 
       - name: Summarize policy
         run: |
           mkdir -p artifacts snapshots
 
-          lfguard summary \
+          lfpolicy summary \
             --desired policy/desired.json \
             --output markdown \
-            --output-file artifacts/lfguard-summary.md \
+            --output-file artifacts/lfpolicy-summary.md \
             --github-summary
 
       - name: Capture current state
         run: |
-          lfguard snapshot \
+          lfpolicy snapshot \
             --desired policy/desired.json \
             --region ap-northeast-2 \
             --output-file snapshots/prod-current.json
 
       - name: Check policy files
         run: |
-          lfguard lint \
+          lfpolicy lint \
             --desired policy/desired.json \
             --output sarif \
-            --output-file artifacts/lfguard-lint.sarif
+            --output-file artifacts/lfpolicy-lint.sarif
 
-          lfguard check \
+          lfpolicy check \
             --desired policy/desired.json \
             --current-snapshot snapshots/prod-current.json \
             --output markdown \
-            --output-file artifacts/lfguard-check.md \
+            --output-file artifacts/lfpolicy-check.md \
             --fail-on-findings \
             --github-summary
 
       - name: Audit drift
         run: |
-          lfguard audit \
+          lfpolicy audit \
             --desired policy/desired.json \
             --current-snapshot snapshots/prod-current.json \
             --output sarif \
-            --output-file artifacts/lfguard-audit.sarif
+            --output-file artifacts/lfpolicy-audit.sarif
 
-          lfguard audit \
+          lfpolicy audit \
             --desired policy/desired.json \
             --current-snapshot snapshots/prod-current.json \
             --output markdown \
-            --output-file artifacts/lfguard-audit.md \
+            --output-file artifacts/lfpolicy-audit.md \
             --fail-on-findings \
             --github-summary
 
-      - name: Upload lfguard reports
+      - name: Upload lfpolicy reports
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: lfguard-reports
+          name: lfpolicy-reports
           path: artifacts/
           if-no-files-found: ignore
           retention-days: 14

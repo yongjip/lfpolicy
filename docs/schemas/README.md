@@ -27,16 +27,16 @@ Compatibility policy:
   without explicit release-note documentation;
 - schemas intentionally avoid closed enums for finding `code` and plan `action`;
 - `docs_url` is a convenience link to live documentation and may show newer
-  explanatory text than the lfguard version that generated historical evidence;
+  explanatory text than the lfpolicy version that generated historical evidence;
 - services should use [`../finding-catalog.md`](../finding-catalog.md) for
   stable finding and plan action metadata.
 
 Available schemas:
 
-- `lfguard.audit.v1.schema.json`
-- `lfguard.lint.v1.schema.json`
-- `lfguard.plan.v1.schema.json`
-- `lfguard.review.manifest.v1.schema.json`
-- `lfguard.review.summary.v1.schema.json`
-- `lfguard.review.explain.v1.schema.json`
-- `lfguard.explain_batch.v1.schema.json`
+- `lfpolicy.audit.v1.schema.json`
+- `lfpolicy.lint.v1.schema.json`
+- `lfpolicy.plan.v1.schema.json`
+- `lfpolicy.review.manifest.v1.schema.json`
+- `lfpolicy.review.summary.v1.schema.json`
+- `lfpolicy.review.explain.v1.schema.json`
+- `lfpolicy.explain_batch.v1.schema.json`

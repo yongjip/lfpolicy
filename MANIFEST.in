@@ -6,7 +6,7 @@ include llms.txt
 include pyproject.toml
 include setup.cfg
 include setup.py
-include src/lakeformation_guard/py.typed
+include src/lfpolicy/py.typed
 include CHANGELOG.md
 include CONTRIBUTING.md
 include SECURITY.md

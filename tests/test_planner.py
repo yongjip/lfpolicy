@@ -1,6 +1,6 @@
 import unittest
 
-from lakeformation_guard import CurrentState, DesiredState, Plan, PlanOptions, audit, plan
+from lfpolicy import CurrentState, DesiredState, Plan, PlanOptions, audit, plan
 
 
 class PlannerTests(unittest.TestCase):
@@ -53,7 +53,7 @@ class PlannerTests(unittest.TestCase):
         payload = plan(desired, CurrentState.empty()).to_dict()
         lf_tag_change, grant_change = payload["changes"]
 
-        self.assertEqual(payload["schema_version"], "lfguard.plan.v1")
+        self.assertEqual(payload["schema_version"], "lfpolicy.plan.v1")
         self.assertEqual(lf_tag_change["id"], "change_001")
         self.assertEqual(lf_tag_change["risk"], "safe")
         self.assertIsNone(lf_tag_change["principal"])
@@ -798,7 +798,7 @@ class PlannerTests(unittest.TestCase):
 
     def test_plan_from_dict_accepts_current_schema_and_preserves_ids(self):
         payload = {
-            "schema_version": "lfguard.plan.v1",
+            "schema_version": "lfpolicy.plan.v1",
             "summary": {"total": 1, "safe": 1, "destructive": 0},
             "changes": [
                 {
@@ -846,7 +846,7 @@ class PlannerTests(unittest.TestCase):
         )
 
         self.assertEqual(change_plan.changes[0].id, "change_001")
-        self.assertEqual(change_plan.to_dict()["schema_version"], "lfguard.plan.v1")
+        self.assertEqual(change_plan.to_dict()["schema_version"], "lfpolicy.plan.v1")
 
 
 if __name__ == "__main__":

@@ -46,7 +46,7 @@ class AWSLakeFormationAdapter:
             import boto3  # type: ignore
         except ImportError as exc:
             raise RuntimeError(
-                "boto3 is required for live AWS operations. Install lfguard[aws]."
+                "boto3 is required for live AWS operations. Install lfpolicy[aws]."
             ) from exc
         session = boto3.Session(profile_name=profile_name, region_name=region_name)
         return cls(session.client("lakeformation"), catalog_id=catalog_id)

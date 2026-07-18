@@ -1,6 +1,6 @@
 # Permission Request Bundles
 
-`lfguard` should not become an approval UI, but a policy repository can still
+`lfpolicy` should not become an approval UI, but a policy repository can still
 model repeatable permission requests as small Python data structures that
 compile to reviewed Lake Formation grants.
 
@@ -28,8 +28,8 @@ for a runnable example. It keeps approved request records in Python and binds
 roles to generic bundles:
 
 ```bash
-lfguard generate examples/permission-requests.py --output-file /tmp/lfguard-requests.json --force
-lfguard check --desired /tmp/lfguard-requests.json --fail-on-findings
+lfpolicy generate examples/permission-requests.py --output-file /tmp/lfpolicy-requests.json --force
+lfpolicy check --desired /tmp/lfpolicy-requests.json --fail-on-findings
 ```
 
 The source record intentionally keeps review metadata near the grant binding:
@@ -62,7 +62,7 @@ For a request that grants access to a sensitive table, attach:
 ```bash
 mkdir -p artifacts/requests
 
-lfguard explain \
+lfpolicy explain \
   --desired policy/desired.json \
   --current-snapshot snapshots/prod-current.json \
   --principal arn:aws:iam::111122223333:role/FinanceAnalyst \
@@ -72,7 +72,7 @@ lfguard explain \
   --output json \
   --output-file artifacts/requests/DATA-1042-explain.json
 
-lfguard plan \
+lfpolicy plan \
   --desired policy/desired.json \
   --current-snapshot snapshots/prod-current.json \
   --output json \
@@ -122,7 +122,7 @@ For a batch of approved request changes, keep the reviewed IDs explicit:
 ## Boundaries
 
 - Keep approval state in the system that owns approvals.
-- Keep `lfguard` desired state as the reviewed permission outcome.
+- Keep `lfpolicy` desired state as the reviewed permission outcome.
 - Do not add organization-specific request statuses or workflow engines to core.
 - Use examples or integration packages for Jira, Slack, or portal-specific
   request ingestion.

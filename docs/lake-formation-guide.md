@@ -1,6 +1,6 @@
 # Lake Formation Guide
 
-This is the short operating guide behind `lfguard`. It explains the Lake
+This is the short operating guide behind `lfpolicy`. It explains the Lake
 Formation model the package assumes, the practices worth automating, and the
 traps to avoid.
 
@@ -18,13 +18,13 @@ an IAM allow and still be blocked by Lake Formation. A principal can have a Lake
 Formation grant and still fail because it lacks the IAM permission for the API
 call.
 
-`lfguard` manages the reviewable Lake Formation policy layer:
+`lfpolicy` manages the reviewable Lake Formation policy layer:
 
 - LF-Tag keys and allowed values.
 - LF-Tag assignments on Data Catalog resources.
 - Lake Formation grants on named resources or LF-Tag policies.
 
-`lfguard` does not create IAM roles, Glue databases, tables, S3 buckets,
+`lfpolicy` does not create IAM roles, Glue databases, tables, S3 buckets,
 registered locations, cross-account shares, data lake administrators, or row and
 cell data filters.
 
@@ -81,7 +81,7 @@ named versus LF-TBAC grant behavior, and permission/resource combinations, see
 
 - Keep IAM administration and Lake Formation policy review separate.
 - Use read-only automation for snapshot, audit, plan, and report workflows.
-- Keep the service write role separate from lfguard's read-only review role.
+- Keep the service write role separate from lfpolicy's read-only review role.
 - Keep revokes and removals in a separate destructive maintenance workflow.
 - Prefer LF-Tag policy grants for databases and tables. Keep named grants as
   documented exceptions.
@@ -125,35 +125,35 @@ named versus LF-TBAC grant behavior, and permission/resource combinations, see
 - Putting `--allow-permission-revokes`, `--allow-resource-tag-removals`, or
   `--allow-lf-tag-deletes`, or `--allow-lf-tag-value-removals` into routine
   CI.
-- Assuming `lfguard snapshot` is full-account discovery.
-- Modeling row or cell data filters in `lfguard` before the package supports
+- Assuming `lfpolicy snapshot` is full-account discovery.
+- Modeling row or cell data filters in `lfpolicy` before the package supports
   them.
 
 ## Simple Rollout
 
-1. Run `lfguard sample --output-dir lfguard-demo` and inspect the plan output.
-2. Run `lfguard bootstrap --output-dir lfguard-policy` to create `policy.py`
+1. Run `lfpolicy sample --output-dir lfpolicy-demo` and inspect the plan output.
+2. Run `lfpolicy bootstrap --output-dir lfpolicy-policy` to create `policy.py`
    and generated `policy/desired.json`.
 3. Replace the example LF-Tag vocabulary, tag assignments, permission groups,
    and role bindings in `policy.py`.
-4. Run `lfguard generate policy.py --output-file policy/desired.json --force`.
-5. Run `lfguard check --desired policy/desired.json --fail-on-findings`.
-6. Capture a scoped non-production snapshot with `lfguard snapshot`.
-7. Run `lfguard audit` and `lfguard plan` from that snapshot in CI.
+4. Run `lfpolicy generate policy.py --output-file policy/desired.json --force`.
+5. Run `lfpolicy check --desired policy/desired.json --fail-on-findings`.
+6. Capture a scoped non-production snapshot with `lfpolicy snapshot`.
+7. Run `lfpolicy audit` and `lfpolicy plan` from that snapshot in CI.
 8. Execute additive changes through the consuming service only after reviewing
    the plan.
 9. Move revokes and tag removals to a separate approved workflow.
 
 Start with the smallest workflow that answers today's question:
 
-- Use `lfguard check` when you only need local policy validation.
-- Use `lfguard audit` when you need to know whether current state drifted.
-- Use `lfguard plan` when you need to review the exact changes before external
+- Use `lfpolicy check` when you only need local policy validation.
+- Use `lfpolicy audit` when you need to know whether current state drifted.
+- Use `lfpolicy plan` when you need to review the exact changes before external
   execution.
-- Use `lfguard bootstrap --output-dir lfguard-policy` when you want a minimal
+- Use `lfpolicy bootstrap --output-dir lfpolicy-policy` when you want a minimal
   starter repository.
 
-`lfguard check --fail-on-findings` is intentionally strict. It can block broad
+`lfpolicy check --fail-on-findings` is intentionally strict. It can block broad
 principals, `ALL`/`SUPER`, mixed-case LF-Tags, multi-value resource tags,
 LF-Tag table policies that mix `SELECT` with table mutation permissions,
 grant-option delegation, wildcard LF-Tag policies, mutating permissions, and

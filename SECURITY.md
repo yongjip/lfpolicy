@@ -1,6 +1,6 @@
 # Security Policy
 
-`lfguard` is designed to make Lake Formation changes reviewable
+`lfpolicy` is designed to make Lake Formation changes reviewable
 before they run. The default planner avoids revokes and removals unless the user
 passes an explicit allow flag.
 

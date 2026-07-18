@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest a new lfguard workflow, resource shape, output, or integration
+about: Suggest a new lfpolicy workflow, resource shape, output, or integration
 title: ""
 labels: enhancement
 assignees: ""
@@ -24,9 +24,9 @@ What Lake Formation guardrail workflow is difficult today?
 
 Describe the command, API, report shape, or documentation you expect.
 
-## Why this belongs in lfguard
+## Why this belongs in lfpolicy
 
-Explain why this should live in `lfguard` instead of the consuming service,
+Explain why this should live in `lfpolicy` instead of the consuming service,
 approval workflow, or a raw boto3 wrapper.
 
 ## Example policy or output

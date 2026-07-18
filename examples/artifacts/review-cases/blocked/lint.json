@@ -23,7 +23,7 @@
       "title": "Policy exception expired"
     }
   ],
-  "schema_version": "lfguard.lint.v1",
+  "schema_version": "lfpolicy.lint.v1",
   "summary": {
     "errors": 1,
     "total": 1,

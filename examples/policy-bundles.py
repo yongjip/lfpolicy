@@ -1,6 +1,6 @@
-"""Generic permission bundle example for lfguard."""
+"""Generic permission bundle example for lfpolicy."""
 
-from lakeformation_guard.policy import (
+from lfpolicy.policy import (
     LakePolicy,
     TagAssignmentScope,
     admin,

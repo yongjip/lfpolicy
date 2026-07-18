@@ -1,9 +1,9 @@
 """Compatibility entry point for local CLI execution.
 
-The primary installed command is ``lfguard``.
+The primary installed command is ``lfpolicy``.
 """
 
-from lakeformation_guard.cli import main
+from lfpolicy.cli import main
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Version tag to publish, for example v0.9.1"
+        description: "Version tag to publish, for example v0.10.0"
         required: true
         type: string
   release:
@@ -61,7 +61,7 @@ jobs:
           import urllib.request
 
           version = os.environ["RELEASE_TAG"].removeprefix("v")
-          url = "https://pypi.org/pypi/lfguard/{}/json".format(version)
+          url = "https://pypi.org/pypi/lfpolicy/{}/json".format(version)
           try:
               with urllib.request.urlopen(url, timeout=10) as response:
                   exists = response.status == 200
@@ -79,8 +79,8 @@ jobs:
       - name: Verify distribution versions
         run: |
           version="${RELEASE_TAG#v}"
-          test -f "dist/lfguard-${version}.tar.gz"
-          test -f "dist/lfguard-${version}-py3-none-any.whl"
+          test -f "dist/lfpolicy-${version}.tar.gz"
+          test -f "dist/lfpolicy-${version}-py3-none-any.whl"
           python - <<'PY'
           import email.parser
           import os
@@ -88,67 +88,67 @@ jobs:
           import zipfile
 
           version = os.environ["RELEASE_TAG"].removeprefix("v")
-          wheel_path = "dist/lfguard-{}-py3-none-any.whl".format(version)
-          sdist_path = "dist/lfguard-{}.tar.gz".format(version)
+          wheel_path = "dist/lfpolicy-{}-py3-none-any.whl".format(version)
+          sdist_path = "dist/lfpolicy-{}.tar.gz".format(version)
 
           with zipfile.ZipFile(wheel_path) as wheel:
               metadata = email.parser.Parser().parsestr(
-                  wheel.read("lfguard-{}.dist-info/METADATA".format(version)).decode()
+                  wheel.read("lfpolicy-{}.dist-info/METADATA".format(version)).decode()
               )
-          if metadata["Name"] != "lfguard" or metadata["Version"] != version:
+          if metadata["Name"] != "lfpolicy" or metadata["Version"] != version:
               raise SystemExit("Wheel metadata does not match release version")
 
           with tarfile.open(sdist_path) as sdist:
-              pkg_info = sdist.extractfile("lfguard-{}/PKG-INFO".format(version))
+              pkg_info = sdist.extractfile("lfpolicy-{}/PKG-INFO".format(version))
               if pkg_info is None:
                   raise SystemExit("sdist PKG-INFO is missing")
               metadata = email.parser.Parser().parsestr(pkg_info.read().decode())
-          if metadata["Name"] != "lfguard" or metadata["Version"] != version:
+          if metadata["Name"] != "lfpolicy" or metadata["Version"] != version:
               raise SystemExit("sdist metadata does not match release version")
           PY
       - name: Check distributions
         run: python -m twine check dist/*
       - name: Smoke test built wheel
         run: |
-          python -m venv /tmp/lfguard-wheel-smoke
-          /tmp/lfguard-wheel-smoke/bin/python -m pip install --no-index --find-links dist lfguard
-          /tmp/lfguard-wheel-smoke/bin/lfguard --version
-          /tmp/lfguard-wheel-smoke/bin/lfguard generate examples/policy.py --output-file /tmp/lfguard-policy.json --force
-          /tmp/lfguard-wheel-smoke/bin/lfguard generate examples/policy.py --output-file /tmp/lfguard-policy.json --check
-          /tmp/lfguard-wheel-smoke/bin/lfguard check --desired /tmp/lfguard-policy.json --fail-on-findings
-          /tmp/lfguard-wheel-smoke/bin/lfguard bootstrap --output-dir /tmp/lfguard-policy-bootstrap
-          /tmp/lfguard-wheel-smoke/bin/lfguard generate /tmp/lfguard-policy-bootstrap/policy.py --output-file /tmp/lfguard-policy-bootstrap/policy/desired.json --check
-          /tmp/lfguard-wheel-smoke/bin/lfguard sample --output-dir /tmp/lfguard-demo
-          /tmp/lfguard-wheel-smoke/bin/lfguard check \
-            --desired /tmp/lfguard-demo/desired.json \
-            --current-snapshot /tmp/lfguard-demo/current-snapshot.json \
+          python -m venv /tmp/lfpolicy-wheel-smoke
+          /tmp/lfpolicy-wheel-smoke/bin/python -m pip install --no-index --find-links dist lfpolicy
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy --version
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy generate examples/policy.py --output-file /tmp/lfpolicy-policy.json --force
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy generate examples/policy.py --output-file /tmp/lfpolicy-policy.json --check
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy check --desired /tmp/lfpolicy-policy.json --fail-on-findings
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy bootstrap --output-dir /tmp/lfpolicy-policy-bootstrap
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy generate /tmp/lfpolicy-policy-bootstrap/policy.py --output-file /tmp/lfpolicy-policy-bootstrap/policy/desired.json --check
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy sample --output-dir /tmp/lfpolicy-demo
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy check \
+            --desired /tmp/lfpolicy-demo/desired.json \
+            --current-snapshot /tmp/lfpolicy-demo/current-snapshot.json \
             --output markdown \
-            --output-file /tmp/lfguard-check.md
-          /tmp/lfguard-wheel-smoke/bin/lfguard lint --desired /tmp/lfguard-demo/desired.json
-          /tmp/lfguard-wheel-smoke/bin/lfguard lint --desired /tmp/lfguard-demo/desired.json --output sarif --output-file /tmp/lfguard-lint.sarif
-          /tmp/lfguard-wheel-smoke/bin/lfguard summary --desired /tmp/lfguard-demo/desired.json --current-snapshot /tmp/lfguard-demo/current-snapshot.json --output markdown
-          /tmp/lfguard-wheel-smoke/bin/lfguard review \
-            --desired /tmp/lfguard-demo/desired.json \
-            --current-snapshot /tmp/lfguard-demo/current-snapshot.json \
-            --output-dir /tmp/lfguard-review-smoke \
+            --output-file /tmp/lfpolicy-check.md
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy lint --desired /tmp/lfpolicy-demo/desired.json
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy lint --desired /tmp/lfpolicy-demo/desired.json --output sarif --output-file /tmp/lfpolicy-lint.sarif
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy summary --desired /tmp/lfpolicy-demo/desired.json --current-snapshot /tmp/lfpolicy-demo/current-snapshot.json --output markdown
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy review \
+            --desired /tmp/lfpolicy-demo/desired.json \
+            --current-snapshot /tmp/lfpolicy-demo/current-snapshot.json \
+            --output-dir /tmp/lfpolicy-review-smoke \
             --force
-          /tmp/lfguard-wheel-smoke/bin/lfguard explain \
-            --desired /tmp/lfguard-demo/desired.json \
-            --current-snapshot /tmp/lfguard-demo/current-snapshot.json \
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy explain \
+            --desired /tmp/lfpolicy-demo/desired.json \
+            --current-snapshot /tmp/lfpolicy-demo/current-snapshot.json \
             --principal arn:aws:iam::111122223333:role/DataConsumer \
             --database sales_curated \
             --table customers \
             --permissions SELECT \
             --output json
-          /tmp/lfguard-wheel-smoke/bin/lfguard explain-batch \
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy explain-batch \
             --requests examples/access-requests.json \
             --current-snapshot examples/access-current-snapshot.json \
             --output json \
-            --output-file /tmp/lfguard-explain-batch.json
-          /tmp/lfguard-wheel-smoke/bin/lfguard plan \
-            --desired /tmp/lfguard-demo/desired.json \
-            --current-snapshot /tmp/lfguard-demo/current-snapshot.json
-          /tmp/lfguard-wheel-smoke/bin/python -c "from lakeformation_guard import CurrentStateProvider, DesiredState, CurrentState, LakePolicy, audit, explain, plan, table_creator; print(DesiredState.__name__, CurrentState.__name__, LakePolicy.__name__, CurrentStateProvider, callable(audit), callable(explain), callable(plan), callable(table_creator))"
+            --output-file /tmp/lfpolicy-explain-batch.json
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy plan \
+            --desired /tmp/lfpolicy-demo/desired.json \
+            --current-snapshot /tmp/lfpolicy-demo/current-snapshot.json
+          /tmp/lfpolicy-wheel-smoke/bin/python -c "from lfpolicy import CurrentStateProvider, DesiredState, CurrentState, LakePolicy, audit, explain, plan, table_creator; print(DesiredState.__name__, CurrentState.__name__, LakePolicy.__name__, CurrentStateProvider, callable(audit), callable(explain), callable(plan), callable(table_creator))"
       - uses: actions/upload-artifact@v6
         with:
           name: distributions
@@ -187,7 +187,7 @@ jobs:
           version="${RELEASE_TAG#v}"
           python -m pip install --upgrade pip
           for attempt in 1 2 3 4 5 6 7 8; do
-            if python -m pip install --no-cache-dir "lfguard==${version}"; then
+            if python -m pip install --no-cache-dir "lfpolicy==${version}"; then
               exit 0
             fi
             if [ "$attempt" -eq 8 ]; then
@@ -198,33 +198,33 @@ jobs:
       - name: Smoke test published package
         run: |
           version="${RELEASE_TAG#v}"
-          lfguard --version
-          test "$(lfguard --version)" = "lfguard ${version}"
-          lfguard bootstrap --output-dir /tmp/lfguard-pypi-policy
-          lfguard generate /tmp/lfguard-pypi-policy/policy.py --output-file /tmp/lfguard-pypi-policy/policy/desired.json --check
-          lfguard check --desired /tmp/lfguard-pypi-policy/policy/desired.json --fail-on-findings
-          lfguard sample --output-dir /tmp/lfguard-pypi-demo
-          lfguard check \
-            --desired /tmp/lfguard-pypi-demo/desired.json \
-            --current-snapshot /tmp/lfguard-pypi-demo/current-snapshot.json \
+          lfpolicy --version
+          test "$(lfpolicy --version)" = "lfpolicy ${version}"
+          lfpolicy bootstrap --output-dir /tmp/lfpolicy-pypi-policy
+          lfpolicy generate /tmp/lfpolicy-pypi-policy/policy.py --output-file /tmp/lfpolicy-pypi-policy/policy/desired.json --check
+          lfpolicy check --desired /tmp/lfpolicy-pypi-policy/policy/desired.json --fail-on-findings
+          lfpolicy sample --output-dir /tmp/lfpolicy-pypi-demo
+          lfpolicy check \
+            --desired /tmp/lfpolicy-pypi-demo/desired.json \
+            --current-snapshot /tmp/lfpolicy-pypi-demo/current-snapshot.json \
             --fail-on-findings
-          lfguard review \
-            --desired /tmp/lfguard-pypi-demo/desired.json \
-            --current-snapshot /tmp/lfguard-pypi-demo/current-snapshot.json \
-            --output-dir /tmp/lfguard-pypi-review \
+          lfpolicy review \
+            --desired /tmp/lfpolicy-pypi-demo/desired.json \
+            --current-snapshot /tmp/lfpolicy-pypi-demo/current-snapshot.json \
+            --output-dir /tmp/lfpolicy-pypi-review \
             --force
-          lfguard explain \
-            --desired /tmp/lfguard-pypi-demo/desired.json \
-            --current-snapshot /tmp/lfguard-pypi-demo/current-snapshot.json \
+          lfpolicy explain \
+            --desired /tmp/lfpolicy-pypi-demo/desired.json \
+            --current-snapshot /tmp/lfpolicy-pypi-demo/current-snapshot.json \
             --principal arn:aws:iam::111122223333:role/DataConsumer \
             --database sales_curated \
             --table customers \
             --permissions SELECT \
             --output json
-          python -c 'import json, pathlib; pathlib.Path("/tmp/lfguard-pypi-requests.json").write_text(json.dumps({"requests": [{"id": "pypi-smoke", "principal": "arn:aws:iam::111122223333:role/DataConsumer", "database": "sales_curated", "table": "customers", "permissions": ["SELECT"]}]}), encoding="utf-8")'
-          lfguard explain-batch \
-            --requests /tmp/lfguard-pypi-requests.json \
-            --current-snapshot /tmp/lfguard-pypi-demo/current-snapshot.json \
+          python -c 'import json, pathlib; pathlib.Path("/tmp/lfpolicy-pypi-requests.json").write_text(json.dumps({"requests": [{"id": "pypi-smoke", "principal": "arn:aws:iam::111122223333:role/DataConsumer", "database": "sales_curated", "table": "customers", "permissions": ["SELECT"]}]}), encoding="utf-8")'
+          lfpolicy explain-batch \
+            --requests /tmp/lfpolicy-pypi-requests.json \
+            --current-snapshot /tmp/lfpolicy-pypi-demo/current-snapshot.json \
             --output json \
-            --output-file /tmp/lfguard-pypi-explain-batch.json
-          python -c "from lakeformation_guard import CurrentStateProvider, DesiredState, LakePolicy, explain, plan, table_creator; print(DesiredState.__name__, LakePolicy.__name__, CurrentStateProvider, callable(explain), callable(plan), callable(table_creator))"
+            --output-file /tmp/lfpolicy-pypi-explain-batch.json
+          python -c "from lfpolicy import CurrentStateProvider, DesiredState, LakePolicy, explain, plan, table_creator; print(DesiredState.__name__, LakePolicy.__name__, CurrentStateProvider, callable(explain), callable(plan), callable(table_creator))"

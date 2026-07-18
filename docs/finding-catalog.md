@@ -1,7 +1,7 @@
 # Finding Catalog
 
 This catalog documents stable public finding codes and plan actions emitted by
-`lfguard` reports. Services, CI jobs, ticket workflows, and LLM agents should
+`lfpolicy` reports. Services, CI jobs, ticket workflows, and LLM agents should
 map workflow behavior from `recommended_action`, `hard_block`, review `status`,
 and explain-batch `decision`, not from `severity` alone.
 
@@ -13,7 +13,7 @@ JSON reports include `docs_anchor` and `docs_url` for catalog-backed findings
 and plan changes. Use `code`, `action`, and `docs_anchor` as stable keys for
 stored audit evidence and service UI mappings. `docs_url` points to live
 documentation on the repository `main` branch and may show newer explanatory
-text than the lfguard version that generated historical evidence.
+text than the lfpolicy version that generated historical evidence.
 
 ## Compatibility
 
@@ -66,7 +66,7 @@ change the meaning of existing `recommended_action`, `hard_block`, `status`, or
 `DATA_CELLS_FILTER_MISSING_CATALOG_ID` means the desired state defines a data
 cells filter, or a grant on a data cells filter, without an explicit
 `catalog_id`. AWS Lake Formation requires `TableCatalogId` for data cells
-filter request shapes; lfguard does not infer it from STS or runtime
+filter request shapes; lfpolicy does not infer it from STS or runtime
 credentials.
 
 ## Audit Findings

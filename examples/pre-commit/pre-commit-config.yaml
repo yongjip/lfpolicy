@@ -1,9 +1,9 @@
 repos:
   - repo: local
     hooks:
-      - id: lfguard-generate-check
-        name: lfguard generate and check desired policy
-        entry: bash -c 'lfguard generate policy.py --output-file policy/desired.json --force && lfguard check --desired policy/desired.json --fail-on-findings'
+      - id: lfpolicy-generate-check
+        name: lfpolicy generate and check desired policy
+        entry: bash -c 'lfpolicy generate policy.py --output-file policy/desired.json --force && lfpolicy check --desired policy/desired.json --fail-on-findings'
         language: system
         pass_filenames: false
         files: ^(policy\.py|policy/desired\.(json|ya?ml))$

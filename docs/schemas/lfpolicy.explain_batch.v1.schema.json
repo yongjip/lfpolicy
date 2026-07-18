@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/yongjip/aws-datalake-guard/docs/schemas/lfguard.explain_batch.v1.schema.json",
-  "title": "lfguard explain-batch report v1",
+  "$id": "https://github.com/yongjip/aws-datalake-guard/docs/schemas/lfpolicy.explain_batch.v1.schema.json",
+  "title": "lfpolicy explain-batch report v1",
   "type": "object",
   "required": ["schema_version", "summary", "results"],
   "properties": {
-    "schema_version": { "const": "lfguard.explain_batch.v1" },
+    "schema_version": { "const": "lfpolicy.explain_batch.v1" },
     "summary": {
       "type": "object",
       "required": ["total", "allowed", "denied"],
@@ -72,7 +72,7 @@
             "type": "object",
             "required": ["schema_version", "summary", "findings", "notes"],
             "properties": {
-              "schema_version": { "const": "lfguard.explain.v1" },
+              "schema_version": { "const": "lfpolicy.explain.v1" },
               "summary": { "type": "object" },
               "findings": { "type": "array" },
               "notes": { "type": "array" }

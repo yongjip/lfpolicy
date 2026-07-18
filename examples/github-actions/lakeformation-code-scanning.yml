@@ -25,66 +25,66 @@ jobs:
           role-to-assume: arn:aws:iam::111122223333:role/LakeFormationReadOnly
           aws-region: ap-northeast-2
 
-      - name: Install lfguard
-        run: python -m pip install "lfguard[aws]"
+      - name: Install lfpolicy
+        run: python -m pip install "lfpolicy[aws]"
 
-      - name: Check lfguard install
-        run: lfguard doctor --require aws
+      - name: Check lfpolicy install
+        run: lfpolicy doctor --require aws
 
-      - name: Generate lfguard SARIF reports
+      - name: Generate lfpolicy SARIF reports
         run: |
           mkdir -p artifacts snapshots
 
-          lfguard generate policy.py --output-file policy/desired.json --check
+          lfpolicy generate policy.py --output-file policy/desired.json --check
 
-          lfguard validate --desired policy/desired.json
+          lfpolicy validate --desired policy/desired.json
 
-          lfguard lint \
+          lfpolicy lint \
             --desired policy/desired.json \
             --output sarif \
-            --output-file artifacts/lfguard-lint.sarif
+            --output-file artifacts/lfpolicy-lint.sarif
 
-          lfguard snapshot \
+          lfpolicy snapshot \
             --desired policy/desired.json \
             --region ap-northeast-2 \
             --output-file snapshots/prod-current.json
 
-          lfguard audit \
+          lfpolicy audit \
             --desired policy/desired.json \
             --current-snapshot snapshots/prod-current.json \
             --output sarif \
-            --output-file artifacts/lfguard-audit.sarif
+            --output-file artifacts/lfpolicy-audit.sarif
 
-      - name: Upload lfguard lint SARIF
+      - name: Upload lfpolicy lint SARIF
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: artifacts/lfguard-lint.sarif
-          category: lfguard-lint
+          sarif_file: artifacts/lfpolicy-lint.sarif
+          category: lfpolicy-lint
 
-      - name: Upload lfguard audit SARIF
+      - name: Upload lfpolicy audit SARIF
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: artifacts/lfguard-audit.sarif
-          category: lfguard-audit
+          sarif_file: artifacts/lfpolicy-audit.sarif
+          category: lfpolicy-audit
 
-      - name: Enforce lfguard gates
+      - name: Enforce lfpolicy gates
         run: |
           set +e
 
-          lfguard check \
+          lfpolicy check \
             --desired policy/desired.json \
             --current-snapshot snapshots/prod-current.json \
             --output markdown \
-            --output-file artifacts/lfguard-check.md \
+            --output-file artifacts/lfpolicy-check.md \
             --fail-on-findings \
             --github-summary
           check_status=$?
 
-          lfguard audit \
+          lfpolicy audit \
             --desired policy/desired.json \
             --current-snapshot snapshots/prod-current.json \
             --output markdown \
-            --output-file artifacts/lfguard-audit.md \
+            --output-file artifacts/lfpolicy-audit.md \
             --fail-on-findings \
             --github-summary
           audit_status=$?

@@ -1,8 +1,8 @@
 # FAQ
 
-## What problem does lfguard solve?
+## What problem does lfpolicy solve?
 
-`lfguard` gives platform and data governance teams a reviewable way to manage
+`lfpolicy` gives platform and data governance teams a reviewable way to manage
 Lake Formation LF-Tag policy as code. It compares desired LF-Tags, resource tag
 assignments, and grants against current state, then reports drift or produces a
 conservative change plan.
@@ -15,7 +15,7 @@ console changes or bespoke boto3 scripts.
 
 The audit, check, validate, lint, plan, sample, bootstrap, schema, permissions,
 completion, review, explain, explain-batch, snapshot, import, and doctor
-commands do not mutate AWS state. `lfguard` has no apply command in 0.9.0 and
+commands do not mutate AWS state. `lfpolicy` has no apply command in 0.9.0 and
 later.
 
 By default, plans are additive only. Permission revokes, resource tag removals,
@@ -27,28 +27,28 @@ can use a separate review path.
 No. Install the base package and run:
 
 ```bash
-lfguard sample --output-dir lfguard-demo
-lfguard plan \
-  --desired lfguard-demo/desired.json \
-  --current-snapshot lfguard-demo/current-snapshot.json
+lfpolicy sample --output-dir lfpolicy-demo
+lfpolicy plan \
+  --desired lfpolicy-demo/desired.json \
+  --current-snapshot lfpolicy-demo/current-snapshot.json
 ```
 
 Live AWS inventory workflows require the optional AWS extra:
 
 ```bash
-python -m pip install "lfguard[aws]"
+python -m pip install "lfpolicy[aws]"
 ```
 
 ## Does it replace IAM or Lake Formation administration?
 
-No. `lfguard` does not bypass AWS authorization, create IAM principals, register
+No. `lfpolicy` does not bypass AWS authorization, create IAM principals, register
 data lake locations, or configure cross-account sharing. It works inside the
 permissions granted to the caller and focuses on LF-Tags, tag assignments, and
 Lake Formation permissions.
 
 ## Does it manage every Lake Formation feature?
 
-No. `lfguard` focuses on a deliberately small guardrail surface:
+No. `lfpolicy` focuses on a deliberately small guardrail surface:
 
 - LF-Tag definitions and allowed values.
 - LF-Tag assignments on catalog resources.
@@ -60,12 +60,12 @@ for live inventory and import.
 
 ## How should teams adopt it?
 
-Start offline with `lfguard sample`. For a real policy repository, define
+Start offline with `lfpolicy sample`. For a real policy repository, define
 permission groups and tag assignments in `policy.py`, generate desired state
-with `lfguard generate`, then add a CI job that runs
-`lfguard check --fail-on-findings`, `lfguard audit`, or
-`lfguard plan --fail-on-changes` against a current-state snapshot.
+with `lfpolicy generate`, then add a CI job that runs
+`lfpolicy check --fail-on-findings`, `lfpolicy audit`, or
+`lfpolicy plan --fail-on-changes` against a current-state snapshot.
 
-Use `lfguard review` and `plan` as advisory evidence. If a consuming service
+Use `lfpolicy review` and `plan` as advisory evidence. If a consuming service
 executes grants or revokes, it owns approval checks, AWS write credentials, and
 audit persistence.

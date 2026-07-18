@@ -1,9 +1,9 @@
 # Service Integration
 
-Use `lfguard` as an advisory evidence layer for Lake Formation permission
+Use `lfpolicy` as an advisory evidence layer for Lake Formation permission
 review and access diagnosis. Services should keep ownership of approval,
 customer-facing language, audit storage, and actual grant or revoke execution.
-`lfguard` does not decide the service's IAM role layout, approval identity
+`lfpolicy` does not decide the service's IAM role layout, approval identity
 model, or runtime credential separation.
 
 ## Contract Boundary
@@ -11,17 +11,17 @@ model, or runtime credential separation.
 Call the public CLI module from the service runtime:
 
 ```python
-[sys.executable, "-m", "lakeformation_guard", "..."]
+[sys.executable, "-m", "lfpolicy", "..."]
 ```
 
-Do not import private `lakeformation_guard.cli` helpers or other implementation
+Do not import private `lfpolicy.cli` helpers or other implementation
 details from application code. Treat JSON files written by `review` and
 `explain-batch` as the integration contract.
 
 For feature-boundary decisions about direct library embedding, see
 [`library-embedding-boundary.md`](library-embedding-boundary.md).
 
-The consuming service owns runtime AWS credentials. `lfguard` does not bypass
+The consuming service owns runtime AWS credentials. `lfpolicy` does not bypass
 AWS authorization and should not be treated as the component that designs or
 enforces service IAM role separation.
 
@@ -39,9 +39,9 @@ Run subprocesses with:
 Use `review` before granting or changing permissions:
 
 ```bash
-python -m lakeformation_guard review \
+python -m lfpolicy review \
   --desired desired.json \
-  --current-cache /tmp/lfguard-current-cache.json \
+  --current-cache /tmp/lfpolicy-current-cache.json \
   --output-dir review/ \
   --force
 ```
@@ -60,7 +60,7 @@ expressed by `recommended_action` and `hard_block`.
 
 Use `code`, `action`, and `docs_anchor` for stable service mappings and stored
 audit evidence. `docs_url` is a convenience link to live documentation and may
-show newer explanatory text than the lfguard version that generated an older
+show newer explanatory text than the lfpolicy version that generated an older
 report.
 
 Suggested service labels:
@@ -81,7 +81,7 @@ cannot currently access a resource.
 Use `explain-batch` for operational access questions:
 
 ```bash
-python -m lakeformation_guard explain-batch \
+python -m lfpolicy explain-batch \
   --requests access-requests.json \
   --current-snapshot current.json \
   --output json
@@ -100,10 +100,10 @@ provider context are acceptable for the workflow.
 
 ## Apply Boundary
 
-`lfguard` has no apply command in 0.9.0 and later. Do not build service
-approval flows around private lfguard Python internals or assumed write
+`lfpolicy` has no apply command in 0.9.0 and later. Do not build service
+approval flows around private lfpolicy Python internals or assumed write
 execution helpers. If a service grants or revokes permissions after reviewing
-lfguard evidence, keep that execution path separate from the lfguard advisory
+lfpolicy evidence, keep that execution path separate from the lfpolicy advisory
 wrapper and make the service own AWS write IAM roles, approval identity checks,
 audit persistence, and rollback behavior.
 
@@ -113,7 +113,7 @@ The repository includes service-facing contract fixtures:
 
 - `examples/artifacts/review-bundle/summary.json`
 - `examples/artifacts/review-bundle/explain.json`
-- `examples/artifacts/lfguard-explain-batch.json`
+- `examples/artifacts/lfpolicy-explain-batch.json`
 - `examples/artifacts/review-cases/`
 - `examples/artifacts/explain-batch-cases/`
 

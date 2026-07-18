@@ -54,7 +54,7 @@ def _load_yaml(text: str, path: Path) -> Any:
         import yaml  # type: ignore
     except ImportError as exc:
         raise StateFormatError(
-            "{} is YAML, but PyYAML is not installed. Install lfguard[yaml].".format(path)
+            "{} is YAML, but PyYAML is not installed. Install lfpolicy[yaml].".format(path)
         ) from exc
     return yaml.safe_load(text)
 

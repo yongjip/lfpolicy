@@ -170,7 +170,7 @@
       "title": "Grant permissions"
     }
   ],
-  "schema_version": "lfguard.plan.v1",
+  "schema_version": "lfpolicy.plan.v1",
   "summary": {
     "destructive": 0,
     "safe": 3,

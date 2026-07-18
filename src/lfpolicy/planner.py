@@ -27,7 +27,7 @@ from .state_index import (
 )
 
 
-PLAN_SCHEMA_VERSION = "lfguard.plan.v1"
+PLAN_SCHEMA_VERSION = "lfpolicy.plan.v1"
 _UNSET = object()
 
 _ACTION_AWS_API = {

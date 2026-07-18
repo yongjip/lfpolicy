@@ -9,9 +9,9 @@ from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-from lakeformation_guard import CurrentState, DesiredState, __version__, audit, lint_desired
-from lakeformation_guard.aws_permissions import IAMActionCheck, IAMPermissionCheckReport
-from lakeformation_guard.cli import build_parser, main
+from lfpolicy import CurrentState, DesiredState, __version__, audit, lint_desired
+from lfpolicy.aws_permissions import IAMActionCheck, IAMPermissionCheckReport
+from lfpolicy.cli import build_parser, main
 
 
 def _sha256(path):
@@ -132,7 +132,7 @@ class AuditCliTests(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             self.assertEqual(exit_code, 0)
             self.assertEqual(payload["summary"], {"total": 2, "safe": 2, "destructive": 0})
-            self.assertEqual(payload["schema_version"], "lfguard.plan.v1")
+            self.assertEqual(payload["schema_version"], "lfpolicy.plan.v1")
             self.assertEqual(
                 [change["action"] for change in payload["changes"]],
                 ["lf_tag.create", "grant.add_permissions"],
@@ -186,7 +186,7 @@ class AuditCliTests(unittest.TestCase):
                 )
 
             self.assertEqual(exit_code, 0)
-            self.assertIn("Wrote lfguard review bundle", stdout.getvalue())
+            self.assertIn("Wrote lfpolicy review bundle", stdout.getvalue())
             self.assertEqual(
                 sorted(path.name for path in review_dir.iterdir()),
                 [
@@ -204,23 +204,23 @@ class AuditCliTests(unittest.TestCase):
             lint_payload = json.loads((review_dir / "lint.json").read_text(encoding="utf-8"))
             explain_payload = json.loads((review_dir / "explain.json").read_text(encoding="utf-8"))
 
-            self.assertEqual(manifest["schema_version"], "lfguard.review.manifest.v1")
+            self.assertEqual(manifest["schema_version"], "lfpolicy.review.manifest.v1")
             self.assertEqual(manifest["inputs"]["desired"]["sha256"], _sha256(desired_path))
             self.assertEqual(manifest["inputs"]["current"]["source"], "current_snapshot")
             self.assertEqual(manifest["inputs"]["current"]["sha256"], _sha256(current_path))
-            self.assertEqual(summary["schema_version"], "lfguard.review.summary.v1")
+            self.assertEqual(summary["schema_version"], "lfpolicy.review.summary.v1")
             self.assertEqual(summary["status"], "review_required")
             self.assertEqual(summary["recommended_action"], "review_required")
             self.assertEqual(summary["hard_block"], False)
             self.assertEqual(summary["blocking_reasons"], [])
-            self.assertEqual(summary["evidence"]["lfguard_version"], manifest["lfguard_version"])
+            self.assertEqual(summary["evidence"]["lfpolicy_version"], manifest["lfpolicy_version"])
             self.assertEqual(summary["evidence"]["generated_at"], manifest["created_at"])
             self.assertEqual(summary["evidence"]["inputs"]["desired"]["sha256"], _sha256(desired_path))
             self.assertEqual(summary["evidence"]["inputs"]["current"]["source"], "current_snapshot")
             self.assertEqual(summary["evidence"]["inputs"]["current"]["sha256"], _sha256(current_path))
             self.assertEqual(summary["evidence"]["truncation"], {"truncated": False, "artifacts": []})
-            self.assertEqual(lint_payload["schema_version"], "lfguard.lint.v1")
-            self.assertEqual(explain_payload["schema_version"], "lfguard.review.explain.v1")
+            self.assertEqual(lint_payload["schema_version"], "lfpolicy.lint.v1")
+            self.assertEqual(explain_payload["schema_version"], "lfpolicy.review.explain.v1")
             self.assertEqual(explain_payload["summary"], {"planned_grant_changes": 1})
             self.assertIn("Planned grant-change evidence", explain_payload["description"])
             self.assertEqual(
@@ -418,7 +418,7 @@ class AuditCliTests(unittest.TestCase):
             desired_path.write_text(json.dumps({"lf_tags": {"sensitivity": ["internal"]}, "grants": []}), encoding="utf-8")
             current = CurrentState.from_dict({"lf_tags": {"sensitivity": ["internal"]}, "grants": []})
 
-            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter") as adapter_class:
+            with patch("lfpolicy.cli.AWSLakeFormationAdapter") as adapter_class:
                 adapter_class.from_boto3.return_value.load_current_state_for.return_value = current
                 with contextlib.redirect_stdout(io.StringIO()):
                     exit_code = main(
@@ -454,7 +454,7 @@ class AuditCliTests(unittest.TestCase):
             desired_path.write_text(json.dumps({"lf_tags": {"sensitivity": ["internal"]}, "grants": []}), encoding="utf-8")
             current = CurrentState.from_dict({"lf_tags": {"sensitivity": ["internal"]}, "grants": []})
 
-            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter") as adapter_class:
+            with patch("lfpolicy.cli.AWSLakeFormationAdapter") as adapter_class:
                 adapter_class.from_boto3.return_value.load_current_state_for.return_value = current
                 with contextlib.redirect_stdout(io.StringIO()):
                     exit_code = main(
@@ -522,7 +522,7 @@ class AuditCliTests(unittest.TestCase):
                 )
 
             self.assertEqual(exit_code, 0)
-            self.assertIn("### lfguard plan", stdout.getvalue())
+            self.assertIn("### lfpolicy plan", stdout.getvalue())
             self.assertIn("| ID | Safety | Action | Target | Reason |", stdout.getvalue())
             self.assertIn("| change_001 | safe | lf_tag.create | lf_tag:sensitivity | LF-Tag is missing |", stdout.getvalue())
 
@@ -558,7 +558,7 @@ class AuditCliTests(unittest.TestCase):
             tmp_path = Path(tmp)
             desired_path = tmp_path / "desired.json"
             current_path = tmp_path / "current.json"
-            output_path = tmp_path / "artifacts" / "lfguard-plan.md"
+            output_path = tmp_path / "artifacts" / "lfpolicy-plan.md"
             desired_path.write_text(
                 json.dumps({"lf_tags": {"sensitivity": ["internal"]}, "grants": []}),
                 encoding="utf-8",
@@ -584,7 +584,7 @@ class AuditCliTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertEqual(stdout.getvalue(), "")
             report = output_path.read_text(encoding="utf-8")
-            self.assertIn("### lfguard plan", report)
+            self.assertIn("### lfpolicy plan", report)
             self.assertIn("| change_001 | safe | lf_tag.create | lf_tag:sensitivity | LF-Tag is missing |", report)
 
     def test_cli_plan_writes_json_report_before_failing_on_changes(self):
@@ -683,7 +683,7 @@ class AuditCliTests(unittest.TestCase):
                 )
 
             self.assertEqual(exit_code, 0)
-            self.assertIn("### lfguard audit", stdout.getvalue())
+            self.assertIn("### lfpolicy audit", stdout.getvalue())
             self.assertIn("- Total findings: 3", stdout.getvalue())
             self.assertIn("- Error findings: 2", stdout.getvalue())
             self.assertIn("- Warning findings: 1", stdout.getvalue())
@@ -720,7 +720,7 @@ class AuditCliTests(unittest.TestCase):
 
             payload = json.loads(stdout.getvalue())
             self.assertEqual(exit_code, 0)
-            self.assertEqual(payload["schema_version"], "lfguard.audit.v1")
+            self.assertEqual(payload["schema_version"], "lfpolicy.audit.v1")
             self.assertEqual(payload["summary"], {"total": 2, "errors": 1, "warnings": 1})
             self.assertEqual(
                 [finding["code"] for finding in payload["findings"]],
@@ -762,7 +762,7 @@ class AuditCliTests(unittest.TestCase):
             run = payload["runs"][0]
             self.assertEqual(exit_code, 0)
             self.assertEqual(payload["version"], "2.1.0")
-            self.assertEqual(run["tool"]["driver"]["name"], "lfguard")
+            self.assertEqual(run["tool"]["driver"]["name"], "lfpolicy")
             self.assertEqual(
                 [result["ruleId"] for result in run["results"]],
                 ["LF_TAG_VALUES_MISSING", "LF_TAG_VALUES_UNMANAGED"],
@@ -778,7 +778,7 @@ class AuditCliTests(unittest.TestCase):
             tmp_path = Path(tmp)
             desired_path = tmp_path / "desired.json"
             current_path = tmp_path / "current.json"
-            output_path = tmp_path / "artifacts" / "lfguard-audit.txt"
+            output_path = tmp_path / "artifacts" / "lfpolicy-audit.txt"
             desired_path.write_text(
                 json.dumps({"lf_tags": {"sensitivity": ["internal"]}, "grants": []}),
                 encoding="utf-8",
@@ -898,7 +898,7 @@ class AuditCliTests(unittest.TestCase):
             self.assertEqual(exit_code, 1)
             self.assertIn("Findings:", stdout.getvalue())
             summary = summary_path.read_text(encoding="utf-8")
-            self.assertIn("### lfguard audit", summary)
+            self.assertIn("### lfpolicy audit", summary)
             self.assertIn("LF_TAG_VALUES_MISSING", summary)
 
     def test_cli_plan_github_summary_requires_environment_file(self):
@@ -1126,7 +1126,7 @@ class AuditCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             policy_path = Path(tmp) / "policy.py"
             policy_path.write_text(
-                """from lakeformation_guard.policy import LakePolicy, TagAssignmentScope, reader
+                """from lfpolicy.policy import LakePolicy, TagAssignmentScope, reader
 
 policy = LakePolicy()
 policy.tag_key("domain", values=["sales"], assignable_to=[TagAssignmentScope.DATABASE])
@@ -1169,8 +1169,8 @@ policy.group("dataconsumer", reader().where(domain="finance"))
 
             desired_path = output_dir / "policy" / "desired.json"
             policy_py_path = output_dir / "policy.py"
-            schema_path = output_dir / "policy" / "lfguard.schema.json"
-            workflow_path = output_dir / ".github" / "workflows" / "lfguard-policy.yml"
+            schema_path = output_dir / "policy" / "lfpolicy.schema.json"
+            workflow_path = output_dir / ".github" / "workflows" / "lfpolicy-policy.yml"
             pre_commit_path = output_dir / ".pre-commit-config.yaml"
             readme_path = output_dir / "README.md"
             desired = DesiredState.from_dict(json.loads(desired_path.read_text(encoding="utf-8")))
@@ -1181,7 +1181,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             readme = readme_path.read_text(encoding="utf-8")
 
             self.assertEqual(exit_code, 0)
-            self.assertIn("lfguard policy bootstrap", stdout.getvalue())
+            self.assertIn("lfpolicy policy bootstrap", stdout.getvalue())
             self.assertIn(str(policy_py_path), stdout.getvalue())
             self.assertIn("LakePolicy", policy_py)
             self.assertIn("table_creator", policy_py)
@@ -1189,17 +1189,17 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             self.assertIn("catalog_admin", policy_py)
             self.assertNotIn('group("admin"', policy_py)
             self.assertEqual(len(desired.lf_tags), 2)
-            self.assertEqual(schema["title"], "lfguard state")
-            self.assertIn("python -m pip install lfguard", workflow)
-            self.assertIn("lfguard generate policy.py --output-file policy/desired.json --check", workflow)
-            self.assertIn("lfguard check", workflow)
-            self.assertIn("--output-file artifacts/lfguard-check.md", workflow)
-            self.assertIn("lfguard summary", workflow)
+            self.assertEqual(schema["title"], "lfpolicy state")
+            self.assertIn("python -m pip install lfpolicy", workflow)
+            self.assertIn("lfpolicy generate policy.py --output-file policy/desired.json --check", workflow)
+            self.assertIn("lfpolicy check", workflow)
+            self.assertIn("--output-file artifacts/lfpolicy-check.md", workflow)
+            self.assertIn("lfpolicy summary", workflow)
             self.assertIn("actions/upload-artifact@v6", workflow)
-            self.assertIn("lfguard generate policy.py --output-file policy/desired.json --force", pre_commit)
-            self.assertIn("lfguard check --desired policy/desired.json --fail-on-findings", pre_commit)
+            self.assertIn("lfpolicy generate policy.py --output-file policy/desired.json --force", pre_commit)
+            self.assertIn("lfpolicy check --desired policy/desired.json --fail-on-findings", pre_commit)
             self.assertIn("policy.py", pre_commit)
-            self.assertIn("lfguard Policy Bootstrap", readme)
+            self.assertIn("lfpolicy Policy Bootstrap", readme)
             self.assertIn("policy.py", readme)
 
             with contextlib.redirect_stdout(io.StringIO()):
@@ -1229,14 +1229,14 @@ policy.group("dataconsumer", reader().where(domain="finance"))
                         str(output_dir),
                         "--include-live-drift",
                         "--aws-role-arn",
-                        "arn:aws:iam::123456789012:role/LFGuardReadOnly",
+                        "arn:aws:iam::123456789012:role/LFPolicyReadOnly",
                         "--aws-region",
                         "ap-northeast-2",
                     ]
                 )
 
-            workflow_path = output_dir / ".github" / "workflows" / "lfguard-live-drift.yml"
-            iam_path = output_dir / "iam" / "lfguard-read-only.json"
+            workflow_path = output_dir / ".github" / "workflows" / "lfpolicy-live-drift.yml"
+            iam_path = output_dir / "iam" / "lfpolicy-read-only.json"
             readme_path = output_dir / "README.md"
             workflow = workflow_path.read_text(encoding="utf-8")
             iam_policy = json.loads(iam_path.read_text(encoding="utf-8"))
@@ -1246,20 +1246,20 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             self.assertEqual(exit_code, 0)
             self.assertIn(str(workflow_path), stdout.getvalue())
             self.assertIn("id-token: write", workflow)
-            self.assertIn("arn:aws:iam::123456789012:role/LFGuardReadOnly", workflow)
+            self.assertIn("arn:aws:iam::123456789012:role/LFPolicyReadOnly", workflow)
             self.assertIn("aws-region: ap-northeast-2", workflow)
-            self.assertIn('python -m pip install "lfguard[aws]"', workflow)
-            self.assertIn("lfguard doctor --require aws", workflow)
-            self.assertIn("lfguard generate policy.py --output-file policy/desired.json --check", workflow)
-            self.assertIn("lfguard snapshot", workflow)
-            self.assertIn("lfguard audit", workflow)
-            self.assertIn("lfguard plan", workflow)
-            self.assertIn("lfguard-live-drift-reports", workflow)
+            self.assertIn('python -m pip install "lfpolicy[aws]"', workflow)
+            self.assertIn("lfpolicy doctor --require aws", workflow)
+            self.assertIn("lfpolicy generate policy.py --output-file policy/desired.json --check", workflow)
+            self.assertIn("lfpolicy snapshot", workflow)
+            self.assertIn("lfpolicy audit", workflow)
+            self.assertIn("lfpolicy plan", workflow)
+            self.assertIn("lfpolicy-live-drift-reports", workflow)
             self.assertIn("lakeformation:GetLFTag", actions)
             self.assertIn("lakeformation:ListPermissions", actions)
             self.assertNotIn("lakeformation:GrantPermissions", actions)
-            self.assertIn(".github/workflows/lfguard-live-drift.yml", readme)
-            self.assertIn("iam/lfguard-read-only.json", readme)
+            self.assertIn(".github/workflows/lfpolicy-live-drift.yml", readme)
+            self.assertIn("iam/lfpolicy-read-only.json", readme)
             self.assertIn("ap-northeast-2", readme)
 
     def test_cli_bootstrap_can_include_code_scanning_workflow(self):
@@ -1275,14 +1275,14 @@ policy.group("dataconsumer", reader().where(domain="finance"))
                         str(output_dir),
                         "--include-code-scanning",
                         "--aws-role-arn",
-                        "arn:aws:iam::123456789012:role/LFGuardReadOnly",
+                        "arn:aws:iam::123456789012:role/LFPolicyReadOnly",
                         "--aws-region",
                         "ap-northeast-2",
                     ]
                 )
 
-            workflow_path = output_dir / ".github" / "workflows" / "lfguard-code-scanning.yml"
-            iam_path = output_dir / "iam" / "lfguard-read-only.json"
+            workflow_path = output_dir / ".github" / "workflows" / "lfpolicy-code-scanning.yml"
+            iam_path = output_dir / "iam" / "lfpolicy-read-only.json"
             readme_path = output_dir / "README.md"
             workflow = workflow_path.read_text(encoding="utf-8")
             iam_policy = json.loads(iam_path.read_text(encoding="utf-8"))
@@ -1293,21 +1293,21 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             self.assertIn(str(workflow_path), stdout.getvalue())
             self.assertIn("security-events: write", workflow)
             self.assertIn("github/codeql-action/upload-sarif@v3", workflow)
-            self.assertIn("category: lfguard-lint", workflow)
-            self.assertIn("category: lfguard-audit", workflow)
-            self.assertIn("arn:aws:iam::123456789012:role/LFGuardReadOnly", workflow)
+            self.assertIn("category: lfpolicy-lint", workflow)
+            self.assertIn("category: lfpolicy-audit", workflow)
+            self.assertIn("arn:aws:iam::123456789012:role/LFPolicyReadOnly", workflow)
             self.assertIn("aws-region: ap-northeast-2", workflow)
-            self.assertIn('python -m pip install "lfguard[aws]"', workflow)
-            self.assertIn("lfguard doctor --require aws", workflow)
-            self.assertIn("lfguard generate policy.py --output-file policy/desired.json --check", workflow)
-            self.assertIn("lfguard snapshot", workflow)
-            self.assertIn("lfguard check", workflow)
-            self.assertIn("lfguard audit", workflow)
-            self.assertIn("lfguard-code-scanning-reports", workflow)
+            self.assertIn('python -m pip install "lfpolicy[aws]"', workflow)
+            self.assertIn("lfpolicy doctor --require aws", workflow)
+            self.assertIn("lfpolicy generate policy.py --output-file policy/desired.json --check", workflow)
+            self.assertIn("lfpolicy snapshot", workflow)
+            self.assertIn("lfpolicy check", workflow)
+            self.assertIn("lfpolicy audit", workflow)
+            self.assertIn("lfpolicy-code-scanning-reports", workflow)
             self.assertIn("lakeformation:GetLFTag", actions)
             self.assertNotIn("lakeformation:GrantPermissions", actions)
-            self.assertIn(".github/workflows/lfguard-code-scanning.yml", readme)
-            self.assertIn("iam/lfguard-read-only.json", readme)
+            self.assertIn(".github/workflows/lfpolicy-code-scanning.yml", readme)
+            self.assertIn("iam/lfpolicy-read-only.json", readme)
             self.assertIn("upload SARIF", readme)
 
     def test_cli_bootstrap_can_include_review_template(self):
@@ -1338,9 +1338,9 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             self.assertIn(str(codeowners_path), stdout.getvalue())
             self.assertIn(str(pr_template_path), stdout.getvalue())
             self.assertIn("policy/* @example/data-platform", codeowners)
-            self.assertIn(".github/workflows/lfguard-*.yml @example/data-platform", codeowners)
+            self.assertIn(".github/workflows/lfpolicy-*.yml @example/data-platform", codeowners)
             self.assertIn("# Lake Formation Policy Change", pr_template)
-            self.assertIn("lfguard check --desired policy/desired.json", pr_template)
+            self.assertIn("lfpolicy check --desired policy/desired.json", pr_template)
             self.assertIn("--allow-permission-revokes", pr_template)
             self.assertIn(".github/CODEOWNERS", readme)
             self.assertIn("@example/data-platform", readme)
@@ -1373,7 +1373,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
                 [
                     {
                         "fileMatch": ["policy/desired.json", "snapshots/*.json"],
-                        "url": "./policy/lfguard.schema.json",
+                        "url": "./policy/lfpolicy.schema.json",
                     }
                 ],
             )
@@ -1388,7 +1388,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             with contextlib.redirect_stdout(io.StringIO()):
                 exit_code = main(["bootstrap", "--output-dir", str(output_dir), "--format", "yaml"])
 
-            workflow = (output_dir / ".github" / "workflows" / "lfguard-policy.yml").read_text(encoding="utf-8")
+            workflow = (output_dir / ".github" / "workflows" / "lfpolicy-policy.yml").read_text(encoding="utf-8")
             pre_commit = (output_dir / ".pre-commit-config.yaml").read_text(encoding="utf-8")
             readme = (output_dir / "README.md").read_text(encoding="utf-8")
 
@@ -1396,12 +1396,12 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             self.assertTrue((output_dir / "policy" / "desired.yaml").exists())
             self.assertFalse((output_dir / "policy" / "desired.json").exists())
             self.assertTrue((output_dir / "policy.py").exists())
-            self.assertIn('python -m pip install "lfguard[yaml]"', workflow)
-            self.assertIn("lfguard doctor --require yaml", workflow)
-            self.assertIn("lfguard generate policy.py --output-file policy/desired.yaml --check", workflow)
-            self.assertIn("lfguard generate policy.py --output-file policy/desired.yaml --force", pre_commit)
-            self.assertIn("lfguard check --desired policy/desired.yaml --fail-on-findings", pre_commit)
-            self.assertIn('python -m pip install "lfguard[yaml]"', readme)
+            self.assertIn('python -m pip install "lfpolicy[yaml]"', workflow)
+            self.assertIn("lfpolicy doctor --require yaml", workflow)
+            self.assertIn("lfpolicy generate policy.py --output-file policy/desired.yaml --check", workflow)
+            self.assertIn("lfpolicy generate policy.py --output-file policy/desired.yaml --force", pre_commit)
+            self.assertIn("lfpolicy check --desired policy/desired.yaml --fail-on-findings", pre_commit)
+            self.assertIn('python -m pip install "lfpolicy[yaml]"', readme)
 
     def test_cli_bootstrap_blank_yaml_layout_is_generated_check_clean(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1452,11 +1452,11 @@ policy.group("dataconsumer", reader().where(domain="finance"))
                     ]
                 )
 
-            workflow = (output_dir / ".github" / "workflows" / "lfguard-live-drift.yml").read_text(encoding="utf-8")
+            workflow = (output_dir / ".github" / "workflows" / "lfpolicy-live-drift.yml").read_text(encoding="utf-8")
 
             self.assertEqual(exit_code, 0)
-            self.assertIn('python -m pip install "lfguard[aws,yaml]"', workflow)
-            self.assertIn("lfguard doctor --require aws --require yaml", workflow)
+            self.assertIn('python -m pip install "lfpolicy[aws,yaml]"', workflow)
+            self.assertIn("lfpolicy doctor --require aws --require yaml", workflow)
             self.assertIn("--desired policy/desired.yaml", workflow)
 
     def test_cli_bootstrap_code_scanning_installs_yaml_and_aws_extras_for_yaml_layout(self):
@@ -1475,11 +1475,11 @@ policy.group("dataconsumer", reader().where(domain="finance"))
                     ]
                 )
 
-            workflow = (output_dir / ".github" / "workflows" / "lfguard-code-scanning.yml").read_text(encoding="utf-8")
+            workflow = (output_dir / ".github" / "workflows" / "lfpolicy-code-scanning.yml").read_text(encoding="utf-8")
 
             self.assertEqual(exit_code, 0)
-            self.assertIn('python -m pip install "lfguard[aws,yaml]"', workflow)
-            self.assertIn("lfguard doctor --require aws --require yaml", workflow)
+            self.assertIn('python -m pip install "lfpolicy[aws,yaml]"', workflow)
+            self.assertIn("lfpolicy doctor --require aws --require yaml", workflow)
             self.assertIn("--desired policy/desired.yaml", workflow)
 
     def test_cli_bootstrap_review_template_uses_yaml_policy_path_for_yaml_layout(self):
@@ -1501,8 +1501,8 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             pr_template = (output_dir / ".github" / "pull_request_template.md").read_text(encoding="utf-8")
 
             self.assertEqual(exit_code, 0)
-            self.assertIn("lfguard check --desired policy/desired.yaml", pr_template)
-            self.assertIn("lfguard summary --desired policy/desired.yaml", pr_template)
+            self.assertIn("lfpolicy check --desired policy/desired.yaml", pr_template)
+            self.assertIn("lfpolicy summary --desired policy/desired.yaml", pr_template)
             self.assertNotIn("policy/desired.json", pr_template)
 
     def test_cli_bootstrap_editor_config_recommends_yaml_extension_for_yaml_layout(self):
@@ -1529,7 +1529,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             self.assertEqual(
                 settings["yaml.schemas"],
                 {
-                    "./policy/lfguard.schema.json": [
+                    "./policy/lfpolicy.schema.json": [
                         "policy/desired.yaml",
                         "snapshots/*.yaml",
                         "snapshots/*.yml",
@@ -1555,7 +1555,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
 
     def test_cli_sample_writes_runnable_offline_demo(self):
         with tempfile.TemporaryDirectory() as tmp:
-            output_dir = Path(tmp) / "lfguard-demo"
+            output_dir = Path(tmp) / "lfpolicy-demo"
 
             stdout = io.StringIO()
             with contextlib.redirect_stdout(stdout):
@@ -1569,20 +1569,20 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             sample_readme = readme_path.read_text(encoding="utf-8")
 
             self.assertEqual(exit_code, 0)
-            self.assertIn("lfguard plan --desired", stdout.getvalue())
-            self.assertIn("lfguard check --desired", stdout.getvalue())
+            self.assertIn("lfpolicy plan --desired", stdout.getvalue())
+            self.assertIn("lfpolicy check --desired", stdout.getvalue())
             self.assertIn("README.md", stdout.getvalue())
             self.assertEqual(len(desired.lf_tags), 2)
             self.assertEqual(len(current.lf_tags), 2)
             self.assertEqual(len(desired.data_cells_filters), 1)
             self.assertEqual(len(current.data_cells_filters), 1)
-            self.assertIn("lfguard Demo", sample_readme)
-            self.assertIn("lfguard check --desired desired.json --current-snapshot current-snapshot.json", sample_readme)
-            self.assertIn("lfguard summary --desired desired.json", sample_readme)
-            self.assertIn("lfguard audit --desired desired.json", sample_readme)
-            self.assertIn("lfguard plan --desired desired.json", sample_readme)
+            self.assertIn("lfpolicy Demo", sample_readme)
+            self.assertIn("lfpolicy check --desired desired.json --current-snapshot current-snapshot.json", sample_readme)
+            self.assertIn("lfpolicy summary --desired desired.json", sample_readme)
+            self.assertIn("lfpolicy audit --desired desired.json", sample_readme)
+            self.assertIn("lfpolicy plan --desired desired.json", sample_readme)
             self.assertIn("--data-cells-filter orders_public", sample_readme)
-            self.assertIn("--current-cache .lfguard/prod-us-east-1-111122223333-current.json", sample_readme)
+            self.assertIn("--current-cache .lfpolicy/prod-us-east-1-111122223333-current.json", sample_readme)
             self.assertEqual(lint_desired(desired), ())
 
             plan_stdout = io.StringIO()
@@ -1602,29 +1602,29 @@ policy.group("dataconsumer", reader().where(domain="finance"))
 
     def test_cli_sample_can_include_github_actions_demo_workflow(self):
         with tempfile.TemporaryDirectory() as tmp:
-            output_dir = Path(tmp) / "lfguard-demo"
+            output_dir = Path(tmp) / "lfpolicy-demo"
 
             stdout = io.StringIO()
             with contextlib.redirect_stdout(stdout):
                 exit_code = main(["sample", "--output-dir", str(output_dir), "--include-ci"])
 
-            workflow_path = output_dir / ".github" / "workflows" / "lfguard-demo.yml"
+            workflow_path = output_dir / ".github" / "workflows" / "lfpolicy-demo.yml"
             workflow = workflow_path.read_text(encoding="utf-8")
             readme = (output_dir / "README.md").read_text(encoding="utf-8")
 
             self.assertEqual(exit_code, 0)
             self.assertIn(str(workflow_path), stdout.getvalue())
             self.assertIn("GitHub Actions Demo", readme)
-            self.assertIn("python -m pip install lfguard", workflow)
-            self.assertIn("lfguard check", workflow)
-            self.assertIn("--desired lfguard-demo/desired.json", workflow)
-            self.assertIn("--current-snapshot lfguard-demo/current-snapshot.json", workflow)
-            self.assertIn("--output-file artifacts/lfguard-check.md", workflow)
+            self.assertIn("python -m pip install lfpolicy", workflow)
+            self.assertIn("lfpolicy check", workflow)
+            self.assertIn("--desired lfpolicy-demo/desired.json", workflow)
+            self.assertIn("--current-snapshot lfpolicy-demo/current-snapshot.json", workflow)
+            self.assertIn("--output-file artifacts/lfpolicy-check.md", workflow)
             self.assertIn("actions/upload-artifact@v6", workflow)
 
     def test_cli_sample_can_write_yaml_demo_files(self):
         with tempfile.TemporaryDirectory() as tmp:
-            output_dir = Path(tmp) / "lfguard-demo"
+            output_dir = Path(tmp) / "lfpolicy-demo"
 
             stdout = io.StringIO()
             with contextlib.redirect_stdout(stdout):
@@ -1638,27 +1638,27 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             self.assertTrue(desired_path.exists())
             self.assertTrue(current_path.exists())
             self.assertFalse((output_dir / "desired.json").exists())
-            self.assertIn("lfguard[yaml]", readme)
+            self.assertIn("lfpolicy[yaml]", readme)
             self.assertIn("desired.yaml", readme)
             self.assertIn("current-snapshot.yaml", readme)
 
     def test_cli_sample_ci_workflow_installs_yaml_extra_for_yaml_demo(self):
         with tempfile.TemporaryDirectory() as tmp:
-            output_dir = Path(tmp) / "lfguard-demo"
+            output_dir = Path(tmp) / "lfpolicy-demo"
 
             with contextlib.redirect_stdout(io.StringIO()):
                 exit_code = main(["sample", "--output-dir", str(output_dir), "--format", "yaml", "--include-ci"])
 
-            workflow = (output_dir / ".github" / "workflows" / "lfguard-demo.yml").read_text(encoding="utf-8")
+            workflow = (output_dir / ".github" / "workflows" / "lfpolicy-demo.yml").read_text(encoding="utf-8")
 
             self.assertEqual(exit_code, 0)
-            self.assertIn('python -m pip install "lfguard[yaml]"', workflow)
-            self.assertIn("--desired lfguard-demo/desired.yaml", workflow)
-            self.assertIn("--current-snapshot lfguard-demo/current-snapshot.yaml", workflow)
+            self.assertIn('python -m pip install "lfpolicy[yaml]"', workflow)
+            self.assertIn("--desired lfpolicy-demo/desired.yaml", workflow)
+            self.assertIn("--current-snapshot lfpolicy-demo/current-snapshot.yaml", workflow)
 
     def test_cli_sample_can_write_both_json_and_yaml_demo_files(self):
         with tempfile.TemporaryDirectory() as tmp:
-            output_dir = Path(tmp) / "lfguard-demo"
+            output_dir = Path(tmp) / "lfpolicy-demo"
 
             stdout = io.StringIO()
             with contextlib.redirect_stdout(stdout):
@@ -1673,7 +1673,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
 
     def test_cli_sample_refuses_to_overwrite_without_force(self):
         with tempfile.TemporaryDirectory() as tmp:
-            output_dir = Path(tmp) / "lfguard-demo"
+            output_dir = Path(tmp) / "lfpolicy-demo"
             output_dir.mkdir()
             desired_path = output_dir / "desired.json"
             desired_path.write_text("{}", encoding="utf-8")
@@ -1694,7 +1694,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
         payload = json.loads(stdout.getvalue())
         self.assertEqual(exit_code, 0)
         self.assertEqual(payload["$schema"], "https://json-schema.org/draft/2020-12/schema")
-        self.assertEqual(payload["title"], "lfguard state")
+        self.assertEqual(payload["title"], "lfpolicy state")
         self.assertIn("lfTagPolicyResource", payload["$defs"])
 
     def test_cli_doctor_outputs_json_report(self):
@@ -1716,7 +1716,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             exit_code = main(["doctor"])
 
         self.assertEqual(exit_code, 0)
-        self.assertIn("lfguard:", stdout.getvalue())
+        self.assertIn("lfpolicy:", stdout.getvalue())
         self.assertIn("Optional dependencies:", stdout.getvalue())
         self.assertIn("No AWS calls were made.", stdout.getvalue())
 
@@ -1737,7 +1737,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
 
     def test_cli_doctor_can_fail_when_required_extra_is_missing(self):
         stdout = io.StringIO()
-        with patch("lakeformation_guard.cli.util.find_spec", return_value=None):
+        with patch("lfpolicy.cli.util.find_spec", return_value=None):
             with contextlib.redirect_stdout(stdout):
                 exit_code = main(["doctor", "--require", "yaml", "--output", "json"])
 
@@ -1783,7 +1783,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             text = output_path.read_text(encoding="utf-8")
             self.assertEqual(exit_code, 0)
             self.assertEqual(stdout.getvalue(), "")
-            self.assertIn("### lfguard permissions: read-only", text)
+            self.assertIn("### lfpolicy permissions: read-only", text)
             self.assertIn("lakeformation:GetDataCellsFilter", text)
             self.assertIn("lakeformation:ListPermissions", text)
             self.assertIn("glue:GetTable", text)
@@ -1795,8 +1795,8 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             IAMPermissionCheckReport(
                 template="read-only",
                 include_glue_read=False,
-                principal_arn="arn:aws:iam::111122223333:role/LfguardReadOnly",
-                caller_arn="arn:aws:sts::111122223333:assumed-role/LfguardReadOnly/session",
+                principal_arn="arn:aws:iam::111122223333:role/LfpolicyReadOnly",
+                caller_arn="arn:aws:sts::111122223333:assumed-role/LfpolicyReadOnly/session",
                 actions=(
                     IAMActionCheck("lakeformation:GetLFTag", "allowed", True),
                     IAMActionCheck("lakeformation:ListPermissions", "allowed", True),
@@ -1805,7 +1805,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
         )
 
         stdout = io.StringIO()
-        with patch("lakeformation_guard.cli.AWSIAMPermissionChecker.from_boto3", return_value=fake_checker) as factory:
+        with patch("lfpolicy.cli.AWSIAMPermissionChecker.from_boto3", return_value=fake_checker) as factory:
             with contextlib.redirect_stdout(stdout):
                 exit_code = main(
                     [
@@ -1826,17 +1826,17 @@ policy.group("dataconsumer", reader().where(domain="finance"))
         self.assertEqual(exit_code, 0)
         factory.assert_called_once_with(profile_name="prod", region_name="us-east-1")
         self.assertEqual(fake_checker.principal_arn, None)
-        self.assertEqual(payload["schema_version"], "lfguard.permissions-check.v1")
+        self.assertEqual(payload["schema_version"], "lfpolicy.permissions-check.v1")
         self.assertTrue(payload["allowed"])
         self.assertEqual(payload["summary"], {"total": 2, "allowed": 2, "denied": 0})
-        self.assertEqual(payload["principal_arn"], "arn:aws:iam::111122223333:role/LfguardReadOnly")
+        self.assertEqual(payload["principal_arn"], "arn:aws:iam::111122223333:role/LfpolicyReadOnly")
 
     def test_cli_permissions_check_returns_failure_when_action_is_denied(self):
         fake_checker = _FakePermissionChecker(
             IAMPermissionCheckReport(
                 template="read-only",
                 include_glue_read=True,
-                principal_arn="arn:aws:iam::111122223333:role/LfguardReadOnly",
+                principal_arn="arn:aws:iam::111122223333:role/LfpolicyReadOnly",
                 caller_arn=None,
                 actions=(
                     IAMActionCheck("lakeformation:GetLFTag", "allowed", True),
@@ -1847,7 +1847,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
         )
 
         stdout = io.StringIO()
-        with patch("lakeformation_guard.cli.AWSIAMPermissionChecker.from_boto3", return_value=fake_checker):
+        with patch("lfpolicy.cli.AWSIAMPermissionChecker.from_boto3", return_value=fake_checker):
             with contextlib.redirect_stdout(stdout):
                 exit_code = main(
                     [
@@ -1855,15 +1855,15 @@ policy.group("dataconsumer", reader().where(domain="finance"))
                         "--check",
                         "--include-glue-read",
                         "--principal-arn",
-                        "arn:aws:iam::111122223333:role/LfguardReadOnly",
+                        "arn:aws:iam::111122223333:role/LfpolicyReadOnly",
                         "--output",
                         "markdown",
                     ]
                 )
 
         self.assertEqual(exit_code, 1)
-        self.assertEqual(fake_checker.principal_arn, "arn:aws:iam::111122223333:role/LfguardReadOnly")
-        self.assertIn("### lfguard permissions check: read-only", stdout.getvalue())
+        self.assertEqual(fake_checker.principal_arn, "arn:aws:iam::111122223333:role/LfpolicyReadOnly")
+        self.assertIn("### lfpolicy permissions check: read-only", stdout.getvalue())
         self.assertIn("Result: **fail**", stdout.getvalue())
         self.assertIn("lakeformation:ListDataCellsFilter", stdout.getvalue())
         self.assertIn("glue:GetTable", stdout.getvalue())
@@ -1875,7 +1875,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
 
         script = stdout.getvalue()
         self.assertEqual(exit_code, 0)
-        self.assertIn("complete -F _lfguard_complete lfguard", script)
+        self.assertIn("complete -F _lfpolicy_complete lfpolicy", script)
         self.assertNotIn("aws-lakeformation-guard", script)
         self.assertIn("bootstrap", script)
         self.assertIn("generate", script)
@@ -1893,14 +1893,14 @@ policy.group("dataconsumer", reader().where(domain="finance"))
 
         script = stdout.getvalue()
         self.assertEqual(exit_code, 0)
-        self.assertIn("#compdef lfguard", script)
+        self.assertIn("#compdef lfpolicy", script)
         self.assertNotIn("aws-lakeformation-guard", script)
         self.assertIn("'permissions:permissions'", script)
         self.assertIn("compadd '--template'", script)
 
     def test_cli_completion_outputs_fish_script_to_file(self):
         with tempfile.TemporaryDirectory() as tmp:
-            output_path = Path(tmp) / "completions" / "lfguard.fish"
+            output_path = Path(tmp) / "completions" / "lfpolicy.fish"
 
             stdout = io.StringIO()
             with contextlib.redirect_stdout(stdout):
@@ -1909,7 +1909,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             script = output_path.read_text(encoding="utf-8")
             self.assertEqual(exit_code, 0)
             self.assertEqual(stdout.getvalue(), "")
-            self.assertIn("complete -c lfguard -f", script)
+            self.assertIn("complete -c lfpolicy -f", script)
             self.assertNotIn("aws-lakeformation-guard", script)
             self.assertIn("__fish_seen_subcommand_from permissions", script)
             self.assertIn("-l include-glue-read", script)
@@ -1950,7 +1950,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             desired_path = tmp_path / "desired.json"
-            output_path = tmp_path / "artifacts" / "lfguard-check.md"
+            output_path = tmp_path / "artifacts" / "lfpolicy-check.md"
             summary_path = tmp_path / "summary.md"
             desired_path.write_text(json.dumps({"lf_tags": {}, "resource_tags": [], "grants": []}), encoding="utf-8")
 
@@ -1975,9 +1975,9 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             summary = summary_path.read_text(encoding="utf-8")
             self.assertEqual(exit_code, 1)
             self.assertEqual(stdout.getvalue(), "")
-            self.assertIn("### lfguard check", report)
+            self.assertIn("### lfpolicy check", report)
             self.assertIn("DESIRED_STATE_EMPTY", report)
-            self.assertIn("### lfguard check", summary)
+            self.assertIn("### lfpolicy check", summary)
             self.assertIn("DESIRED_STATE_EMPTY", summary)
 
     def test_cli_validate_outputs_json_summary(self):
@@ -2817,7 +2817,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             result = payload["runs"][0]["results"][0]
             self.assertEqual(exit_code, 0)
             self.assertEqual(payload["version"], "2.1.0")
-            self.assertEqual(payload["runs"][0]["tool"]["driver"]["name"], "lfguard")
+            self.assertEqual(payload["runs"][0]["tool"]["driver"]["name"], "lfpolicy")
             self.assertEqual(result["ruleId"], "RESOURCE_TAG_VALUE_UNDEFINED")
             self.assertEqual(result["level"], "error")
             self.assertEqual(
@@ -2846,7 +2846,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
                 )
 
             self.assertEqual(exit_code, 0)
-            self.assertIn("### lfguard lint", stdout.getvalue())
+            self.assertIn("### lfpolicy lint", stdout.getvalue())
             self.assertIn("DESIRED_STATE_EMPTY", stdout.getvalue())
 
     def test_cli_lint_writes_github_summary_before_failing_on_findings(self):
@@ -2872,7 +2872,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             self.assertEqual(exit_code, 1)
             self.assertIn("Lint findings:", stdout.getvalue())
             summary = summary_path.read_text(encoding="utf-8")
-            self.assertIn("### lfguard lint", summary)
+            self.assertIn("### lfpolicy lint", summary)
             self.assertIn("DESIRED_STATE_EMPTY", summary)
 
     def test_cli_summary_outputs_policy_inventory_json(self):
@@ -2956,7 +2956,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
                 exit_code = main(["summary", "--desired", str(desired_path), "--output", "markdown"])
 
             self.assertEqual(exit_code, 0)
-            self.assertIn("### lfguard summary", stdout.getvalue())
+            self.assertIn("### lfpolicy summary", stdout.getvalue())
             self.assertIn("| LF-Tag definitions | 1 (sensitivity) |", stdout.getvalue())
 
     def test_cli_summary_writes_github_summary(self):
@@ -2974,7 +2974,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             self.assertEqual(exit_code, 0)
             self.assertIn("Desired summary:", stdout.getvalue())
             summary = summary_path.read_text(encoding="utf-8")
-            self.assertIn("### lfguard summary", summary)
+            self.assertIn("### lfpolicy summary", summary)
             self.assertIn("| LF-Tag definitions | 1 (sensitivity) |", summary)
 
     def test_cli_version_outputs_short_command_name(self):
@@ -2984,7 +2984,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
                 main(["--version"])
 
         self.assertEqual(raised.exception.code, 0)
-        self.assertEqual(stdout.getvalue().strip(), "lfguard {}".format(__version__))
+        self.assertEqual(stdout.getvalue().strip(), "lfpolicy {}".format(__version__))
 
     def test_cli_snapshot_outputs_live_current_state_scope(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -3020,7 +3020,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             )
 
             stdout = io.StringIO()
-            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter") as adapter_class:
+            with patch("lfpolicy.cli.AWSLakeFormationAdapter") as adapter_class:
                 adapter_class.from_boto3.return_value.load_current_state_for.return_value = current
                 with contextlib.redirect_stdout(stdout):
                     exit_code = main(
@@ -3094,7 +3094,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             )
 
             stdout = io.StringIO()
-            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter") as adapter_class:
+            with patch("lfpolicy.cli.AWSLakeFormationAdapter") as adapter_class:
                 adapter_class.from_boto3.return_value.import_state.return_value = imported
                 with contextlib.redirect_stdout(stdout):
                     exit_code = main(
@@ -3156,7 +3156,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             )
 
             stdout = io.StringIO()
-            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter") as adapter_class:
+            with patch("lfpolicy.cli.AWSLakeFormationAdapter") as adapter_class:
                 adapter_class.from_boto3.return_value.import_state.return_value = imported
                 with contextlib.redirect_stdout(stdout):
                     exit_code = main(
@@ -3177,7 +3177,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             self.assertEqual(exit_code, 0)
             self.assertTrue(output_path.exists())
             self.assertIn("Wrote import review notes", stdout.getvalue())
-            self.assertIn("# lfguard Import Review Notes", notes)
+            self.assertIn("# lfpolicy Import Review Notes", notes)
             self.assertIn("Desired scaffold: `{}`".format(output_path), notes)
             self.assertIn("Catalog ID: `123456789012`", notes)
             self.assertIn("Included sections: `data-cells-filters, resource-tags, grants`", notes)
@@ -3186,7 +3186,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             self.assertIn("Grants: 1", notes)
             self.assertIn("Resource-tag import reads LF-Tag assignments only for resources discovered", notes)
             self.assertIn("Data-cells-filter import lists filters only for tables discovered", notes)
-            self.assertIn("lfguard check --desired", notes)
+            self.assertIn("lfpolicy check --desired", notes)
 
     def test_cli_import_review_notes_refuses_to_overwrite_without_force(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -3196,7 +3196,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
             notes_path.write_text("existing", encoding="utf-8")
 
             stderr = io.StringIO()
-            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter") as adapter_class:
+            with patch("lfpolicy.cli.AWSLakeFormationAdapter") as adapter_class:
                 with contextlib.redirect_stderr(stderr):
                     exit_code = main(
                         [
@@ -3763,7 +3763,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
 def _saved_plan_payload(destructive=False):
     if destructive:
         return {
-            "schema_version": "lfguard.plan.v1",
+            "schema_version": "lfpolicy.plan.v1",
             "summary": {"total": 1, "safe": 0, "destructive": 1},
             "changes": [
                 {
@@ -3792,7 +3792,7 @@ def _saved_plan_payload(destructive=False):
             ],
         }
     return {
-        "schema_version": "lfguard.plan.v1",
+        "schema_version": "lfpolicy.plan.v1",
         "summary": {"total": 2, "safe": 2, "destructive": 0},
         "changes": [
             {
@@ -3853,7 +3853,7 @@ class _FakePermissionChecker:
 
 
 def _python_policy_source(object_name="policy", as_factory=False):
-    body = """from lakeformation_guard.policy import LakePolicy, TagAssignmentScope, reader
+    body = """from lfpolicy.policy import LakePolicy, TagAssignmentScope, reader
 
 policy = LakePolicy()
 policy.tag_key(
@@ -3878,7 +3878,7 @@ policy.bind_role("arn:aws:iam::111122223333:role/DataConsumer", "dataconsumer")
 """
     if not as_factory:
         return body if object_name == "policy" else body.replace("policy =", "{} =".format(object_name), 1)
-    return """from lakeformation_guard.policy import LakePolicy, TagAssignmentScope, reader
+    return """from lfpolicy.policy import LakePolicy, TagAssignmentScope, reader
 
 
 def {object_name}():

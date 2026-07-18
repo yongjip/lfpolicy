@@ -3,8 +3,8 @@ import time
 import unittest
 from uuid import uuid4
 
-from lakeformation_guard import DesiredState
-from lakeformation_guard.aws import AWSLakeFormationAdapter
+from lfpolicy import DesiredState
+from lfpolicy.aws import AWSLakeFormationAdapter
 
 try:
     import boto3
@@ -14,11 +14,11 @@ except ImportError:  # pragma: no cover - exercised only without aws extra.
     ClientError = None
 
 
-LIVE_AWS_ENABLED = os.environ.get("LFGUARD_LIVE_AWS") == "1"
-LIVE_TEST_PRINCIPAL = os.environ.get("LFGUARD_LIVE_AWS_TEST_PRINCIPAL_ARN", "")
+LIVE_AWS_ENABLED = os.environ.get("LFPOLICY_LIVE_AWS") == "1"
+LIVE_TEST_PRINCIPAL = os.environ.get("LFPOLICY_LIVE_AWS_TEST_PRINCIPAL_ARN", "")
 
 
-@unittest.skipUnless(LIVE_AWS_ENABLED, "set LFGUARD_LIVE_AWS=1 to run live AWS tests")
+@unittest.skipUnless(LIVE_AWS_ENABLED, "set LFPOLICY_LIVE_AWS=1 to run live AWS tests")
 @unittest.skipIf(boto3 is None, "boto3 is required for live AWS tests")
 class LiveAwsLakeFormationContractTests(unittest.TestCase):
     """Live tests for Lake Formation behavior that local emulators cannot prove.
@@ -30,20 +30,20 @@ class LiveAwsLakeFormationContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        profile_name = os.environ.get("LFGUARD_LIVE_AWS_PROFILE") or None
+        profile_name = os.environ.get("LFPOLICY_LIVE_AWS_PROFILE") or None
         region_name = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-east-1"
         cls.session = boto3.Session(profile_name=profile_name, region_name=region_name)
         cls.lakeformation = cls.session.client("lakeformation")
         cls.glue = cls.session.client("glue")
         cls.sts = cls.session.client("sts")
-        cls.catalog_id = os.environ.get("LFGUARD_LIVE_AWS_CATALOG_ID")
+        cls.catalog_id = os.environ.get("LFPOLICY_LIVE_AWS_CATALOG_ID")
         if not cls.catalog_id:
             cls.catalog_id = cls.sts.get_caller_identity()["Account"]
 
     def setUp(self):
         suffix = uuid4().hex[:10]
-        self.tag_key = "lfguard_contract_{}".format(suffix)
-        self.database_name = "lfguard_contract_{}".format(suffix)
+        self.tag_key = "lfpolicy_contract_{}".format(suffix)
+        self.database_name = "lfpolicy_contract_{}".format(suffix)
         self.table_name = "orders_{}".format(suffix)
         self.created_lf_tags = []
         self.created_tables = []
@@ -132,7 +132,7 @@ class LiveAwsLakeFormationContractTests(unittest.TestCase):
 
     @unittest.skipUnless(
         LIVE_TEST_PRINCIPAL,
-        "set LFGUARD_LIVE_AWS_TEST_PRINCIPAL_ARN for live grant validation",
+        "set LFPOLICY_LIVE_AWS_TEST_PRINCIPAL_ARN for live grant validation",
     )
     def test_real_aws_rejects_lf_tag_policy_select_plus_mutating_permissions(self):
         self.created_grants = []
@@ -194,7 +194,7 @@ class LiveAwsLakeFormationContractTests(unittest.TestCase):
                         {"Name": "login_id", "Type": "string"},
                         {"Name": "phone_number", "Type": "string"},
                     ],
-                    "Location": "s3://lfguard-contract-placeholder/{}/".format(
+                    "Location": "s3://lfpolicy-contract-placeholder/{}/".format(
                         int(time.time())
                     ),
                     "InputFormat": "org.apache.hadoop.mapred.TextInputFormat",

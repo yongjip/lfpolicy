@@ -1,6 +1,6 @@
-"""Minimal Python policy builder example for lfguard."""
+"""Minimal Python policy builder example for lfpolicy."""
 
-from lakeformation_guard.policy import (
+from lfpolicy.policy import (
     LakePolicy,
     TagAssignmentScope,
     database_creator,

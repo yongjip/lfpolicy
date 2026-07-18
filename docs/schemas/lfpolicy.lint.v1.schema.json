@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/yongjip/aws-datalake-guard/docs/schemas/lfguard.lint.v1.schema.json",
-  "title": "lfguard lint report v1",
+  "$id": "https://github.com/yongjip/aws-datalake-guard/docs/schemas/lfpolicy.lint.v1.schema.json",
+  "title": "lfpolicy lint report v1",
   "type": "object",
   "required": ["schema_version", "summary", "findings"],
   "properties": {
-    "schema_version": { "const": "lfguard.lint.v1" },
+    "schema_version": { "const": "lfpolicy.lint.v1" },
     "summary": {
       "type": "object",
       "required": ["total", "errors", "warnings"],

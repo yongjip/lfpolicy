@@ -99,7 +99,7 @@
       "title": "Grant missing"
     }
   ],
-  "schema_version": "lfguard.audit.v1",
+  "schema_version": "lfpolicy.audit.v1",
   "summary": {
     "errors": 3,
     "total": 3,

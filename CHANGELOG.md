@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.10.0
+
+- Breaking: renames the PyPI distribution, CLI, and Python import package from
+  `lfguard` / `lakeformation_guard` to `lfpolicy`.
+- Breaking: moves report schema identifiers from `lfguard.*.v1` to
+  `lfpolicy.*.v1`, renames `lfguard_version` evidence metadata to
+  `lfpolicy_version`, and moves generated `.lfguard` paths and artifact names
+  to `.lfpolicy` / `lfpolicy-*`.
+- Keeps the product advisory-only: `lfpolicy` reviews, plans, audits, and
+  explains Lake Formation permissions but does not execute AWS writes or own
+  approval orchestration.
+
 ## 0.9.2
 
 - Adds `DATA_CELLS_FILTER_MISSING_CATALOG_ID` as a hard-blocking lint finding
@@ -366,7 +378,7 @@
 
 ## 0.2.0
 
-- Adds the Python-native `lakeformation_guard.policy` authoring layer for
+- Adds the Python-native `lfguard.policy` authoring layer for
   defining LF-Tag keys, resource tag assignments, permission groups, and IAM
   role bindings.
 - Adds safe permission templates: `reader()`, `editor()`, `table_creator()`,
@@ -423,7 +435,7 @@
 - Adds `init --template` starter policies for a data-domain example or blank
   policy skeleton.
 - Ships a JSON Schema for desired/current state files.
-- Adds importable planning and audit APIs under `lakeformation_guard`.
+- Adds importable planning and audit APIs under `lfguard`.
 - Supports LF-Tag definitions, resource tag assignments, and Lake Formation grants.
 - Includes an optional boto3 adapter for live AWS inventory and execution.
 - Ships offline JSON/YAML desired-state workflows and example policy files.
