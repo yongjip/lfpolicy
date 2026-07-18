@@ -447,7 +447,7 @@ visible only where `lfpolicy` is intended to manage it:
     "unmanaged_action": "warn"
   },
   "ignore": {
-    "principals": ["IAM_ALLOWED_PRINCIPALS"],
+    "principals": ["arn:aws:iam::*:role/platform-managed-*"],
     "resources": [{"database": "legacy_*"}]
   }
 }
@@ -460,6 +460,11 @@ with that database name even when the resource kind is `table` or
 `table_with_columns`. Patterns can also use `filter_name` for
 `data_cells_filter` grants. Use `{"kind": "database", "database": "legacy_*"}`
 when the kind itself should also be constrained.
+
+`IAM_ALLOWED_PRINCIPALS` and AWS's canonical `IAM_Allowed_Principals` spelling
+are recognized as the same compatibility principal. Putting that principal in
+`ignore.principals` suppresses its migration-readiness audit evidence, so do so
+only when the compatibility scope is intentionally excluded from review.
 
 ## Policy Exceptions
 

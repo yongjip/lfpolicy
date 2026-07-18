@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
 from .advisory import audit_recommended_action, is_hard_block
-from .config import unmanaged_severity
+from .config import ignored_principal, ignored_resource, unmanaged_severity
 from .finding_catalog import audit_metadata
 from .models import CurrentState, DesiredState, Grant, ResourceRef
-from .permissions import missing_permissions
+from .permissions import is_iam_allowed_principal, missing_permissions
 from .state_index import (
     data_cells_filter_index,
     data_cells_filter_sort_key,
@@ -355,6 +355,32 @@ def _audit_grants(desired: DesiredState, current: CurrentState) -> List[AuditFin
     desired_grants = grant_index(desired.grants)
     current_grants = grant_index(current.grants)
 
+    for identity, current_grant in sorted(
+        current_grants.items(),
+        key=lambda item: _grant_sort_key(item[0]),
+    ):
+        if not is_iam_allowed_principal(current_grant.principal):
+            continue
+        if ignored_principal(desired.config, current_grant.principal) or ignored_resource(
+            desired.config,
+            current_grant.resource,
+        ):
+            continue
+        findings.append(
+            _grant_finding(
+                "IAM_ALLOWED_PRINCIPALS_PRESENT",
+                "warning",
+                current_grant,
+                "IAM compatibility principal coverage is present and needs migration-readiness review",
+                {
+                    "catalog_id": current_grant.resource.catalog_id,
+                    "permissions": list(current_grant.permissions),
+                    "grantable_permissions": list(current_grant.grantable_permissions),
+                    "evidence_kind": "iam_allowed_principals_coverage",
+                },
+            )
+        )
+
     for identity, desired_grant in sorted(desired_grants.items(), key=lambda item: _grant_sort_key(item[0])):
         current_grant = current_grants.get(identity)
         if current_grant is None:
@@ -384,6 +410,8 @@ def _audit_grants(desired: DesiredState, current: CurrentState) -> List[AuditFin
 
     for identity, current_grant in sorted(current_grants.items(), key=lambda item: _grant_sort_key(item[0])):
         if identity not in desired_grants:
+            if is_iam_allowed_principal(current_grant.principal):
+                continue
             severity = unmanaged_severity(desired.config, current_grant.principal, current_grant.resource)
             if severity:
                 findings.append(_grant_finding("GRANT_UNMANAGED", severity, current_grant, "Principal grant is not present in desired state", {

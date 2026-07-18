@@ -7,6 +7,7 @@ from fnmatch import fnmatchcase
 from typing import Iterable, Optional
 
 from .models import GuardrailConfig, ResourcePattern, ResourceRef
+from .permissions import is_iam_allowed_principal
 
 
 def lint_severity(config: GuardrailConfig, code: str, default: str) -> Optional[str]:
@@ -36,7 +37,14 @@ def unmanaged_severity(config: GuardrailConfig, principal: Optional[str], resour
 def ignored_principal(config: GuardrailConfig, principal: Optional[str]) -> bool:
     if principal is None:
         return False
-    return _matches_any(principal, config.ignore.principals)
+    if _matches_any(principal, config.ignore.principals):
+        return True
+    if is_iam_allowed_principal(principal):
+        return any(
+            is_iam_allowed_principal(pattern)
+            for pattern in config.ignore.principals
+        )
+    return False
 
 
 def ignored_resource(config: GuardrailConfig, resource: ResourceRef) -> bool:

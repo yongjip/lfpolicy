@@ -80,6 +80,7 @@ credentials.
 | <a id="grant-permissions-missing"></a>`GRANT_PERMISSIONS_MISSING` | Grant permissions missing | grant | `review_required` | false |
 | <a id="grant-permissions-unmanaged"></a>`GRANT_PERMISSIONS_UNMANAGED` | Grant permissions unmanaged | grant | `review_required` | false |
 | <a id="grant-unmanaged"></a>`GRANT_UNMANAGED` | Grant unmanaged | grant | `review_required` | false |
+| <a id="iam-allowed-principals-present"></a>`IAM_ALLOWED_PRINCIPALS_PRESENT` | IAM allowed principals coverage present | grant_governance | `review_required` | false |
 | <a id="lf-tag-expression-body-drift"></a>`LF_TAG_EXPRESSION_BODY_DRIFT` | LF-Tag expression body drift | lf_tag_expression | `review_required` | false |
 | <a id="lf-tag-expression-missing"></a>`LF_TAG_EXPRESSION_MISSING` | LF-Tag expression missing | lf_tag_expression | `review_required` | false |
 | <a id="lf-tag-expression-unmanaged"></a>`LF_TAG_EXPRESSION_UNMANAGED` | LF-Tag expression unmanaged | lf_tag_expression | `review_required` | false |
@@ -91,6 +92,16 @@ credentials.
 | <a id="resource-tag-unmanaged"></a>`RESOURCE_TAG_UNMANAGED` | Resource tag unmanaged | resource_tag | `review_required` | false |
 | <a id="resource-tag-values-missing"></a>`RESOURCE_TAG_VALUES_MISSING` | Resource tag values missing | resource_tag | `review_required` | false |
 | <a id="resource-tag-values-unmanaged"></a>`RESOURCE_TAG_VALUES_UNMANAGED` | Resource tag values unmanaged | resource_tag | `review_required` | false |
+
+`IAM_ALLOWED_PRINCIPALS_PRESENT` means the current snapshot contains Lake
+Formation compatibility coverage for the named database or table. The finding
+preserves the principal spelling, resource, catalog ID, permissions, and
+grantable permissions. It is migration-readiness evidence: consuming services
+should route it for review when moving away from hybrid/default compatibility
+access. It is not a hard block, does not prove that a particular IAM principal
+can access the resource, and never causes lfpolicy to plan an automatic revoke.
+AWS authorization, approval, and grant/revoke execution remain the consuming
+service's responsibility.
 
 ## Plan Actions
 

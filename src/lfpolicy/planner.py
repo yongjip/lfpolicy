@@ -14,7 +14,11 @@ from .models import (
     LFTagExpressionDefinition,
     ResourceRef,
 )
-from .permissions import BROAD_PERMISSION_COVERAGE, missing_permissions
+from .permissions import (
+    BROAD_PERMISSION_COVERAGE,
+    is_iam_allowed_principal,
+    missing_permissions,
+)
 from .state_index import (
     data_cells_filter_index,
     data_cells_filter_sort_key,
@@ -463,7 +467,11 @@ def _plan_grants(desired: DesiredState, current: CurrentState, options: PlanOpti
 
         extra_permissions = sorted(current_permissions - desired_permissions)
         extra_grantables = sorted(current_grantables - desired_grantables)
-        if (extra_permissions or extra_grantables) and options.allow_permission_revokes:
+        if (
+            (extra_permissions or extra_grantables)
+            and options.allow_permission_revokes
+            and not is_iam_allowed_principal(desired_grant.principal)
+        ):
             yield Change(
                 action="grant.revoke_permissions",
                 target=grant_target(desired_grant),
@@ -487,6 +495,8 @@ def _plan_grants(desired: DesiredState, current: CurrentState, options: PlanOpti
     if options.allow_permission_revokes:
         for identity, current_grant in current_grants.items():
             if identity in desired_grants:
+                continue
+            if is_iam_allowed_principal(current_grant.principal):
                 continue
             yield Change(
                 action="grant.revoke_permissions",

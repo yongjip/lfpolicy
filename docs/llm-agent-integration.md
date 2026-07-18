@@ -87,6 +87,8 @@ Examples:
 - Broad principal, `SUPER`, mutating grant, grant option, or named grant:
   usually `approval_required`.
 - Safe additive grant or drift evidence: usually `review_required`.
+- `IAM_ALLOWED_PRINCIPALS_PRESENT`: migration-readiness evidence that requires
+  review, but is not a hard block and must not trigger an automatic revoke.
 - Expired exception, duplicate identity, invalid LF-Tag reference, invalid
   permission combination, or destructive planned change: usually `block`.
 
@@ -114,6 +116,9 @@ lfpolicy explain-batch \
 Only treat an access request as allowed when the result decision is `allowed`.
 If a grant matches the principal and resource but lacks the requested
 permission, the decision remains `denied`.
+An `iam_allowed_principals` explain finding has `status: "context"` because
+lfpolicy does not model the caller's AWS IAM authorization. Do not convert that
+context finding into an `allowed` decision.
 
 ## Prompting Pattern
 

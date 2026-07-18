@@ -30,6 +30,20 @@ class AwsAdapterStubberTests(unittest.TestCase):
         self.stubber.activate()
         self.addCleanup(self.stubber.deactivate)
 
+    def stub_iam_allowed_permissions(self, resource, *, catalog_id, items=()):
+        self.stubber.add_response(
+            "list_permissions",
+            {"PrincipalResourcePermissions": list(items)},
+            {
+                "CatalogId": catalog_id,
+                "Principal": {
+                    "DataLakePrincipalIdentifier": "IAM_Allowed_Principals",
+                },
+                "Resource": resource,
+                "MaxResults": 100,
+            },
+        )
+
     def test_boto3_kwargs_for_uses_botocore_validated_request_shapes(self):
         changes = (
             Change(
@@ -293,6 +307,16 @@ class AwsAdapterStubberTests(unittest.TestCase):
                 "NextToken": "page-2",
             },
         )
+        self.stub_iam_allowed_permissions(
+            {
+                "Table": {
+                    "CatalogId": CATALOG_ID,
+                    "DatabaseName": "analytics",
+                    "Name": "orders",
+                }
+            },
+            catalog_id=CATALOG_ID,
+        )
 
         current = adapter.load_current_state_for(desired)
 
@@ -378,6 +402,16 @@ class AwsAdapterStubberTests(unittest.TestCase):
                 "MaxResults": 100,
             },
         )
+        self.stub_iam_allowed_permissions(
+            {
+                "Table": {
+                    "CatalogId": CATALOG_ID,
+                    "DatabaseName": "analytics",
+                    "Name": "orders",
+                }
+            },
+            catalog_id=CATALOG_ID,
+        )
 
         current = adapter.load_current_state_for(desired)
 
@@ -430,6 +464,16 @@ class AwsAdapterStubberTests(unittest.TestCase):
                 },
                 "ShowAssignedLFTags": True,
             },
+        )
+        self.stub_iam_allowed_permissions(
+            {
+                "Table": {
+                    "CatalogId": "222222222222",
+                    "DatabaseName": "analytics",
+                    "Name": "orders",
+                }
+            },
+            catalog_id="222222222222",
         )
 
         current = adapter.load_current_state_for(desired)
@@ -499,6 +543,16 @@ class AwsAdapterStubberTests(unittest.TestCase):
                 },
                 "ShowAssignedLFTags": True,
             },
+        )
+        self.stub_iam_allowed_permissions(
+            {
+                "Table": {
+                    "CatalogId": CATALOG_ID,
+                    "DatabaseName": "analytics",
+                    "Name": "orders",
+                }
+            },
+            catalog_id=CATALOG_ID,
         )
 
         current = adapter.load_current_state_for(desired)
@@ -825,6 +879,16 @@ class AwsAdapterStubberTests(unittest.TestCase):
                 "MaxResults": 100,
             },
         )
+        self.stub_iam_allowed_permissions(
+            {
+                "Table": {
+                    "CatalogId": "222222222222",
+                    "DatabaseName": "analytics",
+                    "Name": "orders",
+                }
+            },
+            catalog_id="222222222222",
+        )
 
         current = adapter.load_current_state_for(desired)
 
@@ -953,6 +1017,16 @@ class AwsAdapterStubberTests(unittest.TestCase):
                 "MaxResults": 100,
             },
         )
+        self.stub_iam_allowed_permissions(
+            {
+                "Table": {
+                    "CatalogId": "222222222222",
+                    "DatabaseName": "analytics",
+                    "Name": "orders",
+                }
+            },
+            catalog_id="222222222222",
+        )
 
         current = adapter.load_current_state_for(desired)
 
@@ -976,6 +1050,117 @@ class AwsAdapterStubberTests(unittest.TestCase):
                 "all_rows": True,
                 "columns": ["order_id", "status"],
             },
+        )
+        self.stubber.assert_no_pending_responses()
+
+    def test_load_current_state_discovers_iam_allowed_principals_for_desired_table(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id="111111111111")
+        desired = DesiredState.from_dict(
+            {
+                "data_cells_filters": [
+                    {
+                        "name": "orders_public",
+                        "catalog_id": "222222222222",
+                        "database": "analytics",
+                        "table": "orders",
+                        "all_rows": True,
+                    }
+                ]
+            }
+        )
+        table_resource = {
+            "Table": {
+                "CatalogId": "222222222222",
+                "DatabaseName": "analytics",
+                "Name": "orders",
+            }
+        }
+        expected_request = {
+            "CatalogId": "222222222222",
+            "Principal": {
+                "DataLakePrincipalIdentifier": "IAM_Allowed_Principals",
+            },
+            "Resource": table_resource,
+            "MaxResults": 100,
+        }
+        self.stubber.add_response(
+            "get_data_cells_filter",
+            {
+                "DataCellsFilter": {
+                    "TableCatalogId": "222222222222",
+                    "DatabaseName": "analytics",
+                    "TableName": "orders",
+                    "Name": "orders_public",
+                    "RowFilter": {"AllRowsWildcard": {}},
+                }
+            },
+            {
+                "TableCatalogId": "222222222222",
+                "DatabaseName": "analytics",
+                "TableName": "orders",
+                "Name": "orders_public",
+            },
+        )
+        self.stubber.add_response(
+            "list_permissions",
+            {
+                "PrincipalResourcePermissions": [
+                    {
+                        "Principal": {
+                            "DataLakePrincipalIdentifier": "IAM_Allowed_Principals",
+                        },
+                        "Resource": {
+                            "Table": {
+                                "DatabaseName": "analytics",
+                                "Name": "orders",
+                            }
+                        },
+                        "Permissions": ["SUPER"],
+                        "PermissionsWithGrantOption": [],
+                    }
+                ],
+                "NextToken": "page-2",
+            },
+            expected_request,
+        )
+        self.stubber.add_response(
+            "list_permissions",
+            {
+                "PrincipalResourcePermissions": [
+                    {
+                        "Principal": {
+                            "DataLakePrincipalIdentifier": "IAM_ALLOWED_PRINCIPALS",
+                        },
+                        "Resource": {
+                            "Table": {
+                                "DatabaseName": "analytics",
+                                "Name": "orders",
+                            }
+                        },
+                        "Permissions": ["DESCRIBE"],
+                        "PermissionsWithGrantOption": [],
+                    }
+                ]
+            },
+            {**expected_request, "NextToken": "page-2"},
+        )
+
+        current = adapter.load_current_state_for(desired)
+
+        self.assertEqual(
+            [grant.to_dict() for grant in current.grants],
+            [
+                {
+                    "principal": "IAM_Allowed_Principals",
+                    "resource": {
+                        "kind": "table",
+                        "catalog_id": "222222222222",
+                        "database": "analytics",
+                        "table": "orders",
+                    },
+                    "permissions": ["DESCRIBE", "SUPER"],
+                }
+            ],
         )
         self.stubber.assert_no_pending_responses()
 
@@ -1355,6 +1540,16 @@ class AwsAdapterStubberTests(unittest.TestCase):
                 "TableName": "orders",
                 "Name": "orders_public",
             },
+        )
+        self.stub_iam_allowed_permissions(
+            {
+                "Table": {
+                    "CatalogId": CATALOG_ID,
+                    "DatabaseName": "analytics",
+                    "Name": "orders",
+                }
+            },
+            catalog_id=CATALOG_ID,
         )
 
         current = adapter.load_current_state_for(desired)

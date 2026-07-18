@@ -2,10 +2,26 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Set
+from typing import FrozenSet, Iterable, Set
 
 
 BROAD_PERMISSION_COVERAGE = {"ALL", "SUPER", "SUPER_USER"}
+IAM_ALLOWED_PRINCIPAL = "IAM_Allowed_Principals"
+IAM_ALLOWED_PRINCIPAL_ALIASES: FrozenSet[str] = frozenset(
+    {"iamallowedprincipals", "iam_allowed_principals"}
+)
+
+
+def normalize_principal_identifier(principal: str) -> str:
+    """Normalize known Lake Formation special-principal spellings."""
+
+    return str(principal).strip().lower().replace(" ", "").replace("-", "_")
+
+
+def is_iam_allowed_principal(principal: str) -> bool:
+    """Return whether a principal names AWS IAM compatibility coverage."""
+
+    return normalize_principal_identifier(principal) in IAM_ALLOWED_PRINCIPAL_ALIASES
 
 
 def permission_set(permissions: Iterable[str]) -> Set[str]:

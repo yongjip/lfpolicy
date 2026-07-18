@@ -271,7 +271,7 @@ class AuditCliTests(unittest.TestCase):
             state = {
                 "grants": [
                     {
-                        "principal": "IAM_ALLOWED_PRINCIPALS",
+                        "principal": "IAM_Allowed_Principals",
                         "resource": {"kind": "database", "database": "analytics"},
                         "permissions": ["ALL"],
                     }
@@ -3499,7 +3499,7 @@ policy.group("dataconsumer", reader().where(domain="finance"))
                         "permissions": ["DESCRIBE"],
                     },
                     {
-                        "principal": "IAM_ALLOWED_PRINCIPALS",
+                        "principal": "IAM_Allowed_Principals",
                         "resource": {"kind": "database", "database": "analytics"},
                         "permissions": ["DESCRIBE"],
                     },
@@ -3528,6 +3528,93 @@ policy.group("dataconsumer", reader().where(domain="finance"))
 
         self.assertEqual([finding.details["principal"] for finding in findings], ["arn:aws:iam::111122223333:role/data-analyst"])
         self.assertEqual(findings[0].severity, "error")
+
+    def test_audit_reports_iam_allowed_principals_as_readiness_evidence(self):
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "IAM_ALLOWED_PRINCIPALS",
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "permissions": ["SUPER", "DESCRIBE"],
+                    }
+                ]
+            }
+        )
+
+        findings = audit(DesiredState.empty(), current)
+
+        self.assertEqual(
+            [finding.code for finding in findings],
+            ["IAM_ALLOWED_PRINCIPALS_PRESENT"],
+        )
+        payload = findings[0].to_dict()
+        self.assertEqual(payload["severity"], "warning")
+        self.assertEqual(payload["recommended_action"], "review_required")
+        self.assertFalse(payload["hard_block"])
+        self.assertEqual(payload["principal"], "IAM_ALLOWED_PRINCIPALS")
+        self.assertEqual(payload["resource"]["catalog_id"], "222222222222")
+        self.assertEqual(payload["details"]["permissions"], ["DESCRIBE", "SUPER"])
+        self.assertEqual(
+            payload["details"]["evidence_kind"],
+            "iam_allowed_principals_coverage",
+        )
+
+    def test_cli_review_reports_iam_allowed_principals_without_blocking(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            desired_path = tmp_path / "desired.json"
+            current_path = tmp_path / "current.json"
+            review_dir = tmp_path / "review"
+            desired_path.write_text("{}", encoding="utf-8")
+            current_path.write_text(
+                json.dumps(
+                    {
+                        "grants": [
+                            {
+                                "principal": "IAM_Allowed_Principals",
+                                "resource": {
+                                    "kind": "database",
+                                    "catalog_id": "222222222222",
+                                    "database": "analytics",
+                                },
+                                "permissions": ["SUPER"],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                exit_code = main(
+                    [
+                        "review",
+                        "--desired",
+                        str(desired_path),
+                        "--current-snapshot",
+                        str(current_path),
+                        "--output-dir",
+                        str(review_dir),
+                    ]
+                )
+
+            summary = json.loads((review_dir / "summary.json").read_text(encoding="utf-8"))
+            audit_payload = json.loads((review_dir / "audit.json").read_text(encoding="utf-8"))
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(summary["status"], "review_required")
+            self.assertEqual(summary["recommended_action"], "review_required")
+            self.assertFalse(summary["hard_block"])
+            self.assertEqual(summary["blocking_reasons"], [])
+            self.assertEqual(
+                [finding["code"] for finding in audit_payload["findings"]],
+                ["IAM_ALLOWED_PRINCIPALS_PRESENT"],
+            )
 
     def test_audit_managed_principal_boundary_does_not_hide_resource_drift(self):
         desired = DesiredState.from_dict(

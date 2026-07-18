@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
 from .models import CurrentState, DataCellsFilterDefinition, DesiredState, Grant, LFTagValue, ResourceRef
-from .permissions import missing_permissions
+from .permissions import is_iam_allowed_principal, missing_permissions
 from .state_index import (
     DataCellsFilterKey,
     LFTagExpressionKey,
@@ -177,6 +177,43 @@ def explain(
         if relevance is None:
             continue
         findings.append(_finding_for_current_grant(grant, relevance, requested_permissions, data_cells_filters))
+
+    if not is_iam_allowed_principal(principal):
+        for grant in current.grants:
+            if not is_iam_allowed_principal(grant.principal):
+                continue
+            relevance = _grant_relevance(
+                grant.resource,
+                resource,
+                effective_lf_tags_by_catalog,
+                expression_index,
+            )
+            if relevance is None or relevance.status == "not_matched":
+                continue
+            missing_permission_names = sorted(
+                missing_permissions(requested_permissions, grant.permissions)
+            )
+            findings.append(
+                ExplainFinding(
+                    source="iam_allowed_principals",
+                    status="context",
+                    message=(
+                        "IAM_ALLOWED_PRINCIPALS compatibility coverage is present. "
+                        "AWS IAM authorization is not modeled, so this evidence does not prove access."
+                    ),
+                    permissions=grant.permissions,
+                    grantable_permissions=grant.grantable_permissions,
+                    resource=grant.resource,
+                    details={
+                        "principal": grant.principal,
+                        "catalog_id": grant.resource.catalog_id,
+                        "requested_permissions": list(requested_permissions),
+                        "missing_lake_formation_permissions": missing_permission_names,
+                        "aws_iam_authorization_modeled": False,
+                        **dict(relevance.details),
+                    },
+                )
+            )
 
     for grant in desired.grants:
         if grant.principal != principal:

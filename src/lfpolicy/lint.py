@@ -9,7 +9,7 @@ from .advisory import is_hard_block, lint_recommended_action
 from .config import lint_exception_applies, lint_severity
 from .finding_catalog import lint_metadata
 from .models import DesiredState, Grant, GuardrailConfig, PolicyException, ResourceTagAssignment
-from .permissions import BROAD_PERMISSION_COVERAGE
+from .permissions import BROAD_PERMISSION_COVERAGE, normalize_principal_identifier
 from .state_index import (
     DataCellsFilterKey,
     LFTagExpressionKey,
@@ -641,7 +641,7 @@ def _lint_grant_governance(
 ) -> List[LintFinding]:
     findings: List[LintFinding] = []
     target = _grant_target(grant)
-    principal = _normalize_principal(grant.principal)
+    principal = normalize_principal_identifier(grant.principal)
     if principal in BROAD_PRINCIPALS:
         _append_governance_finding(
             findings,
@@ -944,10 +944,6 @@ def _tag_assignment_scopes_for_key(
 
 def _case_sensitive_values(values: Tuple[str, ...]) -> Tuple[str, ...]:
     return tuple(value for value in values if value != value.lower())
-
-
-def _normalize_principal(principal: str) -> str:
-    return principal.strip().lower().replace(" ", "").replace("-", "_")
 
 
 def _grant_target(grant: Grant) -> str:

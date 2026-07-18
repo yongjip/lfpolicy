@@ -279,6 +279,45 @@ class ProviderExplainTests(unittest.TestCase):
             self.assertEqual(expired_provider.load_current_state_for(desired), CurrentState.empty())
             self.assertEqual(len(expired_upstream.calls), 1)
 
+    def test_explain_reports_iam_allowed_principals_as_non_decisive_context(self):
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "IAM_ALLOWED_PRINCIPALS",
+                        "resource": {
+                            "kind": "table",
+                            "catalog_id": "222222222222",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "permissions": ["SUPER"],
+                    }
+                ]
+            }
+        )
+
+        report = explain(
+            DesiredState.empty(),
+            current,
+            principal="arn:aws:iam::222222222222:role/Analyst",
+            resource=ResourceRef(
+                kind="table",
+                catalog_id="222222222222",
+                database_name="analytics",
+                table_name="orders",
+            ),
+            permissions=("SELECT",),
+        )
+
+        self.assertEqual(report.summary()["matched"], 0)
+        self.assertEqual(report.summary()["context"], 1)
+        finding = report.findings[0]
+        self.assertEqual(finding.source, "iam_allowed_principals")
+        self.assertEqual(finding.status, "context")
+        self.assertFalse(finding.details["aws_iam_authorization_modeled"])
+        self.assertEqual(finding.details["missing_lake_formation_permissions"], [])
+
     def test_explain_reports_direct_table_grant_and_effective_tags(self):
         desired = DesiredState.empty()
         current = CurrentState.from_dict(

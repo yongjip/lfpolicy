@@ -89,8 +89,11 @@ validation workflows do not need the `aws` extra.
 
 The adapter scopes live inventory from desired state. It reads only the LF-Tags,
 named LF-Tag expressions, data cells filters, resources, and grants needed for
-the requested comparison, then returns a normal `CurrentState` object to the
-same audit and planner code used by offline workflows. The separate import path
+the requested comparison. It also reads `IAM_Allowed_Principals` coverage for
+explicitly named desired databases and tables so the same ordinary `Grant`
+model can produce migration-readiness evidence. It then returns a normal
+`CurrentState` object to the same audit and planner code used by offline
+workflows. The separate import path
 can scaffold a starter desired-state file from live LF-Tags, named LF-Tag
 expressions, data cells filters discovered through imported grants, grants, and
 resource tags discovered through imported grants.

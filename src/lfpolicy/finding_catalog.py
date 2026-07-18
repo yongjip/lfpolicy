@@ -76,6 +76,7 @@ AUDIT_FINDINGS: Mapping[str, Mapping[str, Any]] = {
     "GRANT_PERMISSIONS_MISSING": _entry("GRANT_PERMISSIONS_MISSING", "Grant permissions missing", "grant", ACTION_REVIEW_REQUIRED),
     "GRANT_PERMISSIONS_UNMANAGED": _entry("GRANT_PERMISSIONS_UNMANAGED", "Grant permissions unmanaged", "grant", ACTION_REVIEW_REQUIRED),
     "GRANT_UNMANAGED": _entry("GRANT_UNMANAGED", "Grant unmanaged", "grant", ACTION_REVIEW_REQUIRED),
+    "IAM_ALLOWED_PRINCIPALS_PRESENT": _entry("IAM_ALLOWED_PRINCIPALS_PRESENT", "IAM allowed principals coverage present", "grant_governance", ACTION_REVIEW_REQUIRED),
     "LF_TAG_EXPRESSION_BODY_DRIFT": _entry("LF_TAG_EXPRESSION_BODY_DRIFT", "LF-Tag expression body drift", "lf_tag_expression", ACTION_REVIEW_REQUIRED),
     "LF_TAG_EXPRESSION_MISSING": _entry("LF_TAG_EXPRESSION_MISSING", "LF-Tag expression missing", "lf_tag_expression", ACTION_REVIEW_REQUIRED),
     "LF_TAG_EXPRESSION_UNMANAGED": _entry("LF_TAG_EXPRESSION_UNMANAGED", "LF-Tag expression unmanaged", "lf_tag_expression", ACTION_REVIEW_REQUIRED),

@@ -15,10 +15,12 @@ from .models import (
     ResourceRef,
     ResourceTagAssignment,
 )
+from .permissions import IAM_ALLOWED_PRINCIPAL, is_iam_allowed_principal
 from .state_index import (
     data_cells_filter_definition_key,
     data_cells_filter_resource_key,
     data_cells_filter_sort_key,
+    grant_index,
     lf_tag_expression_definition_key,
     lf_tag_expression_key,
     lf_tag_expression_sort_key,
@@ -59,6 +61,8 @@ class AWSLakeFormationAdapter:
         data_cells_filters = list(self._load_data_cells_filters(desired))
         resource_tags = list(self._load_resource_tags(desired))
         grants = list(self._load_grants(desired))
+        grants.extend(self._load_iam_allowed_principal_grants(desired))
+        grants = sorted(grant_index(grants).values())
         return CurrentState(
             lf_tags=tuple(lf_tags),
             lf_tag_expressions=tuple(lf_tag_expressions),
@@ -318,6 +322,71 @@ class AWSLakeFormationAdapter:
                 if permissions:
                     yield Grant(principal=principal, resource=resource, permissions=permissions, grantable_permissions=grantables)
 
+    def _load_iam_allowed_principal_grants(
+        self,
+        desired: DesiredState,
+    ) -> Iterable[Grant]:
+        for resource in _iam_allowed_principal_resources(desired, self.catalog_id):
+            kwargs = self._with_catalog_id(
+                {
+                    "catalog_id": resource.catalog_id,
+                    "Principal": {
+                        "DataLakePrincipalIdentifier": IAM_ALLOWED_PRINCIPAL,
+                    },
+                    "Resource": to_lf_resource(resource),
+                    "MaxResults": 100,
+                }
+            )
+            for item in self._list_permissions_for_iam_allowed_principal(
+                kwargs,
+                resource,
+            ):
+                grant = _grant_from_permission_item(
+                    item,
+                    fallback_catalog_id=resource.catalog_id,
+                )
+                if grant and is_iam_allowed_principal(grant.principal):
+                    yield Grant(
+                        principal=IAM_ALLOWED_PRINCIPAL,
+                        resource=grant.resource,
+                        permissions=grant.permissions,
+                        grantable_permissions=grant.grantable_permissions,
+                    )
+
+    def _list_permissions_for_iam_allowed_principal(
+        self,
+        kwargs: Mapping[str, Any],
+        resource: ResourceRef,
+    ) -> Iterable[Mapping[str, Any]]:
+        try:
+            yield from self._list_permissions(kwargs)
+            return
+        except Exception as exc:
+            if not _is_access_denied(exc):
+                raise
+            original_error = exc
+        fallback = self._with_catalog_id(
+            {
+                "catalog_id": resource.catalog_id,
+                "MaxResults": 100,
+            }
+        )
+        try:
+            for item in self._list_permissions(fallback):
+                grant = _grant_from_permission_item(
+                    item,
+                    fallback_catalog_id=resource.catalog_id,
+                )
+                if not grant or not is_iam_allowed_principal(grant.principal):
+                    continue
+                if _iam_allowed_principal_resource(grant.resource) == resource:
+                    yield item
+            return
+        except Exception as fallback_error:
+            if not _is_access_denied(fallback_error):
+                raise
+        raise original_error
+
     def _list_permissions_for_grant(
         self,
         kwargs: Mapping[str, Any],
@@ -473,6 +542,45 @@ def to_lf_resource(resource: ResourceRef) -> Dict[str, Any]:
             "LFTagExpression": _catalog_scoped({"Name": resource.expression_name}, resource)
         }
     raise ValueError("Unsupported resource kind: {}".format(resource.kind))
+
+
+def _iam_allowed_principal_resources(
+    desired: DesiredState,
+    fallback_catalog_id: Optional[str],
+) -> Tuple[ResourceRef, ...]:
+    candidates = [assignment.resource for assignment in desired.resource_tags]
+    candidates.extend(grant.resource for grant in desired.grants)
+    candidates.extend(definition.resource for definition in desired.data_cells_filters)
+    resources = {
+        readiness_resource
+        for candidate in candidates
+        for readiness_resource in (
+            _iam_allowed_principal_resource(candidate, fallback_catalog_id),
+        )
+        if readiness_resource is not None
+    }
+    return tuple(sorted(resources, key=lambda item: item.identity))
+
+
+def _iam_allowed_principal_resource(
+    resource: ResourceRef,
+    fallback_catalog_id: Optional[str] = None,
+) -> Optional[ResourceRef]:
+    catalog_id = resource.catalog_id or fallback_catalog_id
+    if resource.kind == "database":
+        return ResourceRef(
+            kind="database",
+            database_name=resource.database_name,
+            catalog_id=catalog_id,
+        )
+    if resource.kind in {"table", "table_with_columns", "data_cells_filter"}:
+        return ResourceRef(
+            kind="table",
+            database_name=resource.database_name,
+            table_name=resource.table_name,
+            catalog_id=catalog_id,
+        )
+    return None
 
 
 def from_lf_resource(

@@ -32,10 +32,17 @@ It does not perform full account-wide catalog discovery.
 | Read named LF-Tag expressions named in desired state or grants | `get_lf_tag_expression` | `lakeformation:GetLFTagExpression` |
 | Read data cells filters named in desired state or grants | `get_data_cells_filter` | `lakeformation:GetDataCellsFilter` |
 | Read LF-Tag assignments for desired resources and grant resources | `get_resource_lf_tags` | `lakeformation:GetResourceLFTags` |
-| Read permissions for desired principal/resource pairs | `list_permissions` | `lakeformation:ListPermissions` |
+| Read permissions for desired principal/resource pairs and IAM compatibility coverage on explicit database/table resources | `list_permissions` | `lakeformation:ListPermissions` |
 
 `list_permissions` uses a paginator when the installed boto3 client exposes one
 and falls back to manual `NextToken` paging otherwise.
+
+For each explicitly desired database or table, live inventory also makes a
+principal/resource-scoped `list_permissions` request for AWS's canonical
+`IAM_Allowed_Principals` identifier. Table-with-columns and data cells filter
+resources are reduced to their explicitly named table for this read. Results
+remain ordinary `Grant` records in `CurrentState`; no duplicate state field or
+account-wide database/table crawl is introduced.
 
 Library consumers can make the same bounded read for one explicit table with
 `AWSLakeFormationAdapter.list_data_cells_filters(database_name, table_name,

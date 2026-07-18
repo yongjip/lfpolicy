@@ -5,6 +5,9 @@
 - Adds a bounded read-only
   `AWSLakeFormationAdapter.list_data_cells_filters()` helper for listing
   deterministic modeled filters on one explicitly named table.
+- Adds desired-scoped live discovery and non-blocking audit/explain readiness
+  evidence for `IAM_Allowed_Principals` compatibility coverage, while excluding
+  that principal from automatic revoke plans.
 
 ## 0.10.0
 

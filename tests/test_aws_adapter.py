@@ -458,7 +458,12 @@ class AwsAdapterTests(unittest.TestCase):
         self.assertEqual(len(current.resource_tags), 2)
         self.assertEqual(
             [name for name, _ in client.calls],
-            ["get_resource_lf_tags", "get_resource_lf_tags"],
+            [
+                "get_resource_lf_tags",
+                "get_resource_lf_tags",
+                "list_permissions",
+                "list_permissions",
+            ],
         )
 
 if __name__ == "__main__":

@@ -45,11 +45,14 @@ Start with ownership boundaries before failing on every unmanaged current grant:
     "unmanaged_action": "warn"
   },
   "ignore": {
-    "principals": ["IAM_ALLOWED_PRINCIPALS"],
+    "principals": ["arn:aws:iam::*:role/platform-managed-*"],
     "resources": [{"database": "legacy_*"}]
   }
 }
 ```
+
+Keep `IAM_ALLOWED_PRINCIPALS` out of the ignore list when the adoption review
+needs migration-readiness evidence for hybrid/default compatibility access.
 
 Then run audit from a scoped snapshot:
 

@@ -50,6 +50,8 @@ These requests usually belong in `lfpolicy`:
   more robust without changing the product boundary.
 - Narrow boto3 adapter coverage expansions for already modeled Lake Formation
   read operations.
+- Derived advisory readiness findings over ordinary current-state grants, such
+  as `IAM_ALLOWED_PRINCIPALS` coverage on explicitly scoped resources.
 - Pure, stateless request-shape marshalling for already planned changes, when
   no boto3 client is constructed and no request is sent.
 - Documentation for multi-catalog usage, cache scoping, and provider context.

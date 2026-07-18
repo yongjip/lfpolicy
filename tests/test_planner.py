@@ -97,6 +97,31 @@ class PlannerTests(unittest.TestCase):
 
         self.assertEqual(change_plan.changes, ())
 
+    def test_plan_never_proposes_iam_allowed_principals_revocation(self):
+        current = CurrentState.from_dict(
+            {
+                "grants": [
+                    {
+                        "principal": "IAM_ALLOWED_PRINCIPALS",
+                        "resource": {
+                            "kind": "table",
+                            "database": "analytics",
+                            "table": "orders",
+                        },
+                        "permissions": ["SUPER"],
+                    }
+                ]
+            }
+        )
+
+        change_plan = plan(
+            DesiredState.empty(),
+            current,
+            PlanOptions(allow_permission_revokes=True),
+        )
+
+        self.assertEqual(change_plan.changes, ())
+
     def test_plan_lf_tag_delete_requires_explicit_flag_and_runs_last(self):
         desired = DesiredState.from_dict({"lf_tags": {"sensitivity": ["internal"]}})
         current = CurrentState.from_dict(
