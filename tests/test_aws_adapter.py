@@ -165,6 +165,50 @@ class AwsAdapterTests(unittest.TestCase):
     def test_adapter_does_not_reintroduce_apply_execution_api(self):
         self.assertFalse(hasattr(AWSLakeFormationAdapter, "apply"))
 
+    def test_list_data_cells_filters_falls_back_to_manual_next_token_paging(self):
+        class Client:
+            def __init__(self):
+                self.calls = []
+
+            def list_data_cells_filter(self, **kwargs):
+                self.calls.append(kwargs)
+                if kwargs.get("NextToken") == "page-2":
+                    return {
+                        "DataCellsFilters": [
+                            {
+                                "TableCatalogId": "222222222222",
+                                "DatabaseName": "analytics",
+                                "TableName": "orders",
+                                "Name": "orders_a",
+                            }
+                        ]
+                    }
+                return {
+                    "DataCellsFilters": [
+                        {
+                            "TableCatalogId": "222222222222",
+                            "DatabaseName": "analytics",
+                            "TableName": "orders",
+                            "Name": "orders_z",
+                        }
+                    ],
+                    "NextToken": "page-2",
+                }
+
+        client = Client()
+        adapter = AWSLakeFormationAdapter(client, catalog_id="222222222222")
+
+        filters = adapter.list_data_cells_filters("analytics", "orders")
+
+        self.assertEqual([definition.name for definition in filters], ["orders_a", "orders_z"])
+        self.assertEqual(client.calls[1]["NextToken"], "page-2")
+
+    def test_list_data_cells_filters_requires_one_explicit_table(self):
+        adapter = AWSLakeFormationAdapter(object())
+
+        with self.assertRaisesRegex(ValueError, "table resources require database and table"):
+            adapter.list_data_cells_filters("analytics", "")
+
     def test_lf_tag_policy_resource_conversion(self):
         resource = ResourceRef.from_dict(
             {

@@ -31,7 +31,9 @@ Choose the smallest integration that solves the problem:
 3. Scoped live AWS helpers:
    use `lfpolicy.aws.AWSLakeFormationAdapter` only when a caller
    explicitly needs read-only live inventory or import helpers and accepts that
-   this is not the primary service integration contract.
+   this is not the primary service integration contract. For example,
+   `list_data_cells_filters(database_name, table_name, catalog_id=...)` lists
+   modeled filters for one explicitly named table without crawling the catalog.
 4. Request-shaped plan evidence:
    use `lfpolicy.aws.boto3_kwargs_for(change)` only to marshal an
    already reviewed planned `Change` into inert `{method, kwargs}` data. The

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Adds a bounded read-only
+  `AWSLakeFormationAdapter.list_data_cells_filters()` helper for listing
+  deterministic modeled filters on one explicitly named table.
+
 ## 0.10.0
 
 - Breaking: renames the PyPI distribution, CLI, and Python import package from

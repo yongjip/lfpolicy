@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Mapping, Optional
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from .aws_requests import boto3_kwargs_for
 from .models import (
@@ -65,6 +65,30 @@ class AWSLakeFormationAdapter:
             data_cells_filters=tuple(data_cells_filters),
             resource_tags=tuple(resource_tags),
             grants=tuple(grants),
+        )
+
+    def list_data_cells_filters(
+        self,
+        database_name: str,
+        table_name: str,
+        *,
+        catalog_id: Optional[str] = None,
+    ) -> Tuple[DataCellsFilterDefinition, ...]:
+        """List modeled data cells filters for exactly one table."""
+
+        resource = ResourceRef(
+            kind="table",
+            database_name=database_name,
+            table_name=table_name,
+            catalog_id=catalog_id or self.catalog_id,
+        )
+        return tuple(
+            sorted(
+                self._list_data_cells_filters_for_table(resource),
+                key=lambda definition: data_cells_filter_sort_key(
+                    data_cells_filter_definition_key(definition)
+                ),
+            )
         )
 
     def import_state(self, *, include: Iterable[str]) -> CurrentState:
@@ -236,20 +260,35 @@ class AWSLakeFormationAdapter:
                     )
                 )
         for resource in sorted(table_resources, key=lambda item: item.identity):
-            table = {
-                "DatabaseName": resource.database_name,
-                "Name": resource.table_name,
-            }
-            if resource.catalog_id or self.catalog_id:
-                table["CatalogId"] = resource.catalog_id or self.catalog_id
-            request = {"Table": {key: value for key, value in table.items() if value not in (None, "")}, "MaxResults": 100}
-            for item in self._paginate_or_call("list_data_cells_filter", request, "DataCellsFilters"):
-                definition = _data_cells_filter_definition_from_response(
-                    item,
-                    fallback_catalog_id=resource.catalog_id or self.catalog_id,
-                )
-                if definition:
-                    yield definition
+            yield from self._list_data_cells_filters_for_table(resource)
+
+    def _list_data_cells_filters_for_table(
+        self,
+        resource: ResourceRef,
+    ) -> Iterable[DataCellsFilterDefinition]:
+        table = {
+            "DatabaseName": resource.database_name,
+            "Name": resource.table_name,
+        }
+        if resource.catalog_id or self.catalog_id:
+            table["CatalogId"] = resource.catalog_id or self.catalog_id
+        request = {
+            "Table": {
+                key: value for key, value in table.items() if value not in (None, "")
+            },
+            "MaxResults": 100,
+        }
+        for item in self._paginate_or_call(
+            "list_data_cells_filter",
+            request,
+            "DataCellsFilters",
+        ):
+            definition = _data_cells_filter_definition_from_response(
+                item,
+                fallback_catalog_id=resource.catalog_id or self.catalog_id,
+            )
+            if definition:
+                yield definition
 
     def _load_grants(self, desired: DesiredState) -> Iterable[Grant]:
         seen = set()

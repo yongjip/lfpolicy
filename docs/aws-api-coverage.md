@@ -37,6 +37,12 @@ It does not perform full account-wide catalog discovery.
 `list_permissions` uses a paginator when the installed boto3 client exposes one
 and falls back to manual `NextToken` paging otherwise.
 
+Library consumers can make the same bounded read for one explicit table with
+`AWSLakeFormationAdapter.list_data_cells_filters(database_name, table_name,
+catalog_id=...)`. The explicit `catalog_id` takes precedence over the adapter
+default. The helper returns a deterministic tuple of modeled definitions and
+does not discover databases or tables.
+
 ## Live Import
 
 `lfpolicy import` performs starter desired-state scaffolding from live AWS state.

@@ -1045,6 +1045,100 @@ class AwsAdapterStubberTests(unittest.TestCase):
         )
         self.stubber.assert_no_pending_responses()
 
+    def test_list_data_cells_filters_scopes_one_table_paginates_and_sorts(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id=CATALOG_ID)
+        explicit_catalog_id = "222222222222"
+        request = {
+            "Table": {
+                "CatalogId": explicit_catalog_id,
+                "DatabaseName": "analytics",
+                "Name": "orders",
+            },
+            "MaxResults": 100,
+        }
+        self.stubber.add_response(
+            "list_data_cells_filter",
+            {
+                "DataCellsFilters": [
+                    {
+                        "TableCatalogId": explicit_catalog_id,
+                        "DatabaseName": "analytics",
+                        "TableName": "orders",
+                        "Name": "orders_restricted",
+                        "RowFilter": {"FilterExpression": "region = 'KR'"},
+                        "ColumnNames": ["order_id"],
+                    }
+                ],
+                "NextToken": "page-2",
+            },
+            request,
+        )
+        self.stubber.add_response(
+            "list_data_cells_filter",
+            {
+                "DataCellsFilters": [
+                    {
+                        "TableCatalogId": explicit_catalog_id,
+                        "DatabaseName": "analytics",
+                        "TableName": "orders",
+                        "Name": "orders_all",
+                        "RowFilter": {"AllRowsWildcard": {}},
+                        "ColumnWildcard": {"ExcludedColumnNames": ["notes"]},
+                    }
+                ]
+            },
+            {**request, "NextToken": "page-2"},
+        )
+
+        filters = adapter.list_data_cells_filters(
+            "analytics",
+            "orders",
+            catalog_id=explicit_catalog_id,
+        )
+
+        self.assertEqual(
+            [definition.to_dict() for definition in filters],
+            [
+                {
+                    "name": "orders_all",
+                    "catalog_id": explicit_catalog_id,
+                    "database": "analytics",
+                    "table": "orders",
+                    "all_rows": True,
+                    "excluded_columns": ["notes"],
+                },
+                {
+                    "name": "orders_restricted",
+                    "catalog_id": explicit_catalog_id,
+                    "database": "analytics",
+                    "table": "orders",
+                    "row_filter": "region = 'KR'",
+                    "columns": ["order_id"],
+                },
+            ],
+        )
+        self.stubber.assert_no_pending_responses()
+
+    def test_list_data_cells_filters_uses_adapter_catalog_id(self):
+        adapter = AWSLakeFormationAdapter(self.client, catalog_id=CATALOG_ID)
+        self.stubber.add_response(
+            "list_data_cells_filter",
+            {"DataCellsFilters": []},
+            {
+                "Table": {
+                    "CatalogId": CATALOG_ID,
+                    "DatabaseName": "analytics",
+                    "Name": "orders",
+                },
+                "MaxResults": 100,
+            },
+        )
+
+        filters = adapter.list_data_cells_filters("analytics", "orders")
+
+        self.assertEqual(filters, ())
+        self.stubber.assert_no_pending_responses()
+
     def test_import_grants_preserves_table_with_columns_column_wildcard(self):
         adapter = AWSLakeFormationAdapter(self.client, catalog_id=CATALOG_ID)
 
