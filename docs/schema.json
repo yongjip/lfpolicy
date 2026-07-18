@@ -860,7 +860,7 @@
       ]
     }
   },
-  "$id": "https://raw.githubusercontent.com/yongjip/aws-datalake-guard/main/docs/schema.json",
+  "$id": "https://raw.githubusercontent.com/yongjip/lfpolicy/main/docs/schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Desired or current AWS Lake Formation LF-Tag guardrail state.",

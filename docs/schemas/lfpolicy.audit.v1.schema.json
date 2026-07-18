@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/yongjip/aws-datalake-guard/docs/schemas/lfpolicy.audit.v1.schema.json",
+  "$id": "https://github.com/yongjip/lfpolicy/docs/schemas/lfpolicy.audit.v1.schema.json",
   "title": "lfpolicy audit report v1",
   "type": "object",
   "required": ["schema_version", "summary", "findings"],

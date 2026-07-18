@@ -120,7 +120,7 @@ evidence, not full effective-access decisions:
       "recommended_action": "review_required",
       "hard_block": false,
       "docs_anchor": "grant-add-permissions",
-      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#grant-add-permissions",
+      "docs_url": "https://github.com/yongjip/lfpolicy/blob/main/docs/finding-catalog.md#grant-add-permissions",
       "principal": "arn:aws:iam::111122223333:role/Analyst",
       "resource": {
         "kind": "lf_tag_policy",
@@ -554,7 +554,7 @@ changes:
       "recommended_action": "review_required",
       "hard_block": false,
       "docs_anchor": "lf-tag-add-values",
-      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#lf-tag-add-values",
+      "docs_url": "https://github.com/yongjip/lfpolicy/blob/main/docs/finding-catalog.md#lf-tag-add-values",
       "principal": null,
       "resource": null,
       "before": {

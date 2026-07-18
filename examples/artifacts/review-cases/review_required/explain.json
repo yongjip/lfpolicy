@@ -21,7 +21,7 @@
       "before": null,
       "change_id": "change_001",
       "docs_anchor": "grant-add-permissions",
-      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#grant-add-permissions",
+      "docs_url": "https://github.com/yongjip/lfpolicy/blob/main/docs/finding-catalog.md#grant-add-permissions",
       "grantable_permissions": [],
       "hard_block": false,
       "principal": "arn:aws:iam::111122223333:role/Analyst",

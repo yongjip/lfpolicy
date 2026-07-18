@@ -19,7 +19,7 @@
         }
       },
       "docs_anchor": "grant-missing",
-      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#grant-missing",
+      "docs_url": "https://github.com/yongjip/lfpolicy/blob/main/docs/finding-catalog.md#grant-missing",
       "hard_block": false,
       "id": "finding_001",
       "message": "Principal grant is missing",
