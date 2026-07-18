@@ -1,6 +1,6 @@
 # State File Format
 
-`lfguard` desired-state and current-snapshot files use the same JSON/YAML shape.
+`lfpolicy` desired-state and current-snapshot files use the same JSON/YAML shape.
 Desired files describe what should exist; current snapshots describe what exists
 now.
 
@@ -156,7 +156,7 @@ evidence, but they are treated as provider metadata rather than policy drift.
 ## LF-Tag Key Metadata
 
 Generated policy files may include `lf_tag_key_metadata`. This section is not
-read from AWS; it records where a tag key may be assigned so `lfguard` can tell
+read from AWS; it records where a tag key may be assigned so `lfpolicy` can tell
 whether an LF-Tag table policy might narrow access to matching columns.
 
 ```json
@@ -214,7 +214,7 @@ assignments to one lower-case value per key. Use multiple values only in
 
 Supported resource kinds are shown below. `catalog_id` is optional for each
 resource kind when you need to target a specific Glue Data Catalog. LF-Tag
-assignments are valid on databases, tables, and columns; `lfguard` lints
+assignments are valid on databases, tables, and columns; `lfpolicy` lints
 resource tag assignments on other resource kinds as errors.
 
 ### Catalog
@@ -286,7 +286,7 @@ columns except a denied subset:
 
 Data cells filter resources are used for grants on existing Lake Formation row
 and column filters. `catalog_id` maps to the filter's `TableCatalogId` and must
-be explicit because lfguard does not infer it from runtime AWS credentials.
+be explicit because lfpolicy does not infer it from runtime AWS credentials.
 
 ```json
 {
@@ -437,7 +437,7 @@ environment needs gradual cleanup:
 ```
 
 Use ownership boundaries and ignore rules to keep unmanaged current-state drift
-visible only where `lfguard` is intended to manage it:
+visible only where `lfpolicy` is intended to manage it:
 
 ```json
 {
@@ -510,7 +510,7 @@ than exception-controlled policy choices.
 
 ## Normalization
 
-`lfguard` normalizes state files before auditing or planning:
+`lfpolicy` normalizes state files before auditing or planning:
 
 - resource kinds are lowercased and hyphen-insensitive, so `table-with-columns`
   is read as `table_with_columns`;
@@ -523,11 +523,11 @@ than exception-controlled policy choices.
 Run this before CI drift checks:
 
 ```bash
-lfguard validate --desired policy/desired.json
+lfpolicy validate --desired policy/desired.json
 ```
 
 For editor integration, export the JSON Schema:
 
 ```bash
-lfguard schema --output-file policy/lfguard.schema.json
+lfpolicy schema --output-file policy/lfpolicy.schema.json
 ```

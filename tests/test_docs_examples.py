@@ -3,8 +3,8 @@ import re
 import unittest
 from pathlib import Path
 
-from lakeformation_guard import DesiredState, Grant, ResourceRef, __version__, lint_desired
-from lakeformation_guard.policy import load_policy
+from lfpolicy import DesiredState, Grant, ResourceRef, __version__, lint_desired
+from lfpolicy.policy import load_policy
 
 
 class DocumentationExampleTests(unittest.TestCase):
@@ -73,7 +73,7 @@ class DocumentationExampleTests(unittest.TestCase):
         for docs_path in active_paths:
             text = docs_path.read_text(encoding="utf-8")
             self.assertNotIn(
-                "lfguard apply",
+                "lfpolicy apply",
                 text,
                 "{} documents removed apply command".format(docs_path.relative_to(root)),
             )
@@ -91,7 +91,7 @@ class DocumentationExampleTests(unittest.TestCase):
     def test_aws_api_coverage_mentions_adapter_methods(self):
         root = Path(__file__).resolve().parents[1]
         docs_text = (root / "docs" / "aws-api-coverage.md").read_text(encoding="utf-8")
-        source_text = (root / "src" / "lakeformation_guard" / "aws.py").read_text(encoding="utf-8")
+        source_text = (root / "src" / "lfpolicy" / "aws.py").read_text(encoding="utf-8")
         methods = (
             "get_lf_tag",
             "get_lf_tag_expression",
@@ -149,14 +149,14 @@ class DocumentationExampleTests(unittest.TestCase):
         for expected in (
             "security-events: write",
             "github/codeql-action/upload-sarif@v3",
-            "artifacts/lfguard-lint.sarif",
-            "artifacts/lfguard-audit.sarif",
-            "artifacts/lfguard-check.md",
-            "lfguard check",
-            "lfguard generate policy.py --output-file policy/desired.json --check",
+            "artifacts/lfpolicy-lint.sarif",
+            "artifacts/lfpolicy-audit.sarif",
+            "artifacts/lfpolicy-check.md",
+            "lfpolicy check",
+            "lfpolicy generate policy.py --output-file policy/desired.json --check",
             "--desired policy/desired.json",
-            "category: lfguard-lint",
-            "category: lfguard-audit",
+            "category: lfpolicy-lint",
+            "category: lfpolicy-audit",
         ):
             self.assertIn(expected, workflow_text)
         self.assertNotIn("policy/desired.yaml", workflow_text)
@@ -168,9 +168,9 @@ class DocumentationExampleTests(unittest.TestCase):
         )
 
         for expected in (
-            'python -m pip install "lfguard[aws]"',
-            "lfguard doctor --require aws",
-            "lfguard generate policy.py --output-file policy/desired.json --check",
+            'python -m pip install "lfpolicy[aws]"',
+            "lfpolicy doctor --require aws",
+            "lfpolicy generate policy.py --output-file policy/desired.json --check",
             "mkdir -p artifacts snapshots",
             "--desired policy/desired.json",
         ):
@@ -184,8 +184,8 @@ class DocumentationExampleTests(unittest.TestCase):
         )
 
         for expected in (
-            "lfguard generate policy.py --output-file policy/desired.json --force",
-            "lfguard check --desired policy/desired.json --fail-on-findings",
+            "lfpolicy generate policy.py --output-file policy/desired.json --force",
+            "lfpolicy check --desired policy/desired.json --fail-on-findings",
             "policy\\.py",
         ):
             self.assertIn(expected, hook_text)
@@ -264,15 +264,15 @@ class DocumentationExampleTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         artifacts = root / "examples" / "artifacts"
 
-        audit = json.loads((artifacts / "lfguard-audit.json").read_text(encoding="utf-8"))
-        plan = json.loads((artifacts / "lfguard-plan.json").read_text(encoding="utf-8"))
-        explain = json.loads((artifacts / "lfguard-explain.json").read_text(encoding="utf-8"))
-        explain_batch = json.loads((artifacts / "lfguard-explain-batch.json").read_text(encoding="utf-8"))
+        audit = json.loads((artifacts / "lfpolicy-audit.json").read_text(encoding="utf-8"))
+        plan = json.loads((artifacts / "lfpolicy-plan.json").read_text(encoding="utf-8"))
+        explain = json.loads((artifacts / "lfpolicy-explain.json").read_text(encoding="utf-8"))
+        explain_batch = json.loads((artifacts / "lfpolicy-explain-batch.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(audit["schema_version"], "lfguard.audit.v1")
-        self.assertEqual(plan["schema_version"], "lfguard.plan.v1")
-        self.assertEqual(explain["schema_version"], "lfguard.explain.v1")
-        self.assertEqual(explain_batch["schema_version"], "lfguard.explain_batch.v1")
+        self.assertEqual(audit["schema_version"], "lfpolicy.audit.v1")
+        self.assertEqual(plan["schema_version"], "lfpolicy.plan.v1")
+        self.assertEqual(explain["schema_version"], "lfpolicy.explain.v1")
+        self.assertEqual(explain_batch["schema_version"], "lfpolicy.explain_batch.v1")
         self.assertEqual([change["id"] for change in plan["changes"]], ["change_001", "change_002", "change_003"])
         self.assertEqual(explain["summary"]["matched"], 1)
         self.assertEqual(explain_batch["summary"], {"total": 3, "allowed": 1, "denied": 2})
@@ -288,20 +288,20 @@ class DocumentationExampleTests(unittest.TestCase):
         self.assertEqual(explain_batch["results"][1]["explain"]["summary"]["not_matched"], 1)
         self.assertEqual(explain_batch["results"][0]["diagnosis"]["matched_sources"], ["direct_grant"])
         self.assertEqual(explain_batch["results"][1]["diagnosis"]["missing_permissions"], ["DESCRIBE"])
-        self.assertFalse((artifacts / "lfguard-apply-dry-run.md").exists())
+        self.assertFalse((artifacts / "lfpolicy-apply-dry-run.md").exists())
 
     def test_report_contract_schemas_validate_checked_in_fixtures(self):
         root = Path(__file__).resolve().parents[1]
         schemas = root / "docs" / "schemas"
         artifacts = root / "examples" / "artifacts"
         pairs = (
-            ("lfguard.audit.v1.schema.json", artifacts / "lfguard-audit.json"),
-            ("lfguard.lint.v1.schema.json", artifacts / "review-bundle" / "lint.json"),
-            ("lfguard.plan.v1.schema.json", artifacts / "lfguard-plan.json"),
-            ("lfguard.review.manifest.v1.schema.json", artifacts / "review-bundle" / "manifest.json"),
-            ("lfguard.review.summary.v1.schema.json", artifacts / "review-bundle" / "summary.json"),
-            ("lfguard.review.explain.v1.schema.json", artifacts / "review-bundle" / "explain.json"),
-            ("lfguard.explain_batch.v1.schema.json", artifacts / "lfguard-explain-batch.json"),
+            ("lfpolicy.audit.v1.schema.json", artifacts / "lfpolicy-audit.json"),
+            ("lfpolicy.lint.v1.schema.json", artifacts / "review-bundle" / "lint.json"),
+            ("lfpolicy.plan.v1.schema.json", artifacts / "lfpolicy-plan.json"),
+            ("lfpolicy.review.manifest.v1.schema.json", artifacts / "review-bundle" / "manifest.json"),
+            ("lfpolicy.review.summary.v1.schema.json", artifacts / "review-bundle" / "summary.json"),
+            ("lfpolicy.review.explain.v1.schema.json", artifacts / "review-bundle" / "explain.json"),
+            ("lfpolicy.explain_batch.v1.schema.json", artifacts / "lfpolicy-explain-batch.json"),
         )
 
         for schema_name, fixture_path in pairs:
@@ -314,19 +314,19 @@ class DocumentationExampleTests(unittest.TestCase):
         review_case_root = artifacts / "review-cases"
         for case_dir in sorted(path for path in review_case_root.iterdir() if path.is_dir()):
             for schema_name, artifact_name in (
-                ("lfguard.review.manifest.v1.schema.json", "manifest.json"),
-                ("lfguard.review.summary.v1.schema.json", "summary.json"),
-                ("lfguard.lint.v1.schema.json", "lint.json"),
-                ("lfguard.audit.v1.schema.json", "audit.json"),
-                ("lfguard.plan.v1.schema.json", "plan.json"),
-                ("lfguard.review.explain.v1.schema.json", "explain.json"),
+                ("lfpolicy.review.manifest.v1.schema.json", "manifest.json"),
+                ("lfpolicy.review.summary.v1.schema.json", "summary.json"),
+                ("lfpolicy.lint.v1.schema.json", "lint.json"),
+                ("lfpolicy.audit.v1.schema.json", "audit.json"),
+                ("lfpolicy.plan.v1.schema.json", "plan.json"),
+                ("lfpolicy.review.explain.v1.schema.json", "explain.json"),
             ):
                 schema = json.loads((schemas / schema_name).read_text(encoding="utf-8"))
                 fixture = json.loads((case_dir / artifact_name).read_text(encoding="utf-8"))
                 _validate_schema_subset(fixture, schema, path=str((case_dir / artifact_name).relative_to(root)))
 
         explain_case_root = artifacts / "explain-batch-cases"
-        explain_schema = json.loads((schemas / "lfguard.explain_batch.v1.schema.json").read_text(encoding="utf-8"))
+        explain_schema = json.loads((schemas / "lfpolicy.explain_batch.v1.schema.json").read_text(encoding="utf-8"))
         for fixture_path in sorted(explain_case_root.glob("*.json")):
             fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
             _validate_schema_subset(fixture, explain_schema, path=str(fixture_path.relative_to(root)))
@@ -377,24 +377,24 @@ class DocumentationExampleTests(unittest.TestCase):
         plan_payload = json.loads((bundle / "plan.json").read_text(encoding="utf-8"))
         explain_payload = json.loads((bundle / "explain.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(manifest["schema_version"], "lfguard.review.manifest.v1")
-        self.assertEqual(manifest["lfguard_version"], __version__)
+        self.assertEqual(manifest["schema_version"], "lfpolicy.review.manifest.v1")
+        self.assertEqual(manifest["lfpolicy_version"], __version__)
         self.assertEqual(manifest["inputs"]["current"]["source"], "current_snapshot")
         self.assertIn("sha256", manifest["inputs"]["desired"])
         self.assertIn("sha256", manifest["inputs"]["current"])
-        self.assertEqual(summary["schema_version"], "lfguard.review.summary.v1")
+        self.assertEqual(summary["schema_version"], "lfpolicy.review.summary.v1")
         self.assertEqual(summary["status"], "review_required")
         self.assertEqual(summary["recommended_action"], "review_required")
         self.assertFalse(summary["hard_block"])
         self.assertEqual(summary["blocking_reasons"], [])
         self.assertEqual(set(summary["action_summary"]), {"inform", "review_required", "approval_required", "block"})
-        self.assertEqual(summary["evidence"]["lfguard_version"], manifest["lfguard_version"])
+        self.assertEqual(summary["evidence"]["lfpolicy_version"], manifest["lfpolicy_version"])
         self.assertEqual(summary["evidence"]["inputs"]["current"]["source"], "current_snapshot")
         self.assertEqual(summary["evidence"]["truncation"], {"truncated": False, "artifacts": []})
-        self.assertEqual(lint_payload["schema_version"], "lfguard.lint.v1")
-        self.assertEqual(audit_payload["schema_version"], "lfguard.audit.v1")
-        self.assertEqual(plan_payload["schema_version"], "lfguard.plan.v1")
-        self.assertEqual(explain_payload["schema_version"], "lfguard.review.explain.v1")
+        self.assertEqual(lint_payload["schema_version"], "lfpolicy.lint.v1")
+        self.assertEqual(audit_payload["schema_version"], "lfpolicy.audit.v1")
+        self.assertEqual(plan_payload["schema_version"], "lfpolicy.plan.v1")
+        self.assertEqual(explain_payload["schema_version"], "lfpolicy.review.explain.v1")
         self.assertIn("Planned grant-change evidence", explain_payload["description"])
         self.assertIn("explain-batch", explain_payload["description"])
         self.assertEqual(explain_payload["summary"], {"planned_grant_changes": 1})
@@ -425,7 +425,7 @@ class DocumentationExampleTests(unittest.TestCase):
         llm_docs = (root / "docs" / "llm-agent-integration.md").read_text(encoding="utf-8")
 
         for expected in (
-            'sys.executable, "-m", "lakeformation_guard"',
+            'sys.executable, "-m", "lfpolicy"',
             "Do not import private",
             "has no apply command in 0.9.0 and later",
             "`recommended_action`",
@@ -501,7 +501,7 @@ class DocumentationExampleTests(unittest.TestCase):
 
         for expected in (
             "Python-native policy builder",
-            "policy.py -> generated desired.json -> lfguard check/audit/plan/review",
+            "policy.py -> generated desired.json -> lfpolicy check/audit/plan/review",
             "Permission group names are not enums",
             "reader()",
             "editor()",
@@ -524,7 +524,7 @@ class DocumentationExampleTests(unittest.TestCase):
             self.assertIn(expected, direction_text)
         self.assertIn("docs/policy-authoring-direction.md", readme_text)
         self.assertIn("permission group authoring layer", roadmap_text)
-        self.assertIn("lakeformation_guard.policy", architecture_text)
+        self.assertIn("lfpolicy.policy", architecture_text)
 
 
 def _is_external_link(target: str) -> bool:

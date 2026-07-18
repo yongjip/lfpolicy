@@ -1,6 +1,6 @@
 import unittest
 
-from lakeformation_guard.aws_permissions import (
+from lfpolicy.aws_permissions import (
     AWSIAMPermissionChecker,
     iam_policy_actions,
     iam_policy_template,
@@ -49,14 +49,14 @@ class AwsPermissionTemplateTests(unittest.TestCase):
     def test_policy_source_arn_normalizes_assumed_role(self):
         self.assertEqual(
             policy_source_arn_from_caller(
-                "arn:aws:sts::111122223333:assumed-role/LfguardApply/github-actions"
+                "arn:aws:sts::111122223333:assumed-role/LfpolicyApply/github-actions"
             ),
-            "arn:aws:iam::111122223333:role/LfguardApply",
+            "arn:aws:iam::111122223333:role/LfpolicyApply",
         )
 
     def test_policy_source_arn_keeps_iam_role_or_user_arn(self):
         for arn in (
-            "arn:aws:iam::111122223333:role/LfguardApply",
+            "arn:aws:iam::111122223333:role/LfpolicyApply",
             "arn:aws:iam::111122223333:user/platform-bot",
         ):
             self.assertEqual(policy_source_arn_from_caller(arn), arn)
@@ -100,7 +100,7 @@ class AwsPermissionCheckerStubberTests(unittest.TestCase):
             {
                 "UserId": "testing",
                 "Account": ACCOUNT_ID,
-                "Arn": "arn:aws:sts::111122223333:assumed-role/LfguardApply/session",
+                "Arn": "arn:aws:sts::111122223333:assumed-role/LfpolicyApply/session",
             },
             {},
         )
@@ -122,7 +122,7 @@ class AwsPermissionCheckerStubberTests(unittest.TestCase):
                 "IsTruncated": False,
             },
             {
-                "PolicySourceArn": "arn:aws:iam::111122223333:role/LfguardApply",
+                "PolicySourceArn": "arn:aws:iam::111122223333:role/LfpolicyApply",
                 "ActionNames": list(actions),
                 "ResourceArns": ["*"],
             },
@@ -131,8 +131,8 @@ class AwsPermissionCheckerStubberTests(unittest.TestCase):
         report = checker.check(actions, template="read-only")
 
         self.assertFalse(report.allowed)
-        self.assertEqual(report.principal_arn, "arn:aws:iam::111122223333:role/LfguardApply")
-        self.assertEqual(report.caller_arn, "arn:aws:sts::111122223333:assumed-role/LfguardApply/session")
+        self.assertEqual(report.principal_arn, "arn:aws:iam::111122223333:role/LfpolicyApply")
+        self.assertEqual(report.caller_arn, "arn:aws:sts::111122223333:assumed-role/LfpolicyApply/session")
         self.assertEqual(report.denied_actions, ("lakeformation:GetDataCellsFilter",))
         self.assertEqual(report.to_dict()["summary"], {"total": 2, "allowed": 1, "denied": 1})
         self.iam_stubber.assert_no_pending_responses()
@@ -156,7 +156,7 @@ class AwsPermissionCheckerStubberTests(unittest.TestCase):
                 "Marker": "next",
             },
             {
-                "PolicySourceArn": "arn:aws:iam::111122223333:role/LfguardReadOnly",
+                "PolicySourceArn": "arn:aws:iam::111122223333:role/LfpolicyReadOnly",
                 "ActionNames": list(actions),
                 "ResourceArns": ["*"],
             },
@@ -174,7 +174,7 @@ class AwsPermissionCheckerStubberTests(unittest.TestCase):
                 "IsTruncated": False,
             },
             {
-                "PolicySourceArn": "arn:aws:iam::111122223333:role/LfguardReadOnly",
+                "PolicySourceArn": "arn:aws:iam::111122223333:role/LfpolicyReadOnly",
                 "ActionNames": list(actions),
                 "ResourceArns": ["*"],
                 "Marker": "next",
@@ -184,7 +184,7 @@ class AwsPermissionCheckerStubberTests(unittest.TestCase):
         report = checker.check(
             actions,
             template="read-only",
-            principal_arn="arn:aws:iam::111122223333:role/LfguardReadOnly",
+            principal_arn="arn:aws:iam::111122223333:role/LfpolicyReadOnly",
         )
 
         self.assertTrue(report.allowed)

@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for improving `lfguard`.
+Thanks for improving `lfpolicy`.
 
 ## Development Setup
 
@@ -14,7 +14,7 @@ python -m unittest discover -s tests
 ## Reporting Issues
 
 Use the GitHub bug report template for reproducible behavior and include
-sanitized desired/current state when possible. Run `lfguard doctor --output json`
+sanitized desired/current state when possible. Run `lfpolicy doctor --output json`
 and remove any sensitive account, principal, catalog, or path details before
 posting output.
 
@@ -31,7 +31,7 @@ Before filing a feature request, check these boundary docs:
 
 Feature requests are a good fit when they improve review, lint, audit, explain,
 plan, review bundles, or narrow Lake Formation modeling without moving service
-or workflow ownership into `lfguard`.
+or workflow ownership into `lfpolicy`.
 
 If a request mixes in-scope and out-of-scope behavior, split it into smaller
 issues before filing. Maintainers: triage every request with

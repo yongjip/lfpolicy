@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/yongjip/aws-datalake-guard/docs/schemas/lfguard.review.manifest.v1.schema.json",
-  "title": "lfguard review manifest v1",
+  "$id": "https://github.com/yongjip/aws-datalake-guard/docs/schemas/lfpolicy.review.manifest.v1.schema.json",
+  "title": "lfpolicy review manifest v1",
   "type": "object",
-  "required": ["schema_version", "lfguard_version", "created_at", "status", "inputs", "outputs"],
+  "required": ["schema_version", "lfpolicy_version", "created_at", "status", "inputs", "outputs"],
   "properties": {
-    "schema_version": { "const": "lfguard.review.manifest.v1" },
-    "lfguard_version": { "type": "string" },
+    "schema_version": { "const": "lfpolicy.review.manifest.v1" },
+    "lfpolicy_version": { "type": "string" },
     "created_at": { "type": "string" },
     "status": { "enum": ["passed", "review_required", "blocked"] },
     "inputs": {

@@ -1,4 +1,4 @@
-"""Permission request bundle example for lfguard.
+"""Permission request bundle example for lfpolicy.
 
 This file models approved access requests as local data and compiles them to
 ordinary Lake Formation desired state. It is intentionally not an approval UI.
@@ -7,7 +7,7 @@ ordinary Lake Formation desired state. It is intentionally not an approval UI.
 from dataclasses import dataclass
 from typing import Tuple
 
-from lakeformation_guard.policy import (
+from lfpolicy.policy import (
     LakePolicy,
     TagAssignmentScope,
     data_location_access,

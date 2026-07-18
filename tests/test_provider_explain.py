@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from lakeformation_guard import (
+from lfpolicy import (
     CachedCurrentStateProvider,
     CurrentState,
     DesiredState,
@@ -20,8 +20,8 @@ from lakeformation_guard import (
     lint_desired,
     provider_context_fingerprint,
 )
-from lakeformation_guard.cli import main
-from lakeformation_guard.provider import CURRENT_STATE_CACHE_SCHEMA_VERSION
+from lfpolicy.cli import main
+from lfpolicy.provider import CURRENT_STATE_CACHE_SCHEMA_VERSION
 
 
 class FakeCurrentStateProvider:
@@ -1440,7 +1440,7 @@ class ProviderExplainTests(unittest.TestCase):
             )
 
             stdout = io.StringIO()
-            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter.from_boto3") as from_boto3:
+            with patch("lfpolicy.cli.AWSLakeFormationAdapter.from_boto3") as from_boto3:
                 with contextlib.redirect_stdout(stdout):
                     exit_code = main(
                         [
@@ -1464,7 +1464,7 @@ class ProviderExplainTests(unittest.TestCase):
 
             payload = json.loads(stdout.getvalue())
             self.assertEqual(exit_code, 0)
-            self.assertEqual(payload["schema_version"], "lfguard.explain.v1")
+            self.assertEqual(payload["schema_version"], "lfpolicy.explain.v1")
             self.assertEqual(payload["summary"]["matched"], 1)
             self.assertEqual(payload["findings"][0]["id"], "finding_001")
             from_boto3.assert_not_called()
@@ -1535,7 +1535,7 @@ class ProviderExplainTests(unittest.TestCase):
 
             payload = json.loads(stdout.getvalue())
             self.assertEqual(exit_code, 0)
-            self.assertEqual(payload["schema_version"], "lfguard.explain_batch.v1")
+            self.assertEqual(payload["schema_version"], "lfpolicy.explain_batch.v1")
             self.assertEqual(payload["summary"], {"total": 3, "allowed": 1, "denied": 2})
             self.assertEqual(
                 [(result["id"], result["decision"]) for result in payload["results"]],
@@ -1601,7 +1601,7 @@ class ProviderExplainTests(unittest.TestCase):
             )
 
             stdout = io.StringIO()
-            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter.from_boto3") as from_boto3:
+            with patch("lfpolicy.cli.AWSLakeFormationAdapter.from_boto3") as from_boto3:
                 with contextlib.redirect_stdout(stdout):
                     exit_code = main(
                         [
@@ -1676,7 +1676,7 @@ class ProviderExplainTests(unittest.TestCase):
             ).load_current_state_for(desired)
 
             stdout = io.StringIO()
-            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter.from_boto3") as from_boto3:
+            with patch("lfpolicy.cli.AWSLakeFormationAdapter.from_boto3") as from_boto3:
                 with contextlib.redirect_stdout(stdout):
                     exit_code = main(
                         [
@@ -1743,7 +1743,7 @@ class ProviderExplainTests(unittest.TestCase):
 
             adapter = FakeCurrentStateProvider(CurrentState.empty())
             stdout = io.StringIO()
-            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter.from_boto3", return_value=adapter) as from_boto3:
+            with patch("lfpolicy.cli.AWSLakeFormationAdapter.from_boto3", return_value=adapter) as from_boto3:
                 with contextlib.redirect_stdout(stdout):
                     exit_code = main(
                         [
@@ -1807,7 +1807,7 @@ class ProviderExplainTests(unittest.TestCase):
 
             adapter = FakeCurrentStateProvider(current)
             stdout = io.StringIO()
-            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter.from_boto3", return_value=adapter) as from_boto3:
+            with patch("lfpolicy.cli.AWSLakeFormationAdapter.from_boto3", return_value=adapter) as from_boto3:
                 with patch.dict(
                     "os.environ",
                     {
@@ -1860,7 +1860,7 @@ class ProviderExplainTests(unittest.TestCase):
 
             adapter = FakeCurrentStateProvider(current)
             stdout = io.StringIO()
-            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter.from_boto3", return_value=adapter):
+            with patch("lfpolicy.cli.AWSLakeFormationAdapter.from_boto3", return_value=adapter):
                 with patch.dict(
                     "os.environ",
                     {
@@ -1908,7 +1908,7 @@ class ProviderExplainTests(unittest.TestCase):
 
             adapter = FakeCurrentStateProvider(current)
             stdout = io.StringIO()
-            with patch("lakeformation_guard.cli.AWSLakeFormationAdapter.from_boto3", return_value=adapter):
+            with patch("lfpolicy.cli.AWSLakeFormationAdapter.from_boto3", return_value=adapter):
                 with patch.dict(
                     "os.environ",
                     {
@@ -2001,7 +2001,7 @@ class ProviderExplainTests(unittest.TestCase):
                 )
 
             self.assertEqual(exit_code, 0)
-            self.assertIn("### lfguard explain", stdout.getvalue())
+            self.assertIn("### lfpolicy explain", stdout.getvalue())
             self.assertIn("No current or desired grants matched", stdout.getvalue())
 
 

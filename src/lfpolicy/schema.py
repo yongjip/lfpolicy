@@ -22,7 +22,7 @@ _VALUE_LIST = {
 STATE_JSON_SCHEMA: Dict[str, Any] = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://raw.githubusercontent.com/yongjip/aws-datalake-guard/main/docs/schema.json",
-    "title": "lfguard state",
+    "title": "lfpolicy state",
     "description": "Desired or current AWS Lake Formation LF-Tag guardrail state.",
     "type": "object",
     "additionalProperties": False,

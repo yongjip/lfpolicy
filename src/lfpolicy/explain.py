@@ -17,7 +17,7 @@ from .state_index import (
 )
 
 
-EXPLAIN_SCHEMA_VERSION = "lfguard.explain.v1"
+EXPLAIN_SCHEMA_VERSION = "lfpolicy.explain.v1"
 
 
 @dataclass(frozen=True)
@@ -315,7 +315,7 @@ def _direct_resource_relevance(grant_resource: ResourceRef, target: ResourceRef)
             return _GrantRelevance("matched", "Data-location grant resource exactly matches the target.")
         return _GrantRelevance(
             "context",
-            "Data-location grant is present, but table storage locations are not modeled in lfguard state.",
+            "Data-location grant is present, but table storage locations are not modeled in lfpolicy state.",
         )
     return None
 

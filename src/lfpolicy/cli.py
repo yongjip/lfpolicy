@@ -1,4 +1,4 @@
-"""Command line interface for lfguard."""
+"""Command line interface for lfpolicy."""
 
 from __future__ import annotations
 
@@ -59,11 +59,11 @@ from .state_index import (
 )
 
 
-LINT_SCHEMA_VERSION = "lfguard.lint.v1"
-REVIEW_MANIFEST_SCHEMA_VERSION = "lfguard.review.manifest.v1"
-REVIEW_SUMMARY_SCHEMA_VERSION = "lfguard.review.summary.v1"
-REVIEW_EXPLAIN_SCHEMA_VERSION = "lfguard.review.explain.v1"
-EXPLAIN_BATCH_SCHEMA_VERSION = "lfguard.explain_batch.v1"
+LINT_SCHEMA_VERSION = "lfpolicy.lint.v1"
+REVIEW_MANIFEST_SCHEMA_VERSION = "lfpolicy.review.manifest.v1"
+REVIEW_SUMMARY_SCHEMA_VERSION = "lfpolicy.review.summary.v1"
+REVIEW_EXPLAIN_SCHEMA_VERSION = "lfpolicy.review.explain.v1"
+EXPLAIN_BATCH_SCHEMA_VERSION = "lfpolicy.explain_batch.v1"
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -120,10 +120,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="lfguard",
+        prog="lfpolicy",
         description="Review, audit, plan, and explain AWS Lake Formation LF-Tag governance evidence.",
     )
-    parser.add_argument("--version", action="version", version="lfguard {}".format(__version__))
+    parser.add_argument("--version", action="version", version="lfpolicy {}".format(__version__))
     subparsers = parser.add_subparsers(dest="command")
 
     init_parser = subparsers.add_parser("init", help="Generate a starter desired-state policy file.")
@@ -176,7 +176,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sample_parser.add_argument("--force", action="store_true", help="Overwrite sample files if they already exist.")
 
-    bootstrap_parser = subparsers.add_parser("bootstrap", help="Create a starter lfguard policy repository layout.")
+    bootstrap_parser = subparsers.add_parser("bootstrap", help="Create a starter lfpolicy policy repository layout.")
     bootstrap_parser.add_argument("--output-dir", required=True, help="Directory to write the starter layout into.")
     bootstrap_parser.add_argument(
         "--format",
@@ -198,7 +198,7 @@ def build_parser() -> argparse.ArgumentParser:
     bootstrap_parser.add_argument(
         "--include-code-scanning",
         action="store_true",
-        help="Also write a GitHub Code Scanning workflow that uploads lfguard SARIF findings.",
+        help="Also write a GitHub Code Scanning workflow that uploads lfpolicy SARIF findings.",
     )
     bootstrap_parser.add_argument(
         "--include-review-template",
@@ -208,7 +208,7 @@ def build_parser() -> argparse.ArgumentParser:
     bootstrap_parser.add_argument(
         "--include-editor-config",
         action="store_true",
-        help="Also write VS Code settings for lfguard schema validation.",
+        help="Also write VS Code settings for lfpolicy schema validation.",
     )
     bootstrap_parser.add_argument(
         "--policy-owner",
@@ -230,7 +230,7 @@ def build_parser() -> argparse.ArgumentParser:
     schema_parser = subparsers.add_parser("schema", help="Emit the JSON Schema for desired/current state files.")
     schema_parser.add_argument("--output-file", help="Write schema JSON to this file instead of stdout.")
 
-    doctor_parser = subparsers.add_parser("doctor", help="Check local lfguard install and optional integrations.")
+    doctor_parser = subparsers.add_parser("doctor", help="Check local lfpolicy install and optional integrations.")
     _add_output_arg(doctor_parser)
     _add_report_output_file_arg(doctor_parser)
     doctor_parser.add_argument(
@@ -243,7 +243,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     permissions_parser = subparsers.add_parser(
         "permissions",
-        help="Emit or check starter IAM policies for live lfguard workflows.",
+        help="Emit or check starter IAM policies for live lfpolicy workflows.",
     )
     permissions_parser.add_argument(
         "--template",
@@ -270,7 +270,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_output_arg(permissions_parser, markdown=True)
     _add_report_output_file_arg(permissions_parser)
 
-    completion_parser = subparsers.add_parser("completion", help="Emit shell completion scripts for lfguard.")
+    completion_parser = subparsers.add_parser("completion", help="Emit shell completion scripts for lfpolicy.")
     completion_parser.add_argument(
         "--shell",
         choices=("bash", "zsh", "fish"),
@@ -471,7 +471,7 @@ def _cmd_review(args: argparse.Namespace) -> int:
         change_plan=change_plan,
     )
     _write_review_bundle(Path(args.output_dir), bundle, force=args.force)
-    print("Wrote lfguard review bundle to {}.".format(Path(args.output_dir)))
+    print("Wrote lfpolicy review bundle to {}.".format(Path(args.output_dir)))
     if args.fail_on_blocked and bundle["summary"]["status"] == "blocked":
         return 1
     return 0
@@ -571,7 +571,7 @@ def _cmd_generate(args: argparse.Namespace) -> int:
             raise RuntimeError("Could not read generated desired state from {}: {}".format(output_path, exc)) from exc
         if current_text != text:
             print(
-                "generated desired state is out of date: {}; run lfguard generate {} --output-file {} --force".format(
+                "generated desired state is out of date: {}; run lfpolicy generate {} --output-file {} --force".format(
                     output_path,
                     args.policy_file,
                     output_path,
@@ -614,18 +614,18 @@ def _cmd_sample(args: argparse.Namespace) -> int:
     except OSError as exc:
         raise RuntimeError("Could not write sample files to {}: {}".format(output_dir, exc)) from exc
 
-    print("Wrote lfguard sample files to {}.\n".format(output_dir))
+    print("Wrote lfpolicy sample files to {}.\n".format(output_dir))
     print("Run:")
     desired_name, current_name = _sample_primary_files(args.format)
     print(
-        "  lfguard check --desired {}/{} --current-snapshot {}/{}".format(
+        "  lfpolicy check --desired {}/{} --current-snapshot {}/{}".format(
             output_dir, desired_name, output_dir, current_name
         )
     )
-    print("  lfguard plan --desired {}/{} --current-snapshot {}/{}".format(output_dir, desired_name, output_dir, current_name))
+    print("  lfpolicy plan --desired {}/{} --current-snapshot {}/{}".format(output_dir, desired_name, output_dir, current_name))
     if args.include_ci:
         print("\nGitHub Actions demo workflow:")
-        print("  {}/.github/workflows/lfguard-demo.yml".format(output_dir))
+        print("  {}/.github/workflows/lfpolicy-demo.yml".format(output_dir))
     print("\nSee {}/README.md for more commands.".format(output_dir))
     return 0
 
@@ -660,25 +660,25 @@ def _cmd_bootstrap(args: argparse.Namespace) -> int:
         raise RuntimeError("Could not write bootstrap files to {}: {}".format(output_dir, exc)) from exc
 
     desired_name = _bootstrap_desired_name(args.format)
-    print("Wrote lfguard policy bootstrap to {}.\n".format(output_dir))
+    print("Wrote lfpolicy policy bootstrap to {}.\n".format(output_dir))
     print("Review and edit:")
     print("  {}/policy.py".format(output_dir))
     print("  {}/policy/{}".format(output_dir, desired_name))
     print("\nRun:")
     print(
-        "  lfguard generate {}/policy.py --output-file {}/policy/{} --force".format(
+        "  lfpolicy generate {}/policy.py --output-file {}/policy/{} --force".format(
             output_dir,
             output_dir,
             desired_name,
         )
     )
-    print("  lfguard check --desired {}/policy/{} --fail-on-findings".format(output_dir, desired_name))
+    print("  lfpolicy check --desired {}/policy/{} --fail-on-findings".format(output_dir, desired_name))
     if args.include_live_drift:
         print("\nLive drift workflow:")
-        print("  {}/.github/workflows/lfguard-live-drift.yml".format(output_dir))
+        print("  {}/.github/workflows/lfpolicy-live-drift.yml".format(output_dir))
     if args.include_code_scanning:
         print("\nCode Scanning workflow:")
-        print("  {}/.github/workflows/lfguard-code-scanning.yml".format(output_dir))
+        print("  {}/.github/workflows/lfpolicy-code-scanning.yml".format(output_dir))
     if args.include_review_template:
         print("\nReview files:")
         print("  {}/.github/CODEOWNERS".format(output_dir))
@@ -901,7 +901,7 @@ def _review_manifest_payload(
     }
     return {
         "schema_version": REVIEW_MANIFEST_SCHEMA_VERSION,
-        "lfguard_version": __version__,
+        "lfpolicy_version": __version__,
         "created_at": _utc_now_iso(),
         "status": summary["status"],
         "inputs": inputs,
@@ -1017,7 +1017,7 @@ def _review_summary_payload(
 def _review_summary_evidence(manifest_payload: Mapping[str, Any]) -> dict:
     return {
         "generated_at": manifest_payload["created_at"],
-        "lfguard_version": manifest_payload["lfguard_version"],
+        "lfpolicy_version": manifest_payload["lfpolicy_version"],
         "inputs": manifest_payload["inputs"],
         "truncation": {
             "truncated": False,
@@ -1111,7 +1111,7 @@ def _review_explain_payload(change_plan: Plan) -> dict:
         )
     return {
         "schema_version": REVIEW_EXPLAIN_SCHEMA_VERSION,
-        "description": "Planned grant-change evidence for review bundles. Use lfguard explain-batch for effective-access decisions.",
+        "description": "Planned grant-change evidence for review bundles. Use lfpolicy explain-batch for effective-access decisions.",
         "summary": {
             "planned_grant_changes": len(grant_changes),
         },
@@ -1122,7 +1122,7 @@ def _review_explain_payload(change_plan: Plan) -> dict:
 def _render_review_summary_markdown(payload: Mapping[str, Any]) -> str:
     summary = payload["summary"]
     lines = [
-        "# lfguard review",
+        "# lfpolicy review",
         "",
         "- Status: `{}`".format(payload["status"]),
         "- Recommended action: `{}`".format(payload["recommended_action"]),
@@ -1498,7 +1498,7 @@ def _render_explain_batch(payload: Mapping[str, Any], output: str) -> str:
 def _render_explain_batch_markdown(payload: Mapping[str, Any]) -> str:
     summary = payload["summary"]
     lines = [
-        "### lfguard explain-batch",
+        "### lfpolicy explain-batch",
         "",
         "- Total requests: {total}".format(**summary),
         "- Allowed: {allowed}".format(**summary),
@@ -1604,9 +1604,9 @@ def _render_import_review_notes(
 ) -> str:
     profile = _state_profile(imported)
     lines = [
-        "# lfguard Import Review Notes",
+        "# lfpolicy Import Review Notes",
         "",
-        "This file documents a reviewed import scaffold. `lfguard import` is not synchronization; the generated desired state becomes policy only after the team decides what `lfguard` owns.",
+        "This file documents a reviewed import scaffold. `lfpolicy import` is not synchronization; the generated desired state becomes policy only after the team decides what `lfpolicy` owns.",
         "",
         "## Import Context",
         "",
@@ -1651,18 +1651,18 @@ def _render_import_review_notes(
             "- [ ] Add `ownership` and `ignore` rules before adopting mixed managed/unmanaged accounts.",
             "- [ ] Add scoped exceptions with owner, reason, expiry, and approval metadata for intentional risky grants.",
             "- [ ] Convert repeated permission patterns to `policy.py` when request volume makes raw JSON hard to maintain.",
-            "- [ ] Run `lfguard check`, `summary`, `audit`, and `plan` before any consuming service executes changes.",
+            "- [ ] Run `lfpolicy check`, `summary`, `audit`, and `plan` before any consuming service executes changes.",
             "",
             "## Suggested Commands",
             "",
             "```bash",
-            "lfguard check --desired {} --fail-on-findings".format(output_path),
-            "lfguard summary --desired {} --output markdown".format(output_path),
-            "lfguard plan \\",
+            "lfpolicy check --desired {} --fail-on-findings".format(output_path),
+            "lfpolicy summary --desired {} --output markdown".format(output_path),
+            "lfpolicy plan \\",
             "  --desired {} \\".format(output_path),
             "  --current-snapshot snapshots/current.json \\",
             "  --output json \\",
-            "  --output-file artifacts/lfguard-plan.json",
+            "  --output-file artifacts/lfpolicy-plan.json",
             "```",
             "",
         ]
@@ -1793,9 +1793,9 @@ def _blank_permission_group_policy():
 
 
 def _starter_policy_source() -> str:
-    return '''"""Lake Formation permission groups for lfguard."""
+    return '''"""Lake Formation permission groups for lfpolicy."""
 
-from lakeformation_guard.policy import (
+from lfpolicy.policy import (
     LakePolicy,
     TagAssignmentScope,
     database_creator,
@@ -1841,9 +1841,9 @@ policy.bind_role("arn:aws:iam::111122223333:role/CatalogAdmin", "catalog_admin")
 
 
 def _blank_policy_source() -> str:
-    return '''"""Lake Formation permission groups for lfguard."""
+    return '''"""Lake Formation permission groups for lfpolicy."""
 
-from lakeformation_guard.policy import LakePolicy
+from lfpolicy.policy import LakePolicy
 
 
 policy = LakePolicy()
@@ -1917,7 +1917,7 @@ def _render_doctor(report: dict, output: str) -> str:
     if output == "json":
         return dumps_json(report)
     lines = [
-        "lfguard: {}".format(report["version"]),
+        "lfpolicy: {}".format(report["version"]),
         "Python: {version} ({executable})".format(**report["python"]),
         "Optional dependencies:",
     ]
@@ -1926,7 +1926,7 @@ def _render_doctor(report: dict, output: str) -> str:
             suffix = " {}".format(status["version"]) if status["version"] else ""
             lines.append("- {}: installed{} ({})".format(name, suffix, status["purpose"]))
         else:
-            lines.append("- {}: missing; install lfguard[{}] for {}".format(name, status["extra"], status["purpose"]))
+            lines.append("- {}: missing; install lfpolicy[{}] for {}".format(name, status["extra"], status["purpose"]))
     lines.append("AWS environment:")
     aws_env = report["aws_environment"]
     lines.append("- profile: {}".format(aws_env["profile"] or "not set"))
@@ -1950,7 +1950,7 @@ def _render_iam_policy(policy: dict, output: str, *, template: str) -> str:
     if output == "markdown":
         return "\n".join(
             [
-                "### lfguard permissions: {}".format(template),
+                "### lfpolicy permissions: {}".format(template),
                 "",
                 "Review and scope this starter IAM policy before using it in production.",
                 "",
@@ -1969,7 +1969,7 @@ def _render_permissions_check(report: IAMPermissionCheckReport, output: str) -> 
         return dumps_json(payload)
     if output == "markdown":
         lines = [
-            "### lfguard permissions check: {}".format(report.template),
+            "### lfpolicy permissions check: {}".format(report.template),
             "",
             "- Result: **{}**".format("pass" if report.allowed else "fail"),
             "- Principal: `{}`".format(report.principal_arn),
@@ -2212,7 +2212,7 @@ def _completion_options(command: str) -> str:
 
 def _render_bash_completion() -> str:
     lines = [
-        "_lfguard_complete() {",
+        "_lfpolicy_complete() {",
         "  local cur cmd commands opts",
         "  COMPREPLY=()",
         '  cur="${COMP_WORDS[COMP_CWORD]}"',
@@ -2239,7 +2239,7 @@ def _render_bash_completion() -> str:
             '  COMPREPLY=( $(compgen -W "$opts" -- "$cur") )',
             "  return 0",
             "}",
-            "complete -F _lfguard_complete lfguard",
+            "complete -F _lfpolicy_complete lfpolicy",
             "",
         ]
     )
@@ -2248,9 +2248,9 @@ def _render_bash_completion() -> str:
 
 def _render_zsh_completion() -> str:
     lines = [
-        "#compdef lfguard",
+        "#compdef lfpolicy",
         "",
-        "_lfguard() {",
+        "_lfpolicy() {",
         "  local -a commands",
         "  commands=(",
     ]
@@ -2280,7 +2280,7 @@ def _render_zsh_completion() -> str:
             "  esac",
             "}",
             "",
-            "_lfguard \"$@\"",
+            "_lfpolicy \"$@\"",
             "",
         ]
     )
@@ -2289,14 +2289,14 @@ def _render_zsh_completion() -> str:
 
 def _render_fish_completion() -> str:
     lines = [
-        "complete -c lfguard -f",
+        "complete -c lfpolicy -f",
     ]
     for command in _COMPLETION_COMMANDS:
-        lines.append("complete -c lfguard -n '__fish_use_subcommand' -a '{}'".format(command))
+        lines.append("complete -c lfpolicy -n '__fish_use_subcommand' -a '{}'".format(command))
         for option in _COMPLETION_OPTIONS.get(command, ()):
             option_name = option[2:] if option.startswith("--") else option
             lines.append(
-                "complete -c lfguard -n '__fish_seen_subcommand_from {}' -l {}".format(command, option_name)
+                "complete -c lfpolicy -n '__fish_seen_subcommand_from {}' -l {}".format(command, option_name)
             )
     lines.append("")
     return "\n".join(lines)
@@ -2325,7 +2325,7 @@ def _render_check_report(
     if output == "markdown":
         return _render_check_report_markdown(desired_summary, current_summary, findings)
 
-    lines = ["lfguard check {}.".format("passed" if not findings else "completed with lint findings")]
+    lines = ["lfpolicy check {}.".format("passed" if not findings else "completed with lint findings")]
     lines.append(_format_validation_summary("Desired state is valid", desired_summary))
     if current_summary:
         lines.append(_format_validation_summary("Current snapshot is valid", current_summary))
@@ -2343,7 +2343,7 @@ def _render_check_report_markdown(
     findings = tuple(findings)
     lint_summary = _lint_finding_summary(findings)
     lines = [
-        "### lfguard check",
+        "### lfpolicy check",
         "",
         "#### Validation",
         "",
@@ -2436,7 +2436,7 @@ def _render_state_profiles(profiles: dict, output: str) -> str:
 
 
 def _render_state_profiles_markdown(profiles: dict) -> str:
-    lines = ["### lfguard summary", ""]
+    lines = ["### lfpolicy summary", ""]
     for name, profile in profiles.items():
         lines.extend(
             [
@@ -2508,7 +2508,7 @@ def _format_list(values: Iterable[str]) -> str:
 def _render_lint_findings_markdown(findings: Iterable[LintFinding]) -> str:
     findings = tuple(findings)
     summary = _lint_finding_summary(findings)
-    lines = ["### lfguard lint", ""]
+    lines = ["### lfpolicy lint", ""]
     if not findings:
         lines.append("No lint findings.")
         return "\n".join(lines) + "\n"
@@ -2637,8 +2637,8 @@ def _bootstrap_files(
     files = {
         "policy.py": policy_source,
         desired_path: desired_text,
-        "policy/lfguard.schema.json": dumps_json(state_json_schema()),
-        ".github/workflows/lfguard-policy.yml": _bootstrap_github_actions_workflow(
+        "policy/lfpolicy.schema.json": dumps_json(state_json_schema()),
+        ".github/workflows/lfpolicy-policy.yml": _bootstrap_github_actions_workflow(
             desired_path,
             needs_yaml_extra=needs_yaml_extra,
         ),
@@ -2656,21 +2656,21 @@ def _bootstrap_files(
         ),
     }
     if include_live_drift:
-        files[".github/workflows/lfguard-live-drift.yml"] = _bootstrap_live_drift_workflow(
+        files[".github/workflows/lfpolicy-live-drift.yml"] = _bootstrap_live_drift_workflow(
             desired_path,
             needs_yaml_extra=needs_yaml_extra,
             aws_role_arn=aws_role_arn,
             aws_region=aws_region,
         )
-        files["iam/lfguard-read-only.json"] = dumps_json(_iam_policy_template("read-only"))
+        files["iam/lfpolicy-read-only.json"] = dumps_json(_iam_policy_template("read-only"))
     if include_code_scanning:
-        files[".github/workflows/lfguard-code-scanning.yml"] = _bootstrap_code_scanning_workflow(
+        files[".github/workflows/lfpolicy-code-scanning.yml"] = _bootstrap_code_scanning_workflow(
             desired_path,
             needs_yaml_extra=needs_yaml_extra,
             aws_role_arn=aws_role_arn,
             aws_region=aws_region,
         )
-        files["iam/lfguard-read-only.json"] = dumps_json(_iam_policy_template("read-only"))
+        files["iam/lfpolicy-read-only.json"] = dumps_json(_iam_policy_template("read-only"))
     if include_review_template:
         files[".github/CODEOWNERS"] = _bootstrap_codeowners(policy_owner)
         files[".github/pull_request_template.md"] = _bootstrap_pull_request_template(desired_path)
@@ -2688,9 +2688,9 @@ def _bootstrap_desired_name(output_format: str) -> str:
 
 
 def _bootstrap_github_actions_workflow(desired_path: str, *, needs_yaml_extra: bool) -> str:
-    install_target = '"lfguard[yaml]"' if needs_yaml_extra else "lfguard"
-    doctor_command = "lfguard doctor --require yaml" if needs_yaml_extra else "lfguard doctor"
-    return """name: lfguard policy
+    install_target = '"lfpolicy[yaml]"' if needs_yaml_extra else "lfpolicy"
+    doctor_command = "lfpolicy doctor --require yaml" if needs_yaml_extra else "lfpolicy doctor"
+    return """name: lfpolicy policy
 
 on:
   workflow_dispatch:
@@ -2698,7 +2698,7 @@ on:
     paths:
       - "{desired_path}"
       - "policy.py"
-      - "policy/lfguard.schema.json"
+      - "policy/lfpolicy.schema.json"
 
 permissions:
   contents: read
@@ -2713,35 +2713,35 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install lfguard
+      - name: Install lfpolicy
         run: python -m pip install {install_target}
 
-      - name: Check lfguard install
+      - name: Check lfpolicy install
         run: {doctor_command}
 
       - name: Check and summarize policy
         run: |
           mkdir -p artifacts
-          lfguard generate policy.py --output-file {desired_path} --check
+          lfpolicy generate policy.py --output-file {desired_path} --check
 
-          lfguard check \\
+          lfpolicy check \\
             --desired {desired_path} \\
             --output markdown \\
-            --output-file artifacts/lfguard-check.md \\
+            --output-file artifacts/lfpolicy-check.md \\
             --fail-on-findings \\
             --github-summary
 
-          lfguard summary \\
+          lfpolicy summary \\
             --desired {desired_path} \\
             --output markdown \\
-            --output-file artifacts/lfguard-summary.md \\
+            --output-file artifacts/lfpolicy-summary.md \\
             --github-summary
 
-      - name: Upload lfguard reports
+      - name: Upload lfpolicy reports
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: lfguard-policy-reports
+          name: lfpolicy-policy-reports
           path: artifacts/
           if-no-files-found: ignore
 """.format(
@@ -2755,9 +2755,9 @@ def _bootstrap_pre_commit_config(desired_path: str) -> str:
     return """repos:
   - repo: local
     hooks:
-      - id: lfguard-generate-check
-        name: lfguard generate and check desired policy
-        entry: bash -c 'lfguard generate policy.py --output-file {desired_path} --force && lfguard check --desired {desired_path} --fail-on-findings'
+      - id: lfpolicy-generate-check
+        name: lfpolicy generate and check desired policy
+        entry: bash -c 'lfpolicy generate policy.py --output-file {desired_path} --force && lfpolicy check --desired {desired_path} --fail-on-findings'
         language: system
         pass_filenames: false
         files: ^(policy\\.py|policy/desired\\.(json|ya?ml))$
@@ -2773,9 +2773,9 @@ def _bootstrap_live_drift_workflow(
     aws_role_arn: str,
     aws_region: str,
 ) -> str:
-    install_target = '"lfguard[aws,yaml]"' if needs_yaml_extra else '"lfguard[aws]"'
-    doctor_command = "lfguard doctor --require aws --require yaml" if needs_yaml_extra else "lfguard doctor --require aws"
-    return """name: lfguard live drift
+    install_target = '"lfpolicy[aws,yaml]"' if needs_yaml_extra else '"lfpolicy[aws]"'
+    doctor_command = "lfpolicy doctor --require aws --require yaml" if needs_yaml_extra else "lfpolicy doctor --require aws"
+    return """name: lfpolicy live drift
 
 on:
   workflow_dispatch:
@@ -2801,33 +2801,33 @@ jobs:
           role-to-assume: {aws_role_arn}
           aws-region: {aws_region}
 
-      - name: Install lfguard
+      - name: Install lfpolicy
         run: python -m pip install {install_target}
 
-      - name: Check lfguard install
+      - name: Check lfpolicy install
         run: {doctor_command}
 
       - name: Validate policy before AWS access
         run: |
           mkdir -p artifacts snapshots
-          lfguard generate policy.py --output-file {desired_path} --check
+          lfpolicy generate policy.py --output-file {desired_path} --check
 
-          lfguard check \\
+          lfpolicy check \\
             --desired {desired_path} \\
             --output markdown \\
-            --output-file artifacts/lfguard-check.md \\
+            --output-file artifacts/lfpolicy-check.md \\
             --fail-on-findings \\
             --github-summary
 
-          lfguard summary \\
+          lfpolicy summary \\
             --desired {desired_path} \\
             --output markdown \\
-            --output-file artifacts/lfguard-summary.md \\
+            --output-file artifacts/lfpolicy-summary.md \\
             --github-summary
 
       - name: Capture current Lake Formation state
         run: |
-          lfguard snapshot \\
+          lfpolicy snapshot \\
             --desired {desired_path} \\
             --region {aws_region} \\
             --output-file snapshots/current.json
@@ -2836,36 +2836,36 @@ jobs:
         run: |
           set +e
 
-          lfguard review \\
+          lfpolicy review \\
             --desired {desired_path} \\
             --current-snapshot snapshots/current.json \\
             --output-dir artifacts/review
 
-          lfguard audit \\
+          lfpolicy audit \\
             --desired {desired_path} \\
             --current-snapshot snapshots/current.json \\
             --output markdown \\
-            --output-file artifacts/lfguard-audit.md \\
+            --output-file artifacts/lfpolicy-audit.md \\
             --fail-on-findings \\
             --github-summary
           audit_status=$?
 
           set -e
 
-          lfguard plan \\
+          lfpolicy plan \\
             --desired {desired_path} \\
             --current-snapshot snapshots/current.json \\
             --output markdown \\
-            --output-file artifacts/lfguard-plan.md \\
+            --output-file artifacts/lfpolicy-plan.md \\
             --github-summary
 
           exit "$audit_status"
 
-      - name: Upload lfguard reports
+      - name: Upload lfpolicy reports
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: lfguard-live-drift-reports
+          name: lfpolicy-live-drift-reports
           path: |
             artifacts/
             snapshots/
@@ -2887,9 +2887,9 @@ def _bootstrap_code_scanning_workflow(
     aws_role_arn: str,
     aws_region: str,
 ) -> str:
-    install_target = '"lfguard[aws,yaml]"' if needs_yaml_extra else '"lfguard[aws]"'
-    doctor_command = "lfguard doctor --require aws --require yaml" if needs_yaml_extra else "lfguard doctor --require aws"
-    return """name: lfguard code scanning
+    install_target = '"lfpolicy[aws,yaml]"' if needs_yaml_extra else '"lfpolicy[aws]"'
+    doctor_command = "lfpolicy doctor --require aws --require yaml" if needs_yaml_extra else "lfpolicy doctor --require aws"
+    return """name: lfpolicy code scanning
 
 on:
   workflow_dispatch:
@@ -2916,65 +2916,65 @@ jobs:
           role-to-assume: {aws_role_arn}
           aws-region: {aws_region}
 
-      - name: Install lfguard
+      - name: Install lfpolicy
         run: python -m pip install {install_target}
 
-      - name: Check lfguard install
+      - name: Check lfpolicy install
         run: {doctor_command}
 
-      - name: Generate lfguard SARIF reports
+      - name: Generate lfpolicy SARIF reports
         run: |
           mkdir -p artifacts snapshots
-          lfguard generate policy.py --output-file {desired_path} --check
+          lfpolicy generate policy.py --output-file {desired_path} --check
 
-          lfguard validate --desired {desired_path}
+          lfpolicy validate --desired {desired_path}
 
-          lfguard lint \\
+          lfpolicy lint \\
             --desired {desired_path} \\
             --output sarif \\
-            --output-file artifacts/lfguard-lint.sarif
+            --output-file artifacts/lfpolicy-lint.sarif
 
-          lfguard snapshot \\
+          lfpolicy snapshot \\
             --desired {desired_path} \\
             --region {aws_region} \\
             --output-file snapshots/current.json
 
-          lfguard audit \\
+          lfpolicy audit \\
             --desired {desired_path} \\
             --current-snapshot snapshots/current.json \\
             --output sarif \\
-            --output-file artifacts/lfguard-audit.sarif
+            --output-file artifacts/lfpolicy-audit.sarif
 
-      - name: Upload lfguard lint SARIF
+      - name: Upload lfpolicy lint SARIF
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: artifacts/lfguard-lint.sarif
-          category: lfguard-lint
+          sarif_file: artifacts/lfpolicy-lint.sarif
+          category: lfpolicy-lint
 
-      - name: Upload lfguard audit SARIF
+      - name: Upload lfpolicy audit SARIF
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: artifacts/lfguard-audit.sarif
-          category: lfguard-audit
+          sarif_file: artifacts/lfpolicy-audit.sarif
+          category: lfpolicy-audit
 
-      - name: Enforce lfguard gates
+      - name: Enforce lfpolicy gates
         run: |
           set +e
 
-          lfguard check \\
+          lfpolicy check \\
             --desired {desired_path} \\
             --current-snapshot snapshots/current.json \\
             --output markdown \\
-            --output-file artifacts/lfguard-check.md \\
+            --output-file artifacts/lfpolicy-check.md \\
             --fail-on-findings \\
             --github-summary
           check_status=$?
 
-          lfguard audit \\
+          lfpolicy audit \\
             --desired {desired_path} \\
             --current-snapshot snapshots/current.json \\
             --output markdown \\
-            --output-file artifacts/lfguard-audit.md \\
+            --output-file artifacts/lfpolicy-audit.md \\
             --fail-on-findings \\
             --github-summary
           audit_status=$?
@@ -2983,11 +2983,11 @@ jobs:
             exit 1
           fi
 
-      - name: Upload lfguard reports
+      - name: Upload lfpolicy reports
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: lfguard-code-scanning-reports
+          name: lfpolicy-code-scanning-reports
           path: |
             artifacts/
             snapshots/
@@ -3007,7 +3007,7 @@ def _bootstrap_codeowners(policy_owner: str) -> str:
 policy/* {policy_owner}
 snapshots/* {policy_owner}
 iam/* {policy_owner}
-.github/workflows/lfguard-*.yml {policy_owner}
+.github/workflows/lfpolicy-*.yml {policy_owner}
 """.format(
         policy_owner=policy_owner,
     )
@@ -3018,12 +3018,12 @@ def _bootstrap_pull_request_template(desired_path: str) -> str:
 
 ## Review Checklist
 
-- [ ] `lfguard check --desired {desired_path} --fail-on-findings` passes.
-- [ ] `lfguard summary --desired {desired_path} --output markdown` was reviewed for changed LF-Tag keys, resources, principals, and permissions.
-- [ ] If a current-state snapshot is included, `lfguard audit` findings are understood and intentional.
-- [ ] If a plan is included, every `lfguard plan` change was reviewed before a consuming service executes it.
+- [ ] `lfpolicy check --desired {desired_path} --fail-on-findings` passes.
+- [ ] `lfpolicy summary --desired {desired_path} --output markdown` was reviewed for changed LF-Tag keys, resources, principals, and permissions.
+- [ ] If a current-state snapshot is included, `lfpolicy audit` findings are understood and intentional.
+- [ ] If a plan is included, every `lfpolicy plan` change was reviewed before a consuming service executes it.
 - [ ] Destructive flags such as `--allow-permission-revokes`, `--allow-resource-tag-removals`, and `--allow-lf-tag-value-removals` are used only in a separately approved workflow.
-- [ ] Live AWS roles and IAM policies are scoped to the intended read-only lfguard workflow.
+- [ ] Live AWS roles and IAM policies are scoped to the intended read-only lfpolicy workflow.
 
 ## Notes
 
@@ -3038,7 +3038,7 @@ def _bootstrap_vscode_settings(desired_path: str, *, needs_yaml_extra: bool) -> 
         return dumps_json(
             {
                 "yaml.schemas": {
-                    "./policy/lfguard.schema.json": [
+                    "./policy/lfpolicy.schema.json": [
                         desired_path,
                         "snapshots/*.yaml",
                         "snapshots/*.yml",
@@ -3054,7 +3054,7 @@ def _bootstrap_vscode_settings(desired_path: str, *, needs_yaml_extra: bool) -> 
                         desired_path,
                         "snapshots/*.json",
                     ],
-                    "url": "./policy/lfguard.schema.json",
+                    "url": "./policy/lfpolicy.schema.json",
                 }
             ]
         }
@@ -3077,19 +3077,19 @@ def _bootstrap_readme(
     aws_role_arn: str = "arn:aws:iam::111122223333:role/LakeFormationReadOnly",
     aws_region: str = "us-east-1",
 ) -> str:
-    install_command = 'python -m pip install "lfguard[yaml]"' if needs_yaml_extra else "python -m pip install lfguard"
+    install_command = 'python -m pip install "lfpolicy[yaml]"' if needs_yaml_extra else "python -m pip install lfpolicy"
     workflow_files = ""
     workflow_steps = ""
     live_drift_next_step = "Add a read-only Lake Formation snapshot workflow when you are ready to check live AWS drift."
     if include_live_drift or include_code_scanning:
-        live_extra = "lfguard[aws,yaml]" if needs_yaml_extra else "lfguard[aws]"
-        workflow_files = """- `iam/lfguard-read-only.json`: starter IAM policy for the role used by generated
+        live_extra = "lfpolicy[aws,yaml]" if needs_yaml_extra else "lfpolicy[aws]"
+        workflow_files = """- `iam/lfpolicy-read-only.json`: starter IAM policy for the role used by generated
   live AWS workflows.
 """
     if include_live_drift:
-        live_extra = "lfguard[aws,yaml]" if needs_yaml_extra else "lfguard[aws]"
+        live_extra = "lfpolicy[aws,yaml]" if needs_yaml_extra else "lfpolicy[aws]"
         live_drift_next_step = "Review the generated live drift workflow and attach least-privilege read permissions."
-        workflow_files += """- `.github/workflows/lfguard-live-drift.yml`: scheduled live AWS drift check
+        workflow_files += """- `.github/workflows/lfpolicy-live-drift.yml`: scheduled live AWS drift check
   using GitHub OIDC and `{live_extra}`.
 """.format(
             live_extra=live_extra,
@@ -3098,18 +3098,18 @@ def _bootstrap_readme(
 ## Live Drift Workflow
 
 The generated live drift workflow assumes `{aws_role_arn}` in `{aws_region}`.
-Review `.github/workflows/lfguard-live-drift.yml`, attach the starter
-`iam/lfguard-read-only.json` permissions to the assumed role, then enable the
+Review `.github/workflows/lfpolicy-live-drift.yml`, attach the starter
+`iam/lfpolicy-read-only.json` permissions to the assumed role, then enable the
 workflow after the desired policy is reviewed.
 """.format(
             aws_region=aws_region,
             aws_role_arn=aws_role_arn,
         )
     if include_code_scanning:
-        live_extra = "lfguard[aws,yaml]" if needs_yaml_extra else "lfguard[aws]"
+        live_extra = "lfpolicy[aws,yaml]" if needs_yaml_extra else "lfpolicy[aws]"
         live_drift_next_step = "Review the generated Code Scanning workflow and attach least-privilege read permissions."
-        workflow_files += """- `.github/workflows/lfguard-code-scanning.yml`: GitHub Code Scanning workflow
-  that uploads `lfguard` SARIF findings using `{live_extra}`.
+        workflow_files += """- `.github/workflows/lfpolicy-code-scanning.yml`: GitHub Code Scanning workflow
+  that uploads `lfpolicy` SARIF findings using `{live_extra}`.
 """.format(
             live_extra=live_extra,
         )
@@ -3117,8 +3117,8 @@ workflow after the desired policy is reviewed.
 ## Code Scanning Workflow
 
 The generated Code Scanning workflow assumes `{aws_role_arn}` in `{aws_region}`.
-Review `.github/workflows/lfguard-code-scanning.yml`, attach the starter
-`iam/lfguard-read-only.json` permissions to the assumed role, and confirm the
+Review `.github/workflows/lfpolicy-code-scanning.yml`, attach the starter
+`iam/lfpolicy-read-only.json` permissions to the assumed role, and confirm the
 repository can upload SARIF before enabling the workflow.
 """.format(
             aws_region=aws_region,
@@ -3156,7 +3156,7 @@ with the CI workflows your repository enables.
 ## Editor Validation
 
 Open this directory in VS Code to validate `{desired_path}` against
-`policy/lfguard.schema.json`. Install the recommended YAML extension from
+`policy/lfpolicy.schema.json`. Install the recommended YAML extension from
 `.vscode/extensions.json` if VS Code prompts you.
 """.format(
                 desired_path=desired_path,
@@ -3166,21 +3166,21 @@ Open this directory in VS Code to validate `{desired_path}` against
 ## Editor Validation
 
 Open this directory in VS Code to validate `{desired_path}` against
-`policy/lfguard.schema.json`.
+`policy/lfpolicy.schema.json`.
 """.format(
                 desired_path=desired_path,
             )
-    return """# lfguard Policy Bootstrap
+    return """# lfpolicy Policy Bootstrap
 
 This directory is a starter Lake Formation policy-as-code layout generated by
-`lfguard bootstrap`.
+`lfpolicy bootstrap`.
 
 ## Files
 
 - `policy.py`: Python source of truth for permission groups.
 - `{desired_path}`: generated desired LF-Tag and grant policy.
-- `policy/lfguard.schema.json`: JSON Schema for editor integration.
-- `.github/workflows/lfguard-policy.yml`: offline CI check, summary, and report
+- `policy/lfpolicy.schema.json`: JSON Schema for editor integration.
+- `.github/workflows/lfpolicy-policy.yml`: offline CI check, summary, and report
   artifact workflow.
 - `.pre-commit-config.yaml`: local generate-and-check hook.
 {workflow_files}
@@ -3191,9 +3191,9 @@ This directory is a starter Lake Formation policy-as-code layout generated by
 
 ```bash
 {install_command}
-lfguard generate policy.py --output-file {desired_path} --force
-lfguard check --desired {desired_path} --fail-on-findings
-lfguard summary --desired {desired_path}
+lfpolicy generate policy.py --output-file {desired_path} --force
+lfpolicy check --desired {desired_path} --fail-on-findings
+lfpolicy summary --desired {desired_path}
 ```
 {workflow_steps}
 {review_steps}
@@ -3329,7 +3329,7 @@ def _sample_files(output_format: str, *, include_ci: bool = False, workflow_path
         include_ci_note=include_ci,
     )
     if include_ci:
-        files[".github/workflows/lfguard-demo.yml"] = _sample_github_actions_workflow(
+        files[".github/workflows/lfpolicy-demo.yml"] = _sample_github_actions_workflow(
             desired_name,
             current_name,
             workflow_path_prefix=workflow_path_prefix,
@@ -3368,8 +3368,8 @@ def _sample_github_actions_workflow(
 ) -> str:
     desired_path = _workflow_path(workflow_path_prefix, desired_name)
     current_path = _workflow_path(workflow_path_prefix, current_name)
-    install_target = '"lfguard[yaml]"' if needs_yaml_extra else "lfguard"
-    return """name: lfguard demo
+    install_target = '"lfpolicy[yaml]"' if needs_yaml_extra else "lfpolicy"
+    return """name: lfpolicy demo
 
 on:
   workflow_dispatch:
@@ -3382,7 +3382,7 @@ permissions:
   contents: read
 
 jobs:
-  lfguard:
+  lfpolicy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -3391,45 +3391,45 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install lfguard
+      - name: Install lfpolicy
         run: python -m pip install {install_target}
 
       - name: Check, audit, and plan
         run: |
           mkdir -p artifacts
 
-          lfguard review \\
+          lfpolicy review \\
             --desired {desired_path} \\
             --current-snapshot {current_path} \\
             --output-dir artifacts/review
 
-          lfguard check \\
+          lfpolicy check \\
             --desired {desired_path} \\
             --current-snapshot {current_path} \\
             --output markdown \\
-            --output-file artifacts/lfguard-check.md \\
+            --output-file artifacts/lfpolicy-check.md \\
             --fail-on-findings \\
             --github-summary
 
-          lfguard audit \\
+          lfpolicy audit \\
             --desired {desired_path} \\
             --current-snapshot {current_path} \\
             --output markdown \\
-            --output-file artifacts/lfguard-audit.md \\
+            --output-file artifacts/lfpolicy-audit.md \\
             --github-summary
 
-          lfguard plan \\
+          lfpolicy plan \\
             --desired {desired_path} \\
             --current-snapshot {current_path} \\
             --output markdown \\
-            --output-file artifacts/lfguard-plan.md \\
+            --output-file artifacts/lfpolicy-plan.md \\
             --github-summary
 
-      - name: Upload lfguard reports
+      - name: Upload lfpolicy reports
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: lfguard-demo-reports
+          name: lfpolicy-demo-reports
           path: artifacts/
           if-no-files-found: ignore
 """.format(
@@ -3454,28 +3454,28 @@ def _sample_readme(
 YAML state files require the optional YAML extra when you read them:
 
 ```bash
-python -m pip install "lfguard[yaml]"
+python -m pip install "lfpolicy[yaml]"
 ```
 
 """
     both_note = ""
     if include_both_note:
         both_note = """This directory includes both JSON and YAML state files. The JSON commands work
-with the base `lfguard` install.
+with the base `lfpolicy` install.
 
 """
     ci_note = ""
     if include_ci_note:
         ci_note = """## GitHub Actions Demo
 
-This directory includes `.github/workflows/lfguard-demo.yml`, an offline
+This directory includes `.github/workflows/lfpolicy-demo.yml`, an offline
 workflow that checks, audits, plans, and uploads Markdown reports. If
 this sample directory is not your repository root, commit the sample directory
 and copy its `.github` directory to the repository root before enabling the
 workflow.
 
 """
-    return """# lfguard Demo
+    return """# lfpolicy Demo
 
 This directory contains a desired Lake Formation guardrail policy and a
 deliberately incomplete current-state snapshot. It is safe to use without AWS
@@ -3485,7 +3485,7 @@ credentials.
 ## Write A Review Bundle
 
 ```bash
-lfguard review \\
+lfpolicy review \\
   --desired {desired_name} \\
   --current-snapshot {current_name} \\
   --output-dir review
@@ -3494,25 +3494,25 @@ lfguard review \\
 ## Check State Files
 
 ```bash
-lfguard check --desired {desired_name} --current-snapshot {current_name}
+lfpolicy check --desired {desired_name} --current-snapshot {current_name}
 ```
 
 ## Summarize Policy
 
 ```bash
-lfguard summary --desired {desired_name} --current-snapshot {current_name}
+lfpolicy summary --desired {desired_name} --current-snapshot {current_name}
 ```
 
 ## Audit Drift
 
 ```bash
-lfguard audit --desired {desired_name} --current-snapshot {current_name}
+lfpolicy audit --desired {desired_name} --current-snapshot {current_name}
 ```
 
 ## Plan Safe Changes
 
 ```bash
-lfguard plan --desired {desired_name} --current-snapshot {current_name}
+lfpolicy plan --desired {desired_name} --current-snapshot {current_name}
 ```
 
 Expected summary:
@@ -3527,7 +3527,7 @@ The sample desired state includes a Lake Formation data cells filter definition
 and a missing `SELECT` grant on that filter:
 
 ```bash
-lfguard explain \\
+lfpolicy explain \\
   --desired {desired_name} \\
   --current-snapshot {current_name} \\
   --principal arn:aws:iam::111122223333:role/FilteredAnalyst \\
@@ -3544,35 +3544,35 @@ the same AWS context, scope the cache by profile, region, catalog, and desired
 state:
 
 ```bash
-lfguard plan \\
+lfpolicy plan \\
   --desired {desired_name} \\
   --profile prod \\
   --region us-east-1 \\
   --catalog-id 111122223333 \\
-  --current-cache .lfguard/prod-us-east-1-111122223333-current.json \\
+  --current-cache .lfpolicy/prod-us-east-1-111122223333-current.json \\
   --current-cache-max-age 900
 ```
 
 ## Save Reports
 
 ```bash
-lfguard check \\
+lfpolicy check \\
   --desired {desired_name} \\
   --current-snapshot {current_name} \\
   --output markdown \\
-  --output-file lfguard-check.md
+  --output-file lfpolicy-check.md
 
-lfguard audit \\
+lfpolicy audit \\
   --desired {desired_name} \\
   --current-snapshot {current_name} \\
   --output json \\
-  --output-file lfguard-audit.json
+  --output-file lfpolicy-audit.json
 
-lfguard plan \\
+lfpolicy plan \\
   --desired {desired_name} \\
   --current-snapshot {current_name} \\
   --output markdown \\
-  --output-file lfguard-plan.md
+  --output-file lfpolicy-plan.md
 ```
 """.format(
         both_note=both_note,
@@ -3638,7 +3638,7 @@ def _render_explain(report: ExplainReport, output: str) -> str:
 def _render_explain_markdown(report: ExplainReport) -> str:
     summary = report.summary()
     lines = [
-        "### lfguard explain",
+        "### lfpolicy explain",
         "",
         "- Principal: `{}`".format(report.principal),
         "- Resource: `{}`".format(report.resource.identity),
@@ -3758,7 +3758,7 @@ def _render_plan_markdown(change_plan: Plan, *, prefix: Optional[str] = None) ->
     summary = change_plan.summary()
     lines.extend(
         [
-            "### lfguard plan",
+            "### lfpolicy plan",
             "",
             "- Total changes: {total}".format(**summary),
             "- Safe changes: {safe}".format(**summary),
@@ -3819,7 +3819,7 @@ def _print_findings_markdown(findings: Iterable[AuditFinding]) -> None:
 def _render_findings_markdown(findings: Iterable[AuditFinding]) -> str:
     findings = tuple(findings)
     summary = _finding_summary(findings)
-    lines = ["### lfguard audit", ""]
+    lines = ["### lfpolicy audit", ""]
     if not findings:
         lines.append("No findings.")
         return "\n".join(lines) + "\n"
@@ -3866,7 +3866,7 @@ def _findings_to_sarif(findings: Iterable[Any], *, sarif_uri: Optional[str] = No
             {
                 "tool": {
                     "driver": {
-                        "name": "lfguard",
+                        "name": "lfpolicy",
                         "version": __version__,
                         "informationUri": "https://github.com/yongjip/aws-datalake-guard",
                         "rules": rules,
@@ -3900,7 +3900,7 @@ def _sarif_level(severity: str) -> str:
 
 
 def _sarif_location(finding: Any, sarif_uri: Optional[str]) -> dict:
-    artifact_uri = sarif_uri or "lfguard-audit"
+    artifact_uri = sarif_uri or "lfpolicy-audit"
     return {
         "physicalLocation": {
             "artifactLocation": {"uri": artifact_uri},

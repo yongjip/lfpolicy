@@ -1,4 +1,4 @@
-# lfguard review
+# lfpolicy review
 
 - Status: `blocked`
 - Recommended action: `block`

@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report reproducible lfguard behavior that looks incorrect
+about: Report reproducible lfpolicy behavior that looks incorrect
 title: ""
 labels: bug
 assignees: ""
@@ -13,7 +13,7 @@ Describe the behavior you saw and what you expected instead.
 ## Command or API call
 
 ```bash
-lfguard ...
+lfpolicy ...
 ```
 
 ## Minimal desired/current state
@@ -24,7 +24,7 @@ be public.
 
 ## Environment
 
-- `lfguard` version:
+- `lfpolicy` version:
 - Python version:
 - Operating system:
 - Install extras used, such as `aws` or `yaml`:
@@ -35,7 +35,7 @@ be public.
 Run this if possible and paste the sanitized output:
 
 ```bash
-lfguard doctor --output json
+lfpolicy doctor --output json
 ```
 
 ## Notes

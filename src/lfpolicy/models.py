@@ -530,7 +530,7 @@ def _data_cells_filter_definition_sort_key(definition: DataCellsFilterDefinition
 class LFTagKeyMetadata:
     """Authoring metadata for an LF-Tag key.
 
-    This metadata is optional and not read from AWS. It lets lfguard distinguish
+    This metadata is optional and not read from AWS. It lets lfpolicy distinguish
     table-wide LF-Tag policy grants from grants that may narrow access to
     matching columns.
     """

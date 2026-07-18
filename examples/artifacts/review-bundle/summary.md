@@ -1,4 +1,4 @@
-# lfguard review
+# lfpolicy review
 
 - Status: `review_required`
 - Recommended action: `review_required`

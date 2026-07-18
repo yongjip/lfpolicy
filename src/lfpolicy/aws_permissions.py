@@ -1,4 +1,4 @@
-"""AWS IAM permission templates and preflight checks for live read-only lfguard use."""
+"""AWS IAM permission templates and preflight checks for live read-only lfpolicy use."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 
-PERMISSIONS_CHECK_SCHEMA_VERSION = "lfguard.permissions-check.v1"
+PERMISSIONS_CHECK_SCHEMA_VERSION = "lfpolicy.permissions-check.v1"
 
 
 @dataclass(frozen=True)
@@ -29,7 +29,7 @@ class IAMActionCheck:
 
 @dataclass(frozen=True)
 class IAMPermissionCheckReport:
-    """Report describing whether an IAM principal can run a live lfguard workflow."""
+    """Report describing whether an IAM principal can run a live lfpolicy workflow."""
 
     template: str
     include_glue_read: bool
@@ -83,7 +83,7 @@ class AWSIAMPermissionChecker:
             import boto3  # type: ignore
         except ImportError as exc:
             raise RuntimeError(
-                "boto3 is required for live AWS permission checks. Install lfguard[aws]."
+                "boto3 is required for live AWS permission checks. Install lfpolicy[aws]."
             ) from exc
         session = boto3.Session(profile_name=profile_name, region_name=region_name)
         return cls(session.client("iam"), session.client("sts"))
@@ -131,7 +131,7 @@ class AWSIAMPermissionChecker:
 
 
 def iam_policy_template(template: str, *, include_glue_read: bool = False) -> Dict[str, Any]:
-    """Return the starter IAM policy for a live lfguard workflow template."""
+    """Return the starter IAM policy for a live lfpolicy workflow template."""
 
     if template != "read-only":
         raise ValueError("Unsupported IAM permission template: {}".format(template))

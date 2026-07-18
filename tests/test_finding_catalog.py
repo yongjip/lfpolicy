@@ -2,8 +2,8 @@ import ast
 import unittest
 from pathlib import Path
 
-from lakeformation_guard.finding_catalog import AUDIT_FINDINGS, LINT_FINDINGS, PLAN_ACTIONS
-from lakeformation_guard.planner import _ACTION_AWS_API
+from lfpolicy.finding_catalog import AUDIT_FINDINGS, LINT_FINDINGS, PLAN_ACTIONS
+from lfpolicy.planner import _ACTION_AWS_API
 
 
 class FindingCatalogTests(unittest.TestCase):
@@ -13,13 +13,13 @@ class FindingCatalogTests(unittest.TestCase):
         cls.catalog_doc = (cls.root / "docs" / "finding-catalog.md").read_text(encoding="utf-8")
 
     def test_lint_finding_codes_have_catalog_entries(self):
-        source_path = self.root / "src" / "lakeformation_guard" / "lint.py"
+        source_path = self.root / "src" / "lfpolicy" / "lint.py"
         codes = _finding_codes(source_path, "LintFinding") | _dynamic_lint_codes(source_path)
 
         self.assertEqual(codes - set(LINT_FINDINGS), set())
 
     def test_audit_finding_codes_have_catalog_entries(self):
-        source_path = self.root / "src" / "lakeformation_guard" / "audit.py"
+        source_path = self.root / "src" / "lfpolicy" / "audit.py"
         codes = _finding_codes(source_path, "AuditFinding") | _dynamic_grant_audit_codes(source_path)
 
         self.assertEqual(codes - set(AUDIT_FINDINGS), set())

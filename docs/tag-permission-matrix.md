@@ -107,7 +107,7 @@ matches any value for `domain`, but it still requires the resource to have the
 
 ## Grant Shape Matrix
 
-| Grant shape | Tag evaluation | Typical use | `lfguard` stance |
+| Grant shape | Tag evaluation | Typical use | `lfpolicy` stance |
 | --- | --- | --- | --- |
 | Named catalog grant | None. The grant names the catalog. | Catalog-level administration such as `CREATE_DATABASE`. | Supported, but broad grants are linted when risky. |
 | Named database grant | None. The grant names the database. | Small exceptions or migration support. | Supported as an exception; routine named database grants are lint errors unless excepted. |
@@ -132,8 +132,8 @@ Assume table `orders` has columns `id`, `amount`, and `email`.
 | Table has `sensitivity=internal`; column `email` has `sensitivity=restricted`. | `SELECT` on `sensitivity=internal` | Principal can select `id` and `amount`, not `email`. |
 | Same table and column tags. | `SELECT` on `sensitivity=restricted` | Principal can select `email` only. |
 | Same table and column tags. | `DESCRIBE` on `sensitivity=restricted` | Principal can see matching column metadata, subject to the calling service's metadata behavior. |
-| Same table and column tags. | `ALTER`, `DROP`, `INSERT`, or `DELETE` through only the restricted column match | AWS does not grant those full-table permissions from a partial-column LF-Tag match; only `DESCRIBE` is granted. `lfguard` blocks LF-Tag table policies that combine `SELECT` with these permissions. |
-| Same table and column tags. | `ALL`/`SUPER` through only the restricted column match | AWS reduces the effective LF-TBAC result to `SELECT` and `DESCRIBE` for the matching subset. `lfguard` still blocks `ALL`/`SUPER` in desired policy. |
+| Same table and column tags. | `ALTER`, `DROP`, `INSERT`, or `DELETE` through only the restricted column match | AWS does not grant those full-table permissions from a partial-column LF-Tag match; only `DESCRIBE` is granted. `lfpolicy` blocks LF-Tag table policies that combine `SELECT` with these permissions. |
+| Same table and column tags. | `ALL`/`SUPER` through only the restricted column match | AWS reduces the effective LF-TBAC result to `SELECT` and `DESCRIBE` for the matching subset. `lfpolicy` still blocks `ALL`/`SUPER` in desired policy. |
 | Table has `domain=sales`; column `email` has `sensitivity=restricted`. | `SELECT` on `domain=sales AND sensitivity=restricted` | Matches `email` only if the column also effectively has `domain=sales` through inheritance. |
 | Table has `domain=sales`; column `email` has `domain=privacy`. | `SELECT` on `domain=sales` | Does not match `email`; the column override changes the effective value for that key. |
 | Table has `domain=sales`; column `email` has `domain=privacy`. | `SELECT` on `domain=privacy` | Matches `email` only. |
@@ -163,10 +163,10 @@ This matrix answers the common same-key table/column override case.
 
 ## Permission Matrix
 
-This matrix describes AWS Lake Formation permission shapes and how `lfguard`
+This matrix describes AWS Lake Formation permission shapes and how `lfpolicy`
 models them.
 
-| Resource shape | AWS permissions | `lfguard` support |
+| Resource shape | AWS permissions | `lfpolicy` support |
 | --- | --- | --- |
 | Catalog / Data Catalog | `CREATE_DATABASE`; catalog also has `ALL`, `ALTER`, `DESCRIBE`, `DROP` in the AWS reference. | `catalog` grants are supported. |
 | Database | `ALL`, `ALTER`, `CREATE_TABLE`, `DESCRIBE`, `DROP`. | `database` grants and `lf_tag_policy` with `resource_type=DATABASE` are supported. |
@@ -176,7 +176,7 @@ models them.
 | LF-Tag policy - database | Database permissions on databases matching an LF-Tag expression. | Supported as `lf_tag_policy` with `resource_type=DATABASE`. |
 | LF-Tag policy - table | Table permissions on tables/views/columns matching an LF-Tag expression. | Supported as `lf_tag_policy` with `resource_type=TABLE`. |
 | LF-Tag values | `ASSOCIATE`, `DESCRIBE`, and grant-with-LF-Tag-expression permissions. | Not modeled as desired grants. Use native Lake Formation administration for LF-Tag permission delegation. |
-| LF-Tags themselves | `ALTER`, `DROP`. | `lfguard` models LF-Tag definitions as desired state and plan evidence, but does not model administrative LF-Tag delegation grants or execute writes. |
+| LF-Tags themselves | `ALTER`, `DROP`. | `lfpolicy` models LF-Tag definitions as desired state and plan evidence, but does not model administrative LF-Tag delegation grants or execute writes. |
 | Data filters / cell filters | `SELECT`, `DESCRIBE`, `DROP` on filtered table resources. | `data_cells_filter` grants and `data_cells_filters` definitions are supported, including row filters and included or excluded columns. |
 | Resource links | `DESCRIBE`, `DROP`. | Not modeled separately. |
 
@@ -195,13 +195,13 @@ models them.
 | `DATA_LOCATION_ACCESS` | Use a registered S3 location for table data. | Data location. | Required for some producer workflows; not a table read permission by itself. |
 | `ASSOCIATE` | Assign an LF-Tag value to a Data Catalog resource. | LF-Tag value. | Implicitly includes `DESCRIBE`; useful for delegated tag stewards. |
 | `GrantWithLFTagExpression` | Delegate grants using the permitted LF-Tag expression. | LF-Tag value. | Treat as stewardship delegation, not routine reader access. |
-| `ALL` / `SUPER` | Broad supported operations on the resource. | Catalog, database, table, LF-Tag policy resources. | `lfguard` treats this as an error because it hides the intended permission shape. |
-| `SUPER_USER` | Super user on catalogs within a catalog resource. | Catalog. | Outside normal `lfguard` desired policy; review natively. |
+| `ALL` / `SUPER` | Broad supported operations on the resource. | Catalog, database, table, LF-Tag policy resources. | `lfpolicy` treats this as an error because it hides the intended permission shape. |
+| `SUPER_USER` | Super user on catalogs within a catalog resource. | Catalog. | Outside normal `lfpolicy` desired policy; review natively. |
 
 ## Grant Option
 
 `grantable_permissions` means the principal can delegate those Lake Formation
-permissions to another principal. Keep it rare. In `lfguard`, declare it only
+permissions to another principal. Keep it rare. In `lfpolicy`, declare it only
 when delegation is the intent:
 
 ```json
@@ -222,7 +222,7 @@ option when column filtering is applied.
 
 ## Controlled-Lake Guardrails
 
-`lfguard lint` is intentionally opinionated. It reports errors for policy that
+`lfpolicy lint` is intentionally opinionated. It reports errors for policy that
 does not behave cleanly in AWS, such as mixed-case LF-Tags, multiple values for
 one key on a resource, broad `IAMAllowedPrincipals` or `ALLIAMPrincipals`
 grants, `ALL`/`SUPER` permissions, and LF-Tag `TABLE` policies that combine
@@ -239,7 +239,7 @@ It reports errors for policy that can be valid but must be explicit: mutating
 permissions, grant option, and named database/table grants. Use scoped
 `exceptions` with reason, ticket, owner, approver, and expiry metadata when these are
 intentional. Wildcard LF-Tag policy values remain warnings. In CI,
-`lfguard check --fail-on-findings` blocks both errors and warnings by default,
+`lfpolicy check --fail-on-findings` blocks both errors and warnings by default,
 which keeps the lake closer to a controlled database permission model.
 
 ## Review Checklist

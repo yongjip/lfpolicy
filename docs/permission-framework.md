@@ -1,6 +1,6 @@
 # Permission Framework Concepts
 
-`lfguard` is a strict framework for defining, validating, explaining, planning,
+`lfpolicy` is a strict framework for defining, validating, explaining, planning,
 and reviewing AWS Lake Formation data permissions. It is not a
 consumer-specific integration layer; approval systems, CI jobs, internal consoles, Jira,
 Slack, and cache-backed inventory systems should integrate through state files,
@@ -88,7 +88,7 @@ policy.group("analytics", reader().where(domain="sales")).as_named_expression(
 
 The compiled desired state contains one `lf_tag_expressions` definition and
 LF-Tag policy grants that reference it by `expression_name`. This is a pure
-authoring convenience; `lfguard` still emits evidence and does not execute AWS
+authoring convenience; `lfpolicy` still emits evidence and does not execute AWS
 permission changes. Because the same named expression is used for the database
 and table grants, all filter keys in a named-expression group must be
 database-assignable.
@@ -110,11 +110,11 @@ lint, audit, explain, plan, and review semantics.
 
 JSON reports are intended as API-friendly evidence:
 
-- `plan` uses `schema_version: "lfguard.plan.v1"` and deterministic
+- `plan` uses `schema_version: "lfpolicy.plan.v1"` and deterministic
   `change_001` IDs.
-- `audit` uses `schema_version: "lfguard.audit.v1"` and deterministic
+- `audit` uses `schema_version: "lfpolicy.audit.v1"` and deterministic
   `finding_001` IDs.
-- `explain` uses `schema_version: "lfguard.explain.v1"` and deterministic
+- `explain` uses `schema_version: "lfpolicy.explain.v1"` and deterministic
   `finding_001` IDs.
 
 Store these reports as CI artifacts or feed them into approval systems. Treat
@@ -125,7 +125,7 @@ schema-version changes as integration events.
 - [`ci-evidence-workflows.md`](ci-evidence-workflows.md): CI artifact sets,
   drift gates, plan review, access explanation, and review bundle evidence.
 - [`terraform-cdk-coexistence.md`](terraform-cdk-coexistence.md): ownership
-  boundaries between infrastructure tools and `lfguard`.
+  boundaries between infrastructure tools and `lfpolicy`.
 - [`import-adoption-recipes.md`](import-adoption-recipes.md): practical import,
   ownership, data cells filter, and promotion recipes.
 - [`exception-lifecycle.md`](exception-lifecycle.md): request, approval, expiry,

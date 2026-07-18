@@ -23,7 +23,7 @@ from .state_index import (
 )
 
 
-AUDIT_SCHEMA_VERSION = "lfguard.audit.v1"
+AUDIT_SCHEMA_VERSION = "lfpolicy.audit.v1"
 
 
 @dataclass(frozen=True)

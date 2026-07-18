@@ -3,10 +3,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import lakeformation_guard
-from lakeformation_guard.lint import lint_desired
-from lakeformation_guard.models import DesiredState
-from lakeformation_guard.policy import (
+import lfpolicy
+from lfpolicy.lint import lint_desired
+from lfpolicy.models import DesiredState
+from lfpolicy.policy import (
     LakePolicy,
     PermissionTemplate,
     PolicyValidationError,
@@ -635,7 +635,7 @@ class PolicyAuthoringTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             policy_path = Path(tmp) / "policy.py"
             policy_path.write_text(
-                """from lakeformation_guard.policy import LakePolicy, TagAssignmentScope, reader
+                """from lfpolicy.policy import LakePolicy, TagAssignmentScope, reader
 
 policy = LakePolicy()
 policy.tag_key("domain", values=["sales"], assignable_to=[TagAssignmentScope.DATABASE])
@@ -672,8 +672,8 @@ policy.bind_role("arn:aws:iam::111122223333:role/DataConsumer", "dataconsumer")
         )
 
     def test_ambiguous_creator_template_is_not_public_api(self):
-        self.assertFalse(hasattr(lakeformation_guard, "creator"))
-        self.assertNotIn("creator", lakeformation_guard.__all__)
+        self.assertFalse(hasattr(lfpolicy, "creator"))
+        self.assertNotIn("creator", lfpolicy.__all__)
         self.assertEqual(
             PermissionTemplate("table_creator"),
             PermissionTemplate.TABLE_CREATOR,

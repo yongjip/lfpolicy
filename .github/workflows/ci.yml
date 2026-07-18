@@ -42,47 +42,47 @@ jobs:
         run: python -m twine check dist/*
       - name: Smoke test built wheel
         run: |
-          python -m venv /tmp/lfguard-wheel-smoke
-          /tmp/lfguard-wheel-smoke/bin/python -m pip install --no-index --find-links dist lfguard
-          /tmp/lfguard-wheel-smoke/bin/lfguard --version
-          /tmp/lfguard-wheel-smoke/bin/lfguard generate examples/policy.py --output-file /tmp/lfguard-policy.json --force
-          /tmp/lfguard-wheel-smoke/bin/lfguard generate examples/policy.py --output-file /tmp/lfguard-policy.json --check
-          /tmp/lfguard-wheel-smoke/bin/lfguard check --desired /tmp/lfguard-policy.json --fail-on-findings
-          /tmp/lfguard-wheel-smoke/bin/lfguard bootstrap --output-dir /tmp/lfguard-policy-bootstrap
-          /tmp/lfguard-wheel-smoke/bin/lfguard generate /tmp/lfguard-policy-bootstrap/policy.py --output-file /tmp/lfguard-policy-bootstrap/policy/desired.json --check
-          /tmp/lfguard-wheel-smoke/bin/lfguard sample --output-dir /tmp/lfguard-demo
-          /tmp/lfguard-wheel-smoke/bin/lfguard check \
-            --desired /tmp/lfguard-demo/desired.json \
-            --current-snapshot /tmp/lfguard-demo/current-snapshot.json \
+          python -m venv /tmp/lfpolicy-wheel-smoke
+          /tmp/lfpolicy-wheel-smoke/bin/python -m pip install --no-index --find-links dist lfpolicy
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy --version
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy generate examples/policy.py --output-file /tmp/lfpolicy-policy.json --force
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy generate examples/policy.py --output-file /tmp/lfpolicy-policy.json --check
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy check --desired /tmp/lfpolicy-policy.json --fail-on-findings
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy bootstrap --output-dir /tmp/lfpolicy-policy-bootstrap
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy generate /tmp/lfpolicy-policy-bootstrap/policy.py --output-file /tmp/lfpolicy-policy-bootstrap/policy/desired.json --check
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy sample --output-dir /tmp/lfpolicy-demo
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy check \
+            --desired /tmp/lfpolicy-demo/desired.json \
+            --current-snapshot /tmp/lfpolicy-demo/current-snapshot.json \
             --output markdown \
-            --output-file /tmp/lfguard-check.md
-          /tmp/lfguard-wheel-smoke/bin/lfguard lint --desired /tmp/lfguard-demo/desired.json
-          /tmp/lfguard-wheel-smoke/bin/lfguard lint --desired /tmp/lfguard-demo/desired.json --output sarif --output-file /tmp/lfguard-lint.sarif
-          /tmp/lfguard-wheel-smoke/bin/lfguard summary --desired /tmp/lfguard-demo/desired.json --current-snapshot /tmp/lfguard-demo/current-snapshot.json --output markdown
-          /tmp/lfguard-wheel-smoke/bin/lfguard review \
-            --desired /tmp/lfguard-demo/desired.json \
-            --current-snapshot /tmp/lfguard-demo/current-snapshot.json \
-            --output-dir /tmp/lfguard-review-smoke \
+            --output-file /tmp/lfpolicy-check.md
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy lint --desired /tmp/lfpolicy-demo/desired.json
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy lint --desired /tmp/lfpolicy-demo/desired.json --output sarif --output-file /tmp/lfpolicy-lint.sarif
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy summary --desired /tmp/lfpolicy-demo/desired.json --current-snapshot /tmp/lfpolicy-demo/current-snapshot.json --output markdown
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy review \
+            --desired /tmp/lfpolicy-demo/desired.json \
+            --current-snapshot /tmp/lfpolicy-demo/current-snapshot.json \
+            --output-dir /tmp/lfpolicy-review-smoke \
             --force
-          /tmp/lfguard-wheel-smoke/bin/lfguard explain \
-            --desired /tmp/lfguard-demo/desired.json \
-            --current-snapshot /tmp/lfguard-demo/current-snapshot.json \
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy explain \
+            --desired /tmp/lfpolicy-demo/desired.json \
+            --current-snapshot /tmp/lfpolicy-demo/current-snapshot.json \
             --principal arn:aws:iam::111122223333:role/DataConsumer \
             --database sales_curated \
             --table customers \
             --permissions SELECT \
             --output json
-          /tmp/lfguard-wheel-smoke/bin/lfguard explain-batch \
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy explain-batch \
             --requests examples/access-requests.json \
             --current-snapshot examples/access-current-snapshot.json \
             --output json \
-            --output-file /tmp/lfguard-explain-batch.json
-          /tmp/lfguard-wheel-smoke/bin/lfguard plan \
-            --desired /tmp/lfguard-demo/desired.json \
-            --current-snapshot /tmp/lfguard-demo/current-snapshot.json
-          /tmp/lfguard-wheel-smoke/bin/python -c "from lakeformation_guard import CurrentStateProvider, DesiredState, CurrentState, LakePolicy, audit, explain, plan, table_creator; print(DesiredState.__name__, CurrentState.__name__, LakePolicy.__name__, CurrentStateProvider, callable(audit), callable(explain), callable(plan), callable(table_creator))"
+            --output-file /tmp/lfpolicy-explain-batch.json
+          /tmp/lfpolicy-wheel-smoke/bin/lfpolicy plan \
+            --desired /tmp/lfpolicy-demo/desired.json \
+            --current-snapshot /tmp/lfpolicy-demo/current-snapshot.json
+          /tmp/lfpolicy-wheel-smoke/bin/python -c "from lfpolicy import CurrentStateProvider, DesiredState, CurrentState, LakePolicy, audit, explain, plan, table_creator; print(DesiredState.__name__, CurrentState.__name__, LakePolicy.__name__, CurrentStateProvider, callable(audit), callable(explain), callable(plan), callable(table_creator))"
       - uses: actions/upload-artifact@v6
         with:
-          name: lfguard-distributions
+          name: lfpolicy-distributions
           path: dist/
           if-no-files-found: error

@@ -1,6 +1,6 @@
 # Roadmap
 
-This roadmap is intentionally conservative. `lfguard` should stay small,
+This roadmap is intentionally conservative. `lfpolicy` should stay small,
 reviewable, and safe by default while it expands around real Lake Formation
 policy workflows.
 
@@ -10,7 +10,7 @@ The first release focuses on the core guardrail loop:
 
 - Offline desired/current state files in JSON and optional YAML.
 - Importable `lint_desired()`, `audit()`, and `plan()` APIs.
-- A short `lfguard` CLI with validation, lint, audit, plan, review, snapshot,
+- A short `lfpolicy` CLI with validation, lint, audit, plan, review, snapshot,
   and explain workflows.
 - Conservative planning defaults that omit revokes and removals unless explicitly
   allowed.
@@ -22,7 +22,7 @@ The first release focuses on the core guardrail loop:
 Recent releases added adoption controls, named LF-Tag expressions, import
 scaffolding, stable plan JSON, review bundles, a small current-state provider
 interface, effective-access explanations, cache-backed live workflows, and data
-cells filter modeling. Version 0.9.0 removed lfguard-owned AWS write execution
+cells filter modeling. Version 0.9.0 removed lfpolicy-owned AWS write execution
 to keep the package advisory-only.
 
 ## Near-Term Priorities
@@ -49,7 +49,7 @@ The most useful next improvements are:
 
 ## Evaluation Priorities
 
-Before widening the supported surface, `lfguard` should collect feedback on:
+Before widening the supported surface, `lfpolicy` should collect feedback on:
 
 - Whether the desired-state shape is expressive enough for platform teams.
 - Which Lake Formation resource kinds or grant patterns are missing.
@@ -61,7 +61,7 @@ Before widening the supported surface, `lfguard` should collect feedback on:
 
 ## Non-Goals
 
-`lfguard` should not become a general AWS provisioning framework. It should not
+`lfpolicy` should not become a general AWS provisioning framework. It should not
 replace Terraform, CloudFormation, CDK, IAM administration, Lake Formation
 administration, or account security controls.
 

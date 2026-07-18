@@ -56,9 +56,9 @@ Example:
 
 1. Request: capture the requester, business reason, target resource, requested
    permissions, and expiry.
-2. Review: run `lfguard lint` and confirm only the intended finding is
+2. Review: run `lfpolicy lint` and confirm only the intended finding is
    suppressed.
-3. Evidence: attach the `lfguard review` bundle to the approval record.
+3. Evidence: attach the `lfpolicy review` bundle to the approval record.
 4. Execute: let the consuming service grant approved access and keep destructive
    cleanup separate.
 5. Monitor: run scheduled CI so expired exceptions start failing lint.
@@ -70,10 +70,10 @@ Example:
 Run exceptions through the same gate as the rest of desired state:
 
 ```bash
-lfguard lint \
+lfpolicy lint \
   --desired policy/desired.json \
   --output json \
-  --output-file artifacts/lfguard-lint.json \
+  --output-file artifacts/lfpolicy-lint.json \
   --fail-on-findings
 ```
 

@@ -1,11 +1,11 @@
 # LLM Agent Integration
 
 Use this guide when an LLM agent, approval workflow assistant, or service
-reads `lfguard` JSON output. This is runtime integration guidance, not coding
+reads `lfpolicy` JSON output. This is runtime integration guidance, not coding
 agent guidance for modifying this repository. Repository coding agents should
 start with [`../AGENTS.md`](../AGENTS.md).
 
-Backend services should invoke `lfguard` through the CLI module and consume JSON
+Backend services should invoke `lfpolicy` through the CLI module and consume JSON
 artifacts. See [`service-integration.md`](service-integration.md) for the
 subprocess contract boundary.
 
@@ -13,7 +13,7 @@ subprocess contract boundary.
 
 Separate technical severity from workflow action.
 
-- `severity` describes the governance signal produced by `lfguard`.
+- `severity` describes the governance signal produced by `lfpolicy`.
 - `recommended_action` tells the consuming workflow what to do next.
 - `hard_block` is a boolean shortcut for `recommended_action: "block"`.
 
@@ -45,7 +45,7 @@ Read `review/summary.json` first.
 4. If `recommended_action` is `review_required`, summarize the plan, lint, and
    audit evidence for a human reviewer.
 5. If `recommended_action` is `inform`, show the finding only as context.
-6. Do not execute AWS writes from a review bundle alone. `lfguard` has no apply
+6. Do not execute AWS writes from a review bundle alone. `lfpolicy` has no apply
    command in 0.9.0 and later; consuming services own approval and execution.
 
 Recommended review summary handling:
@@ -105,7 +105,7 @@ someone currently can or cannot access a table.
 For operational access questions, use `explain-batch`:
 
 ```bash
-lfguard explain-batch \
+lfpolicy explain-batch \
   --requests access-requests.json \
   --current-snapshot current.json \
   --output json

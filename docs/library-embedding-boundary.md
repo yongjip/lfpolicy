@@ -1,11 +1,11 @@
 # Library Embedding Boundary
 
-`lfguard` is a Lake Formation policy review engine first. It is not intended to
+`lfpolicy` is a Lake Formation policy review engine first. It is not intended to
 become a request-time mutation SDK for every service that manages Lake
 Formation.
 
 Use this document when evaluating feature requests from services that want to
-embed `lfguard` as a library.
+embed `lfpolicy` as a library.
 
 For the maintainer-side triage procedure, labels, decision table, and canned
 replies, see [`request-screening.md`](request-screening.md).
@@ -15,32 +15,32 @@ replies, see [`request-screening.md`](request-screening.md).
 - Keep advisory evidence as the center of the product.
 - Keep desired/current state, lint, audit, explain, review, and plan
   deterministic and reviewable.
-- Keep AWS write execution outside `lfguard`.
+- Keep AWS write execution outside `lfpolicy`.
 - Keep service IAM layout, approval identity, runtime credentials, customer
-  language, and request-state ownership outside `lfguard`.
+  language, and request-state ownership outside `lfpolicy`.
 
 ## Preferred Integration Paths
 
 Choose the smallest integration that solves the problem:
 
 1. Service or workflow integration:
-   invoke `python -m lakeformation_guard ...` and consume JSON artifacts.
+   invoke `python -m lfpolicy ...` and consume JSON artifacts.
 2. Offline policy or evidence reuse:
    use the public top-level Python API for models, `lint_desired()`, `audit()`,
    `plan()`, `explain()`, providers, and the policy builder.
 3. Scoped live AWS helpers:
-   use `lakeformation_guard.aws.AWSLakeFormationAdapter` only when a caller
+   use `lfpolicy.aws.AWSLakeFormationAdapter` only when a caller
    explicitly needs read-only live inventory or import helpers and accepts that
    this is not the primary service integration contract.
 4. Request-shaped plan evidence:
-   use `lakeformation_guard.aws.boto3_kwargs_for(change)` only to marshal an
+   use `lfpolicy.aws.boto3_kwargs_for(change)` only to marshal an
    already reviewed planned `Change` into inert `{method, kwargs}` data. The
    consuming service still owns the client, credentials, approval, retries,
    rollback, audit storage, and actual AWS write decision.
 
 ## Changes That Fit Core
 
-These requests usually belong in `lfguard`:
+These requests usually belong in `lfpolicy`:
 
 - New Lake Formation state shapes, planner actions, and explanation logic for
   supported LF resources.
@@ -60,7 +60,7 @@ These requests are usually declined or redirected:
   `upsert_*()`, or `convert_to_*()` that are designed around one HTTP handler
   rather than reviewed desired state and plans.
 - AWS write flows, rollback engines, or HTTP-response-oriented execution
-  orchestration that turn `lfguard` into a service mutation runtime.
+  orchestration that turn `lfpolicy` into a service mutation runtime.
 - Dynamic desired-state expansion from live AWS at plan time, such as "all
   current values of this LF-Tag key". Desired policy should stay explicit and
   reviewable.
@@ -71,7 +71,7 @@ These requests are usually declined or redirected:
 
 ## Multi-Catalog Guidance
 
-`lfguard` does not provide a catalog-orchestration engine. Treat each catalog as
+`lfpolicy` does not provide a catalog-orchestration engine. Treat each catalog as
 an explicit review scope:
 
 - Put `catalog_id` on desired resources, LF-Tags, expressions, and filters when
@@ -84,32 +84,32 @@ an explicit review scope:
 Example CLI pattern:
 
 ```bash
-lfguard snapshot \
+lfpolicy snapshot \
   --desired policy/desired.json \
   --profile prod \
   --region us-east-1 \
   --catalog-id 111122223333 \
   --output-file snapshots/prod-111122223333.json
 
-lfguard review \
+lfpolicy review \
   --desired policy/desired.json \
   --current-snapshot snapshots/prod-111122223333.json \
   --output-dir artifacts/review-111122223333
 ```
 
 If a service needs to fan out across catalogs, keep that loop in the service or
-workflow layer rather than adding a catalog scheduler to `lfguard` core.
+workflow layer rather than adding a catalog scheduler to `lfpolicy` core.
 
 ## When Raw boto3 Is The Right Tool
 
 Use raw boto3 or a service-owned wrapper when you need:
 
-- Lake Formation features that `lfguard` does not model.
+- Lake Formation features that `lfpolicy` does not model.
 - Request-time imperative mutations that intentionally bypass the review-bundle
   workflow.
 - Full control over retries, rollback, batching, or portal-specific execution
   semantics.
 
-`lfguard` should remain the place for policy correctness, stable evidence, and
+`lfpolicy` should remain the place for policy correctness, stable evidence, and
 explicit reviewed changes, not the place for every service-specific control
 plane abstraction.

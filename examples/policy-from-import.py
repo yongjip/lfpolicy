@@ -6,7 +6,7 @@ state from this file and compare it with the reviewed import before deleting the
 temporary scaffold.
 """
 
-from lakeformation_guard.policy import (
+from lfpolicy.policy import (
     LakePolicy,
     TagAssignmentScope,
     data_location_access,
@@ -17,7 +17,7 @@ from lakeformation_guard.policy import (
 
 CATALOG_ID = "111122223333"
 
-# Representative shape copied from an lfguard import scaffold. This reference is
+# Representative shape copied from an lfpolicy import scaffold. This reference is
 # not used for generation; it documents what was converted into the policy below.
 IMPORTED_DESIRED_REFERENCE = {
     "lf_tags": {

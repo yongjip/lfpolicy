@@ -1,7 +1,7 @@
 {
-  "description": "Planned grant-change evidence for review bundles. Use lfguard explain-batch for effective-access decisions.",
+  "description": "Planned grant-change evidence for review bundles. Use lfpolicy explain-batch for effective-access decisions.",
   "grant_changes": [],
-  "schema_version": "lfguard.review.explain.v1",
+  "schema_version": "lfpolicy.review.explain.v1",
   "summary": {
     "planned_grant_changes": 0
   }

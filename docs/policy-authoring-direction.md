@@ -1,6 +1,6 @@
 # Policy Authoring Direction
 
-`lfguard` should stay small and opinionated. The high-level policy layer should
+`lfpolicy` should stay small and opinionated. The high-level policy layer should
 make common data governance roles easy to define while keeping dangerous Lake
 Formation combinations out of normal authoring.
 
@@ -10,7 +10,7 @@ Use a Python-native policy builder as the source of truth for permission groups.
 Generate normal `DesiredState` JSON or YAML from it.
 
 ```text
-policy.py -> generated desired.json -> lfguard check/audit/plan/review
+policy.py -> generated desired.json -> lfpolicy check/audit/plan/review
 ```
 
 Do not build a large YAML DSL. YAML is still useful as the generated review
@@ -25,7 +25,7 @@ artifact, but Python should own the reusable policy logic.
 | Permission group | User-defined group name such as `dataconsumer`, `dataengineer`, `datasteward`, `operations`, or `catalog_admin`. |
 | Permission template | Package-defined behavior such as `reader()`, `producer()`, `steward()`, `admin()`, or `data_location_access()`. |
 | IAM role binding | Assignment from an IAM role to one or more permission groups. Treat IAM roles as the execution/user-group boundary. |
-| Generated desired state | The normal `lfguard` desired policy produced by the builder. |
+| Generated desired state | The normal `lfpolicy` desired policy produced by the builder. |
 
 Permission group names are not enums. Companies should define their own group
 names. The package only defines the safe behavior templates.
@@ -66,7 +66,7 @@ The tag assignment scope is enough to determine whether a tag can narrow
 columns.
 
 ```python
-from lakeformation_guard.policy import LakePolicy, TagAssignmentScope
+from lfpolicy.policy import LakePolicy, TagAssignmentScope
 
 policy = LakePolicy()
 
@@ -163,23 +163,23 @@ group must be assignable to databases.
 
 ## Import to Python Migration
 
-Use `lfguard import` as a scaffold, then convert only the owned surface into
+Use `lfpolicy import` as a scaffold, then convert only the owned surface into
 Python policy. Keep the import beside the new policy until reviewers agree the
 generated desired state covers the intended resources and grants.
 
 ```bash
-lfguard import \
+lfpolicy import \
   --catalog-id 111122223333 \
   --include lf-tags,lf-tag-expressions,data-cells-filters,resource-tags,grants \
   --output policy/imported-desired.json
 
-lfguard generate policy.py --output-file policy/desired.json --force
-lfguard check --desired policy/desired.json --fail-on-findings
-lfguard plan \
+lfpolicy generate policy.py --output-file policy/desired.json --force
+lfpolicy check --desired policy/desired.json --fail-on-findings
+lfpolicy plan \
   --desired policy/desired.json \
   --current-snapshot snapshots/sandbox-current.json \
   --output json \
-  --output-file artifacts/lfguard-plan.json
+  --output-file artifacts/lfpolicy-plan.json
 ```
 
 Convert in this order:
@@ -204,7 +204,7 @@ Use neutral examples in public docs and tests. Avoid company-specific database
 names, role names, and data domains.
 
 ```python
-from lakeformation_guard.policy import (
+from lfpolicy.policy import (
     LakePolicy,
     TagAssignmentScope,
     admin,
@@ -262,9 +262,9 @@ policy.write_desired("policy/desired.json")
 Or generate through the CLI:
 
 ```bash
-lfguard generate policy.py --output-file policy/desired.json
-lfguard generate policy.py --output-file policy/desired.json --check
-lfguard check --desired policy/desired.json --fail-on-findings
+lfpolicy generate policy.py --output-file policy/desired.json
+lfpolicy generate policy.py --output-file policy/desired.json --check
+lfpolicy check --desired policy/desired.json --fail-on-findings
 ```
 
 Generated YAML includes a header when you choose a `.yaml` or `.yml` output
@@ -288,7 +288,7 @@ for finding in findings:
 `validate()` and `to_desired_state()` raise `PolicyValidationError` when those
 findings are present. The error includes stable finding codes, field paths such
 as `groups.dataconsumer.filters.domain`, the human message, and a suggested
-fix. `lfguard generate` prints that same detail without a Python traceback.
+fix. `lfpolicy generate` prints that same detail without a Python traceback.
 
 ## Guardrails
 
@@ -315,7 +315,7 @@ potentially column-filtered and blocks them.
 
 ## Current Scope
 
-- `lakeformation_guard.policy` module.
+- `lfpolicy.policy` module.
 - `LakePolicy`, `TagKey`, `PermissionGroup`, `RoleBinding`.
 - `TagAssignmentScope` enum.
 - Templates: `reader()`, `editor()`, `producer()`, `table_creator()`,

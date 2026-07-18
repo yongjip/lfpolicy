@@ -1,11 +1,11 @@
-# Where lfguard Fits
+# Where lfpolicy Fits
 
-`lfguard` is built for Lake Formation policy guardrails, not general AWS
+`lfpolicy` is built for Lake Formation policy guardrails, not general AWS
 infrastructure provisioning. It is most useful when LF-Tag policy should be
 reviewed as code, checked for drift, explained, and attached to approval or
 audit records before any external execution step.
 
-## Use lfguard when
+## Use lfpolicy when
 
 - You want pull-request, Jira, service approval, or audit evidence for LF-Tags,
   resource tag assignments, and Lake Formation grants.
@@ -23,12 +23,12 @@ Terraform, CloudFormation, and CDK are still the right place for foundational
 resources such as accounts, VPCs, IAM roles, S3 buckets, Glue databases, and
 registered data lake locations.
 
-`lfguard` can sit next to those tools when the Lake Formation policy layer needs
+`lfpolicy` can sit next to those tools when the Lake Formation policy layer needs
 its own audit and approval workflow. A common pattern is:
 
 1. Provision infrastructure and IAM principals with your infrastructure tool.
 2. Store desired LF-Tag policy in the application or platform repository.
-3. Run `lfguard review` in CI to produce machine-readable JSON plus Markdown
+3. Run `lfpolicy review` in CI to produce machine-readable JSON plus Markdown
    evidence.
 4. Let the consuming service or operator workflow execute only the approved
    changes after the review bundle is approved.
@@ -41,10 +41,10 @@ detailed ownership matrix and pipeline pattern.
 ## Use raw boto3 when
 
 Raw boto3 is appropriate for custom workflows that need full control over every
-AWS API call or that cover Lake Formation features outside `lfguard`'s supported
+AWS API call or that cover Lake Formation features outside `lfpolicy`'s supported
 surface.
 
-`lfguard` is a better fit when the problem is repeated policy comparison,
+`lfpolicy` is a better fit when the problem is repeated policy comparison,
 reviewable reports, conservative defaults, and a reusable package API.
 
 ## Use the AWS console when
@@ -53,15 +53,15 @@ The console is useful for exploration and one-off inspection. It is less useful
 as the source of truth for production access policy because changes can be hard
 to review, reproduce, or gate in CI.
 
-Use `lfguard snapshot` when you need to capture current Lake Formation state for
+Use `lfpolicy snapshot` when you need to capture current Lake Formation state for
 review before moving policy into version control.
 
-## When not to use lfguard
+## When not to use lfpolicy
 
-Do not use `lfguard` as the only control for account security or data access. It
+Do not use `lfpolicy` as the only control for account security or data access. It
 does not create IAM principals, register data lake locations, configure
 cross-account sharing, or replace Lake Formation administration.
 
-Do not treat lfguard evidence as AWS authorization or approval workflow state.
+Do not treat lfpolicy evidence as AWS authorization or approval workflow state.
 The consuming service or operator workflow must use appropriately scoped AWS
 credentials and execute only reviewed changes.

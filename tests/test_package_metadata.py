@@ -3,7 +3,7 @@ import re
 import unittest
 from pathlib import Path
 
-from lakeformation_guard import __version__
+from lfpolicy import __version__
 
 
 class PackageMetadataTests(unittest.TestCase):
@@ -15,6 +15,11 @@ class PackageMetadataTests(unittest.TestCase):
 
     def test_setup_version_matches_imported_version(self):
         self.assertEqual(self.config["metadata"]["version"], __version__)
+
+    def test_distribution_uses_lfpolicy_name(self):
+        self.assertEqual(self.config["metadata"]["name"], "lfpolicy")
+        self.assertTrue((self.root / "src" / "lfpolicy").is_dir())
+        self.assertFalse((self.root / "src" / "lakeformation_guard").exists())
 
     def test_build_system_uses_modern_setuptools_backend(self):
         pyproject = (self.root / "pyproject.toml").read_text(encoding="utf-8")
@@ -33,7 +38,8 @@ class PackageMetadataTests(unittest.TestCase):
     def test_console_scripts_include_primary_command(self):
         console_scripts = self.config["options.entry_points"]["console_scripts"]
 
-        self.assertIn("lfguard = lakeformation_guard.cli:main", console_scripts)
+        self.assertIn("lfpolicy = lfpolicy.cli:main", console_scripts)
+        self.assertNotIn("lfguard =", console_scripts)
         self.assertNotIn("aws-lakeformation-guard", console_scripts)
 
     def test_license_metadata_uses_spdx_expression(self):
@@ -55,7 +61,7 @@ class PackageMetadataTests(unittest.TestCase):
         self.assertTrue((self.root / "AGENTS.md").exists())
         self.assertTrue((self.root / "CLAUDE.md").exists())
         self.assertTrue((self.root / "llms.txt").exists())
-        self.assertTrue((self.root / "docs" / "schemas" / "lfguard.review.summary.v1.schema.json").exists())
+        self.assertTrue((self.root / "docs" / "schemas" / "lfpolicy.review.summary.v1.schema.json").exists())
         self.assertTrue((self.root / "examples" / "policy.py").exists())
         self.assertTrue((self.root / "examples" / "github-actions" / "lakeformation-drift.yml").exists())
         self.assertTrue((self.root / "examples" / "pre-commit" / "pre-commit-config.yaml").exists())
@@ -109,16 +115,16 @@ class PackageMetadataTests(unittest.TestCase):
 
         for workflow_path in workflow_paths:
             workflow = workflow_path.read_text(encoding="utf-8")
-            self.assertIn("/lfguard --version", workflow)
+            self.assertIn("/lfpolicy --version", workflow)
             self.assertNotIn("/aws-lakeformation-guard --version", workflow)
-            self.assertIn("/lfguard generate examples/policy.py --output-file /tmp/lfguard-policy.json --check", workflow)
-            self.assertIn("/lfguard bootstrap --output-dir /tmp/lfguard-policy-bootstrap", workflow)
-            self.assertIn("/tmp/lfguard-policy-bootstrap/policy.py", workflow)
-            self.assertIn("/lfguard check", workflow)
-            self.assertIn("--current-snapshot /tmp/lfguard-demo/current-snapshot.json", workflow)
-            self.assertIn("/lfguard review", workflow)
-            self.assertIn("/lfguard explain", workflow)
-            self.assertIn("/lfguard explain-batch", workflow)
+            self.assertIn("/lfpolicy generate examples/policy.py --output-file /tmp/lfpolicy-policy.json --check", workflow)
+            self.assertIn("/lfpolicy bootstrap --output-dir /tmp/lfpolicy-policy-bootstrap", workflow)
+            self.assertIn("/tmp/lfpolicy-policy-bootstrap/policy.py", workflow)
+            self.assertIn("/lfpolicy check", workflow)
+            self.assertIn("--current-snapshot /tmp/lfpolicy-demo/current-snapshot.json", workflow)
+            self.assertIn("/lfpolicy review", workflow)
+            self.assertIn("/lfpolicy explain", workflow)
+            self.assertIn("/lfpolicy explain-batch", workflow)
             self.assertIn("LakePolicy", workflow)
             self.assertIn("CurrentStateProvider", workflow)
             self.assertIn("callable(explain)", workflow)
@@ -140,11 +146,11 @@ class PackageMetadataTests(unittest.TestCase):
         self.assertIn("release_version=", workflow)
         self.assertIn("Check PyPI version", workflow)
         self.assertIn("pypi-version-exists", workflow)
-        self.assertIn("https://pypi.org/pypi/lfguard/{}/json", workflow)
+        self.assertIn("https://pypi.org/pypi/lfpolicy/{}/json", workflow)
         self.assertIn("Verify distribution versions", workflow)
-        self.assertIn("dist/lfguard-${version}.tar.gz", workflow)
-        self.assertIn("lfguard-{}.dist-info/METADATA", workflow)
-        self.assertIn("lfguard-{}/PKG-INFO", workflow)
+        self.assertIn("dist/lfpolicy-${version}.tar.gz", workflow)
+        self.assertIn("lfpolicy-{}.dist-info/METADATA", workflow)
+        self.assertIn("lfpolicy-{}/PKG-INFO", workflow)
         self.assertIn("verify-pypi:", workflow)
         self.assertIn("if: needs.build.outputs.pypi-version-exists != 'true'", workflow)
         self.assertIn("needs: [build, publish]", workflow)
@@ -153,16 +159,16 @@ class PackageMetadataTests(unittest.TestCase):
             "RELEASE_TAG: ${{ github.event.release.tag_name || github.event.inputs.release_tag }}",
             workflow,
         )
-        self.assertIn('python -m pip install --no-cache-dir "lfguard==${version}"', workflow)
-        self.assertIn('test "$(lfguard --version)" = "lfguard ${version}"', workflow)
+        self.assertIn('python -m pip install --no-cache-dir "lfpolicy==${version}"', workflow)
+        self.assertIn('test "$(lfpolicy --version)" = "lfpolicy ${version}"', workflow)
         self.assertIn("sleep 15", workflow)
-        self.assertIn("lfguard bootstrap --output-dir /tmp/lfguard-pypi-policy", workflow)
-        self.assertIn("lfguard generate /tmp/lfguard-pypi-policy/policy.py", workflow)
-        self.assertIn("--output-file /tmp/lfguard-pypi-policy/policy/desired.json --check", workflow)
-        self.assertIn("lfguard sample --output-dir /tmp/lfguard-pypi-demo", workflow)
-        self.assertIn("lfguard review", workflow)
-        self.assertIn("lfguard explain", workflow)
-        self.assertIn("lfguard explain-batch", workflow)
+        self.assertIn("lfpolicy bootstrap --output-dir /tmp/lfpolicy-pypi-policy", workflow)
+        self.assertIn("lfpolicy generate /tmp/lfpolicy-pypi-policy/policy.py", workflow)
+        self.assertIn("--output-file /tmp/lfpolicy-pypi-policy/policy/desired.json --check", workflow)
+        self.assertIn("lfpolicy sample --output-dir /tmp/lfpolicy-pypi-demo", workflow)
+        self.assertIn("lfpolicy review", workflow)
+        self.assertIn("lfpolicy explain", workflow)
+        self.assertIn("lfpolicy explain-batch", workflow)
         self.assertIn("LakePolicy", workflow)
         self.assertIn("CurrentStateProvider", workflow)
         self.assertIn("callable(explain)", workflow)

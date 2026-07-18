@@ -1,6 +1,6 @@
 # Examples
 
-These files let you try `lfguard` without AWS credentials:
+These files let you try `lfpolicy` without AWS credentials:
 
 - `desired.json`: a desired Lake Formation LF-Tag and grant policy.
 - `desired.yaml`: the same desired policy in YAML.
@@ -30,7 +30,7 @@ These files let you try `lfguard` without AWS credentials:
 - `pre-commit/pre-commit-config.yaml`: a copyable local pre-commit hook that
   regenerates and checks a desired-state policy before commit.
 
-YAML examples require installing `lfguard[yaml]`; JSON examples work with the
+YAML examples require installing `lfpolicy[yaml]`; JSON examples work with the
 base package.
 
 The snapshot is missing two desired LF-Tag values, one table tag assignment, and
@@ -40,25 +40,25 @@ conservative plans.
 The `artifacts/` directory contains pre-generated examples of the JSON and
 Markdown evidence a pull request or scheduled governance job would attach:
 
-- `artifacts/lfguard-audit.json`
-- `artifacts/lfguard-plan.json`
-- `artifacts/lfguard-explain.json`
-- `artifacts/lfguard-explain-batch.json`
+- `artifacts/lfpolicy-audit.json`
+- `artifacts/lfpolicy-plan.json`
+- `artifacts/lfpolicy-explain.json`
+- `artifacts/lfpolicy-explain-batch.json`
 - `artifacts/review-bundle/`
 - `artifacts/review-cases/`
 - `artifacts/explain-batch-cases/`
 
-If you installed `lfguard` from PyPI and do not have this repository checked
+If you installed `lfpolicy` from PyPI and do not have this repository checked
 out, generate the same kind of local demo files with:
 
 ```bash
-lfguard sample --output-dir lfguard-demo
+lfpolicy sample --output-dir lfpolicy-demo
 ```
 
 ## Check the Policy
 
 ```bash
-lfguard check \
+lfpolicy check \
   --desired examples/desired.json \
   --current-snapshot examples/current-snapshot.json
 ```
@@ -72,8 +72,8 @@ assignments and LF-Tag policy expressions.
 Use `policy.py` when you want permission groups to be the source of truth:
 
 ```bash
-lfguard generate examples/policy.py --output-file /tmp/lfguard-desired.json --force
-lfguard check --desired /tmp/lfguard-desired.json --fail-on-findings
+lfpolicy generate examples/policy.py --output-file /tmp/lfpolicy-desired.json --force
+lfpolicy check --desired /tmp/lfpolicy-desired.json --fail-on-findings
 ```
 
 The example assigns LF-Tags to neutral databases, tables, and a sensitive
@@ -86,23 +86,23 @@ templates.
 To see the newer generic bundle names:
 
 ```bash
-lfguard generate examples/policy-bundles.py --output-file /tmp/lfguard-bundles.json --force
-lfguard check --desired /tmp/lfguard-bundles.json --fail-on-findings
+lfpolicy generate examples/policy-bundles.py --output-file /tmp/lfpolicy-bundles.json --force
+lfpolicy check --desired /tmp/lfpolicy-bundles.json --fail-on-findings
 ```
 
 To see how a reviewed import scaffold can become `policy.py`:
 
 ```bash
-lfguard generate examples/policy-from-import.py --output-file /tmp/lfguard-migrated.json --force
-lfguard check --desired /tmp/lfguard-migrated.json --fail-on-findings
+lfpolicy generate examples/policy-from-import.py --output-file /tmp/lfpolicy-migrated.json --force
+lfpolicy check --desired /tmp/lfpolicy-migrated.json --fail-on-findings
 ```
 
 To see access requests represented as policy data, without adding an approval UI
-to `lfguard` core:
+to `lfpolicy` core:
 
 ```bash
-lfguard generate examples/permission-requests.py --output-file /tmp/lfguard-requests.json --force
-lfguard check --desired /tmp/lfguard-requests.json --fail-on-findings
+lfpolicy generate examples/permission-requests.py --output-file /tmp/lfpolicy-requests.json --force
+lfpolicy check --desired /tmp/lfpolicy-requests.json --fail-on-findings
 ```
 
 The request records include ticket, requester, owner, approver, review date,
@@ -118,7 +118,7 @@ Use `policy-exceptions.json` to see how intentional risky grants are scoped
 without globally weakening lint rules:
 
 ```bash
-lfguard lint --desired examples/policy-exceptions.json
+lfpolicy lint --desired examples/policy-exceptions.json
 ```
 
 The example suppresses `ALL` and named database grant lint findings only for the
@@ -127,7 +127,7 @@ matching principal, resource, permissions, and non-expired exception rules.
 ## Summarize the Policy
 
 ```bash
-lfguard summary \
+lfpolicy summary \
   --desired examples/desired.json \
   --current-snapshot examples/current-snapshot.json
 ```
@@ -138,7 +138,7 @@ principals, grant resource kinds, and permissions for reviewers.
 ## Audit Drift
 
 ```bash
-lfguard audit \
+lfpolicy audit \
   --desired examples/desired.json \
   --current-snapshot examples/current-snapshot.json
 ```
@@ -152,21 +152,21 @@ Findings: 3 total, 3 error(s), 0 warning(s).
 To use the audit in CI and save evidence for review:
 
 ```bash
-lfguard audit \
+lfpolicy audit \
   --desired examples/desired.json \
   --current-snapshot examples/current-snapshot.json \
   --output json \
-  --output-file artifacts/lfguard-audit.json \
+  --output-file artifacts/lfpolicy-audit.json \
   --fail-on-findings
 ```
 
-The command writes `artifacts/lfguard-audit.json` before exiting with status `1`.
+The command writes `artifacts/lfpolicy-audit.json` before exiting with status `1`.
 
 Use `--fail-on-severity error` when warnings should be reported but should not
 fail the job:
 
 ```bash
-lfguard audit \
+lfpolicy audit \
   --desired examples/desired.json \
   --current-snapshot examples/current-snapshot.json \
   --fail-on-findings \
@@ -176,7 +176,7 @@ lfguard audit \
 ## Plan Safe Changes
 
 ```bash
-lfguard plan \
+lfpolicy plan \
   --desired examples/desired.json \
   --current-snapshot examples/current-snapshot.json
 ```
@@ -190,11 +190,11 @@ Plan: 3 change(s), 3 safe, 0 destructive.
 To save a Markdown plan for pull request review:
 
 ```bash
-lfguard plan \
+lfpolicy plan \
   --desired examples/desired.json \
   --current-snapshot examples/current-snapshot.json \
   --output markdown \
-  --output-file artifacts/lfguard-plan.md
+  --output-file artifacts/lfpolicy-plan.md
 ```
 
 By default, the plan is additive only. It will add missing LF-Tag values,
@@ -206,8 +206,8 @@ remove tag values unless a matching `--allow-*` flag is supplied.
 Install the YAML extra, then run the same plan against the YAML desired policy:
 
 ```bash
-python -m pip install "lfguard[yaml]"
-lfguard plan \
+python -m pip install "lfpolicy[yaml]"
+lfpolicy plan \
   --desired examples/desired.yaml \
   --current-snapshot examples/current-snapshot.json
 ```
@@ -221,7 +221,7 @@ before enabling the workflow.
 
 Use [`github-actions/lakeformation-code-scanning.yml`](github-actions/lakeformation-code-scanning.yml)
 when your repository can upload SARIF to GitHub Code Scanning. It uploads
-separate `lfguard-lint` and `lfguard-audit` categories before enforcing the
+separate `lfpolicy-lint` and `lfpolicy-audit` categories before enforcing the
 check and drift gates.
 
 For the evidence model behind these workflows, see
@@ -232,11 +232,11 @@ For the evidence model behind these workflows, see
 Use [`pre-commit/pre-commit-config.yaml`](pre-commit/pre-commit-config.yaml) as
 a starting point when developers should regenerate and check desired-state
 policy before committing. Copy it to `.pre-commit-config.yaml`, update the
-policy paths, and install the hook in an environment where `lfguard` is
+policy paths, and install the hook in an environment where `lfpolicy` is
 available:
 
 ```bash
-python -m pip install lfguard pre-commit
+python -m pip install lfpolicy pre-commit
 pre-commit install
 pre-commit run --all-files
 ```

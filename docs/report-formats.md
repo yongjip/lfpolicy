@@ -1,6 +1,6 @@
 # Report Formats
 
-`lfguard` reports are designed for both humans and CI systems. Commands that
+`lfpolicy` reports are designed for both humans and CI systems. Commands that
 support reports accept `--output text`, `--output json`, `--output markdown`,
 or `--output sarif` where appropriate, and `--output-file PATH` writes the same
 report without printing to stdout.
@@ -15,7 +15,7 @@ Use review bundles when a service, LLM agent, pull request, Jira ticket, or audi
 log needs one durable evidence directory.
 
 ```bash
-lfguard review \
+lfpolicy review \
   --desired desired.json \
   --current-snapshot current.json \
   --output-dir review/
@@ -38,8 +38,8 @@ review/
 
 ```json
 {
-  "schema_version": "lfguard.review.manifest.v1",
-  "lfguard_version": "0.9.0",
+  "schema_version": "lfpolicy.review.manifest.v1",
+  "lfpolicy_version": "0.10.0",
   "status": "review_required",
   "inputs": {
     "desired": {
@@ -57,7 +57,7 @@ review/
 }
 ```
 
-`summary.json` uses `schema_version: "lfguard.review.summary.v1"` and reports
+`summary.json` uses `schema_version: "lfpolicy.review.summary.v1"` and reports
 `passed`, `review_required`, or `blocked`. The status is separate from technical
 finding severity. A bundle is blocked only when at least one finding or plan
 change has `recommended_action: "block"`. Non-blocking lint errors remain
@@ -66,7 +66,7 @@ guidance for services and LLM agents.
 
 ```json
 {
-  "schema_version": "lfguard.review.summary.v1",
+  "schema_version": "lfpolicy.review.summary.v1",
   "status": "review_required",
   "recommended_action": "approval_required",
   "hard_block": false,
@@ -79,7 +79,7 @@ guidance for services and LLM agents.
   "blocking_reasons": [],
   "evidence": {
     "generated_at": "2026-07-01T00:00:00Z",
-    "lfguard_version": "0.9.0",
+    "lfpolicy_version": "0.10.0",
     "inputs": {
       "desired": {
         "source": "desired_state",
@@ -101,13 +101,13 @@ guidance for services and LLM agents.
 ```
 
 `explain.json` in a review bundle uses
-`schema_version: "lfguard.review.explain.v1"` and contains planned grant-change
+`schema_version: "lfpolicy.review.explain.v1"` and contains planned grant-change
 evidence, not full effective-access decisions:
 
 ```json
 {
-  "schema_version": "lfguard.review.explain.v1",
-  "description": "Planned grant-change evidence for review bundles. Use lfguard explain-batch for effective-access decisions.",
+  "schema_version": "lfpolicy.review.explain.v1",
+  "description": "Planned grant-change evidence for review bundles. Use lfpolicy explain-batch for effective-access decisions.",
   "summary": {
     "planned_grant_changes": 1
   },
@@ -140,12 +140,12 @@ evidence, not full effective-access decisions:
 }
 ```
 
-Use `lfguard explain-batch` when the question is whether specific principals can
+Use `lfpolicy explain-batch` when the question is whether specific principals can
 currently access specific resources.
 
 Use `code`, `action`, and `docs_anchor` as stable keys for service mappings and
 stored audit evidence. `docs_url` points to live documentation on the repository
-`main` branch and may show newer explanatory text than the lfguard version that
+`main` branch and may show newer explanatory text than the lfpolicy version that
 generated older evidence.
 
 Checked-in review bundle fixtures are available under
@@ -156,7 +156,7 @@ Checked-in review bundle fixtures are available under
 Use audit reports when you want to detect drift without proposing remediation.
 
 ```bash
-lfguard audit \
+lfpolicy audit \
   --desired examples/desired.json \
   --current-snapshot examples/current-snapshot.json \
   --output json
@@ -166,7 +166,7 @@ JSON audit reports contain a severity summary and an ordered list of findings:
 
 ```json
 {
-  "schema_version": "lfguard.audit.v1",
+  "schema_version": "lfpolicy.audit.v1",
   "summary": {
     "total": 3,
     "errors": 3,
@@ -221,7 +221,7 @@ Markdown audit reports use the same finding order and include summary counts,
 which makes them suitable for GitHub Actions job summaries:
 
 ```markdown
-### lfguard audit
+### lfpolicy audit
 
 - Total findings: 3
 - Error findings: 3
@@ -236,11 +236,11 @@ SARIF audit reports use SARIF 2.1.0 for systems that already ingest static
 analysis or security scan results:
 
 ```bash
-lfguard audit \
+lfpolicy audit \
   --desired examples/desired.json \
   --current-snapshot examples/current-snapshot.json \
   --output sarif \
-  --output-file artifacts/lfguard-audit.sarif
+  --output-file artifacts/lfpolicy-audit.sarif
 ```
 
 Each SARIF result includes the finding code as `ruleId`, the finding severity
@@ -253,7 +253,7 @@ Use lint reports when you want to catch desired-policy authoring mistakes before
 capturing AWS state or planning changes.
 
 ```bash
-lfguard lint \
+lfpolicy lint \
   --desired examples/desired.json \
   --output json
 ```
@@ -262,7 +262,7 @@ JSON lint reports contain the same severity summary shape as audit reports:
 
 ```json
 {
-  "schema_version": "lfguard.lint.v1",
+  "schema_version": "lfpolicy.lint.v1",
   "summary": {
     "total": 1,
     "errors": 1,
@@ -291,10 +291,10 @@ SARIF lint reports use the same SARIF 2.1.0 shape as audit reports, with
 desired-policy lint codes as `ruleId` values:
 
 ```bash
-lfguard lint \
+lfpolicy lint \
   --desired examples/desired.json \
   --output sarif \
-  --output-file artifacts/lfguard-lint.sarif
+  --output-file artifacts/lfpolicy-lint.sarif
 ```
 
 ## Check Reports
@@ -303,7 +303,7 @@ Use check reports when CI should validate local files and lint desired policy in
 one offline command:
 
 ```bash
-lfguard check \
+lfpolicy check \
   --desired examples/desired.json \
   --current-snapshot examples/current-snapshot.json \
   --output json
@@ -340,7 +340,7 @@ JSON check reports combine validation counts and lint findings:
 ```
 
 Markdown check reports include validation counts plus the same lint finding
-table used by `lfguard lint`.
+table used by `lfpolicy lint`.
 
 ## Summary Reports
 
@@ -348,7 +348,7 @@ Use summary reports when reviewers need a compact inventory before reading the
 full desired/current state files:
 
 ```bash
-lfguard summary \
+lfpolicy summary \
   --desired examples/desired.json \
   --current-snapshot examples/current-snapshot.json \
   --output json
@@ -385,7 +385,7 @@ Use explain reports when reviewers need to understand why access exists or why
 a desired grant is still missing:
 
 ```bash
-lfguard explain \
+lfpolicy explain \
   --desired examples/desired.json \
   --current-snapshot examples/current-snapshot.json \
   --principal arn:aws:iam::111122223333:role/Analyst \
@@ -400,7 +400,7 @@ explanation status, and ordered findings:
 
 ```json
 {
-  "schema_version": "lfguard.explain.v1",
+  "schema_version": "lfpolicy.explain.v1",
   "principal": "arn:aws:iam::111122223333:role/Analyst",
   "resource": {
     "kind": "table",
@@ -459,7 +459,7 @@ Finding statuses have these meanings:
 - `missing`: a desired grant matches the target but is absent from current
   state.
 - `context`: related current state exists, such as a data-location grant, but
-  `lfguard` cannot prove it grants the requested catalog access by itself.
+  `lfpolicy` cannot prove it grants the requested catalog access by itself.
 
 When the target omits `catalog_id`, explain reports also expose
 `effective_lf_tags_by_catalog` so reviewers can see whether the answer was
@@ -475,7 +475,7 @@ Use explain-batch reports for operational access diagnosis across one or more
 requests:
 
 ```bash
-lfguard explain-batch \
+lfpolicy explain-batch \
   --requests examples/access-requests.json \
   --current-snapshot examples/access-current-snapshot.json \
   --output json
@@ -485,12 +485,12 @@ The top-level `decision` is the access contract. Treat access as allowed only
 when `decision` is `allowed`. The compact `diagnosis` object summarizes matching
 finding IDs, missing permissions, matching sources, and notes for service UIs or
 tickets. The nested `explain` object remains the detailed Lake Formation
-snapshot/desired-state evidence. `lfguard` does not diagnose IAM, S3, KMS, or
+snapshot/desired-state evidence. `lfpolicy` does not diagnose IAM, S3, KMS, or
 application-layer authorization in this report.
 
 ```json
 {
-  "schema_version": "lfguard.explain_batch.v1",
+  "schema_version": "lfpolicy.explain_batch.v1",
   "summary": {
     "total": 1,
     "allowed": 0,
@@ -525,7 +525,7 @@ application-layer authorization in this report.
 Use plan reports when you want a reviewable change list before touching AWS.
 
 ```bash
-lfguard plan \
+lfpolicy plan \
   --desired examples/desired.json \
   --current-snapshot examples/current-snapshot.json \
   --output json
@@ -536,7 +536,7 @@ changes:
 
 ```json
 {
-  "schema_version": "lfguard.plan.v1",
+  "schema_version": "lfpolicy.plan.v1",
   "summary": {
     "total": 3,
     "safe": 3,
@@ -599,7 +599,7 @@ request review.
 
 ## Execution Boundary
 
-`lfguard` does not emit apply reports in 0.9.0 and later because it does not
+`lfpolicy` does not emit apply reports in 0.9.0 and later because it does not
 execute AWS writes. Store `review/summary.json`, `review/manifest.json`,
 `plan.json`, and selected change IDs when an external service needs compact
 approval or audit evidence.
@@ -610,11 +610,11 @@ For pull requests, combine machine-readable artifacts with a readable job
 summary:
 
 ```bash
-lfguard audit \
+lfpolicy audit \
   --desired policy/desired.json \
   --current-snapshot snapshots/prod-current.json \
   --output json \
-  --output-file artifacts/lfguard-audit.json \
+  --output-file artifacts/lfpolicy-audit.json \
   --fail-on-findings \
   --github-summary
 ```

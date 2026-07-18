@@ -1,17 +1,17 @@
-# lfguard
+# lfpolicy
 
 [![CI](https://github.com/yongjip/aws-datalake-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/yongjip/aws-datalake-guard/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/lfguard.svg)](https://pypi.org/project/lfguard/)
-[![Python](https://img.shields.io/pypi/pyversions/lfguard.svg)](https://pypi.org/project/lfguard/)
+[![PyPI](https://img.shields.io/pypi/v/lfpolicy.svg)](https://pypi.org/project/lfpolicy/)
+[![Python](https://img.shields.io/pypi/pyversions/lfpolicy.svg)](https://pypi.org/project/lfpolicy/)
 
-`lfguard` is a strict framework for reviewing, validating, explaining, and
+`lfpolicy` is a strict framework for reviewing, validating, explaining, and
 planning AWS Lake Formation data permissions. It compares a desired LF-Tag and
 permission policy against current state, reports drift, produces a conservative
 change plan, and writes stable evidence that services, LLM agents, pull
 requests, Jira tickets, and audit logs can attach before a consuming service
 executes any AWS write.
 
-The import package is `lakeformation_guard`; the CLI command is `lfguard`.
+The import package is `lfpolicy`; the CLI command is `lfpolicy`.
 
 ## What it manages
 
@@ -34,7 +34,7 @@ values, are omitted unless the matching allow flag is set.
 
 ## What it does not manage
 
-`lfguard` is deliberately scoped to Lake Formation policy guardrails. It does
+`lfpolicy` is deliberately scoped to Lake Formation policy guardrails. It does
 not create IAM principals, register data lake locations, configure
 cross-account sharing, crawl the whole Glue Data Catalog, or replace Terraform,
 CloudFormation, CDK, IAM administration, or the consuming service's grant/revoke
@@ -58,21 +58,21 @@ checks stay focused and reviewable.
 
 ## Core workflow
 
-`lfguard` is useful when it keeps the workflow small:
+`lfpolicy` is useful when it keeps the workflow small:
 
 | Step | Command | Purpose |
 | --- | --- | --- |
-| 1 | `lfguard review` | Write lint, audit, plan, planned grant evidence, and summaries into one bundle. |
-| 2 | `lfguard explain-batch` | Answer operational access questions from a reviewed snapshot. |
-| 3 | `lfguard check` | Validate and lint desired policy before AWS access. |
-| 4 | `lfguard audit` / `lfguard plan` | Run focused drift or plan checks when a full bundle is not needed. |
+| 1 | `lfpolicy review` | Write lint, audit, plan, planned grant evidence, and summaries into one bundle. |
+| 2 | `lfpolicy explain-batch` | Answer operational access questions from a reviewed snapshot. |
+| 3 | `lfpolicy check` | Validate and lint desired policy before AWS access. |
+| 4 | `lfpolicy audit` / `lfpolicy plan` | Run focused drift or plan checks when a full bundle is not needed. |
 
 Everything else is supporting workflow: Python policy generation, sample files,
 repository bootstrap, schema export, install diagnostics, IAM policy starters,
 effective-access explanation, and report formatting. Those helpers are optional.
 The core value is review, exception control, explanation, and stable evidence.
 
-`lfguard check --fail-on-findings` is deliberately rigid: it blocks undefined
+`lfpolicy check --fail-on-findings` is deliberately rigid: it blocks undefined
 tags, mixed-case LF-Tags, multiple values for one key on a resource, broad
 principals, `ALL`/`SUPER`, LF-Tag table policies that mix `SELECT` with
 `ALTER`/`DELETE`/`DROP`/`INSERT`, and other patterns that make a lake harder to
@@ -98,7 +98,7 @@ and should carry approval evidence.
 - Keep data access policy as code without writing direct boto3 orchestration for
   every grant and tag assignment.
 - Coexist with Terraform, CloudFormation, or CDK by letting infrastructure tools
-  own resources while `lfguard` owns reviewed Lake Formation policy.
+  own resources while `lfpolicy` owns reviewed Lake Formation policy.
 
 ## Lake Formation operating model
 
@@ -107,7 +107,7 @@ time, start with [`docs/lake-formation-guide.md`](docs/lake-formation-guide.md).
 It explains how IAM, Glue Data Catalog resources, Lake Formation grants,
 LF-Tags, `IAMAllowedPrincipals`, hybrid access mode, and data filters fit
 together, then calls out the small set of best practices and antipatterns that
-shape `lfguard`'s conservative defaults.
+shape `lfpolicy`'s conservative defaults.
 
 For the framework lifecycle, provider boundary, exception model, and stable
 evidence outputs, see
@@ -116,26 +116,26 @@ evidence outputs, see
 ## Install
 
 ```bash
-python -m pip install lfguard
+python -m pip install lfpolicy
 ```
 
 For an isolated CLI install:
 
 ```bash
-pipx install lfguard
-uv tool install lfguard
+pipx install lfpolicy
+uv tool install lfpolicy
 ```
 
 For live AWS usage:
 
 ```bash
-python -m pip install "lfguard[aws]"
+python -m pip install "lfpolicy[aws]"
 ```
 
 For YAML policy files:
 
 ```bash
-python -m pip install "lfguard[yaml]"
+python -m pip install "lfpolicy[yaml]"
 ```
 
 ## Quickstart
@@ -143,7 +143,7 @@ python -m pip install "lfguard[yaml]"
 Generate a runnable offline demo with no AWS credentials:
 
 ```bash
-lfguard sample --output-dir lfguard-demo
+lfpolicy sample --output-dir lfpolicy-demo
 ```
 
 The command writes `desired.json`, `current-snapshot.json`, and a short
@@ -153,10 +153,10 @@ Write the review bundle that a service, pull request, ticket, or audit log can
 attach:
 
 ```bash
-lfguard review \
-  --desired lfguard-demo/desired.json \
-  --current-snapshot lfguard-demo/current-snapshot.json \
-  --output-dir lfguard-demo/review
+lfpolicy review \
+  --desired lfpolicy-demo/desired.json \
+  --current-snapshot lfpolicy-demo/current-snapshot.json \
+  --output-dir lfpolicy-demo/review
 ```
 
 The bundle includes `summary.md`, `summary.json`, `lint.json`, `audit.json`,
@@ -166,17 +166,17 @@ The bundle includes `summary.md`, `summary.json`, `lint.json`, `audit.json`,
 Run focused checks when you only need one view:
 
 ```bash
-lfguard check \
-  --desired lfguard-demo/desired.json \
-  --current-snapshot lfguard-demo/current-snapshot.json
+lfpolicy check \
+  --desired lfpolicy-demo/desired.json \
+  --current-snapshot lfpolicy-demo/current-snapshot.json
 
-lfguard audit \
-  --desired lfguard-demo/desired.json \
-  --current-snapshot lfguard-demo/current-snapshot.json
+lfpolicy audit \
+  --desired lfpolicy-demo/desired.json \
+  --current-snapshot lfpolicy-demo/current-snapshot.json
 
-lfguard plan \
-  --desired lfguard-demo/desired.json \
-  --current-snapshot lfguard-demo/current-snapshot.json
+lfpolicy plan \
+  --desired lfpolicy-demo/desired.json \
+  --current-snapshot lfpolicy-demo/current-snapshot.json
 ```
 
 Expected output:
@@ -192,9 +192,9 @@ Plan: 4 change(s), 4 safe, 0 destructive.
 Explain the sample row/column-filtered grant:
 
 ```bash
-lfguard explain \
-  --desired lfguard-demo/desired.json \
-  --current-snapshot lfguard-demo/current-snapshot.json \
+lfpolicy explain \
+  --desired lfpolicy-demo/desired.json \
+  --current-snapshot lfpolicy-demo/current-snapshot.json \
   --principal arn:aws:iam::111122223333:role/FilteredAnalyst \
   --database analytics \
   --table orders \
@@ -206,12 +206,12 @@ For repeated live reads, use a cache path scoped to the AWS context and pass the
 context explicitly:
 
 ```bash
-lfguard plan \
-  --desired lfguard-demo/desired.json \
+lfpolicy plan \
+  --desired lfpolicy-demo/desired.json \
   --profile prod \
   --region us-east-1 \
   --catalog-id 111122223333 \
-  --current-cache .lfguard/prod-us-east-1-111122223333-current.json \
+  --current-cache .lfpolicy/prod-us-east-1-111122223333-current.json \
   --current-cache-max-age 900
 ```
 
@@ -220,7 +220,7 @@ lfguard plan \
 For permission-group workflows, author `policy.py` and generate desired state:
 
 ```python
-from lakeformation_guard.policy import (
+from lfpolicy.policy import (
     LakePolicy,
     TagAssignmentScope,
     database_creator,
@@ -281,9 +281,9 @@ reference `expression_name: "AnalyticsReaders"`. It is still advisory desired
 state generation only; the consuming service owns any AWS write execution.
 
 ```bash
-lfguard generate policy.py --output-file policy/desired.json --force
-lfguard generate policy.py --output-file policy/desired.json --check
-lfguard check --desired policy/desired.json --fail-on-findings
+lfpolicy generate policy.py --output-file policy/desired.json --force
+lfpolicy generate policy.py --output-file policy/desired.json --check
+lfpolicy check --desired policy/desired.json --fail-on-findings
 ```
 
 The built-in templates are intentionally small:
@@ -375,55 +375,55 @@ each resource kind and grant shape.
 Show version and command help:
 
 ```bash
-lfguard --version
-lfguard --help
+lfpolicy --version
+lfpolicy --help
 ```
 
 Core commands:
 
 ```bash
-lfguard check --desired desired.json --current-snapshot current.json --fail-on-findings
-lfguard audit --desired desired.json --current-snapshot current.json --fail-on-findings
-lfguard plan --desired desired.json --current-snapshot current.json
-lfguard review --desired desired.json --current-snapshot current.json --output-dir review/ --force
-lfguard explain-batch --requests access-requests.json --current-snapshot current.json --output json
+lfpolicy check --desired desired.json --current-snapshot current.json --fail-on-findings
+lfpolicy audit --desired desired.json --current-snapshot current.json --fail-on-findings
+lfpolicy plan --desired desired.json --current-snapshot current.json
+lfpolicy review --desired desired.json --current-snapshot current.json --output-dir review/ --force
+lfpolicy explain-batch --requests access-requests.json --current-snapshot current.json --output json
 ```
 
 Starter and support commands:
 
 ```bash
-lfguard init --output-file policy/desired.json
-lfguard generate policy.py --output-file policy/desired.json
-lfguard generate policy.py --output-file policy/desired.json --check
-lfguard sample --output-dir lfguard-demo
-lfguard bootstrap --output-dir lfguard-policy
-lfguard import --catalog-id 123456789012 \
+lfpolicy init --output-file policy/desired.json
+lfpolicy generate policy.py --output-file policy/desired.json
+lfpolicy generate policy.py --output-file policy/desired.json --check
+lfpolicy sample --output-dir lfpolicy-demo
+lfpolicy bootstrap --output-dir lfpolicy-policy
+lfpolicy import --catalog-id 123456789012 \
   --output policy/imported-desired.json \
   --review-notes policy/import-review.md
-lfguard explain \
+lfpolicy explain \
   --desired desired.json \
   --current-snapshot current.json \
   --principal role \
   --database analytics \
   --table orders
-lfguard schema --output-file policy/lfguard.schema.json
-lfguard doctor --require aws
-lfguard permissions --template read-only --include-glue-read
+lfpolicy schema --output-file policy/lfpolicy.schema.json
+lfpolicy doctor --require aws
+lfpolicy permissions --template read-only --include-glue-read
 ```
 
 Keep optional scaffolds secondary. Add them only when someone owns the workflow:
 
 ```bash
-lfguard bootstrap --output-dir lfguard-policy --include-live-drift
-lfguard bootstrap --output-dir lfguard-policy --include-code-scanning
-lfguard bootstrap --output-dir lfguard-policy --include-review-template
-lfguard bootstrap --output-dir lfguard-policy --include-editor-config
+lfpolicy bootstrap --output-dir lfpolicy-policy --include-live-drift
+lfpolicy bootstrap --output-dir lfpolicy-policy --include-code-scanning
+lfpolicy bootstrap --output-dir lfpolicy-policy --include-review-template
+lfpolicy bootstrap --output-dir lfpolicy-policy --include-editor-config
 ```
 
 Allow revokes only when that is the intended maintenance operation:
 
 ```bash
-lfguard plan \
+lfpolicy plan \
   --desired desired.json \
   --current-snapshot current.json \
   --allow-permission-revokes
@@ -432,7 +432,7 @@ lfguard plan \
 ## Python API
 
 ```python
-from lakeformation_guard import (
+from lfpolicy import (
     CurrentState,
     DesiredState,
     PlanOptions,
@@ -480,8 +480,8 @@ for change in change_plan.changes:
 The live adapter only depends on `boto3` when you instantiate it:
 
 ```python
-from lakeformation_guard import DesiredState, PlanOptions, plan
-from lakeformation_guard.aws import AWSLakeFormationAdapter
+from lfpolicy import DesiredState, PlanOptions, plan
+from lfpolicy.aws import AWSLakeFormationAdapter
 
 desired = DesiredState.from_file("desired.json")
 adapter = AWSLakeFormationAdapter.from_boto3(profile_name="prod", region_name="ap-northeast-2")
@@ -493,11 +493,11 @@ For repeated live reads, keep caching outside the planner by wrapping the live
 adapter as a provider:
 
 ```python
-from lakeformation_guard import CachedCurrentStateProvider
+from lfpolicy import CachedCurrentStateProvider
 
 provider = CachedCurrentStateProvider.for_aws(
     adapter,
-    ".lfguard/prod-ap-northeast-2-111122223333-current.json",
+    ".lfpolicy/prod-ap-northeast-2-111122223333-current.json",
     max_age_seconds=900,
     profile_name="prod",
     region_name="ap-northeast-2",
@@ -513,8 +513,8 @@ stage/prod, regions, and catalogs.
 
 Use an IAM principal with the minimum Lake Formation read permissions required
 for live inventory. The package does not bypass AWS authorization. Use
-`lfguard permissions` to generate a read-only starter IAM policy and
-`lfguard permissions --check` to preflight the role before live inventory,
+`lfpolicy permissions` to generate a read-only starter IAM policy and
+`lfpolicy permissions --check` to preflight the role before live inventory,
 snapshot, import, review, audit, plan, or explain workflows.
 
 ## Release and Trust
@@ -522,7 +522,7 @@ snapshot, import, review, audit, plan, or explain workflows.
 The repository includes GitHub Actions for CI and PyPI Trusted Publishing. See
 [`docs/publishing.md`](docs/publishing.md) for the release path and the exact
 PyPI publisher settings. The latest release notes are in
-[`docs/release-notes/v0.9.2.md`](docs/release-notes/v0.9.2.md), with prior
+[`docs/release-notes/v0.10.0.md`](docs/release-notes/v0.10.0.md), with prior
 release notes under [`docs/release-notes/`](docs/release-notes/).
 
 ## More docs
@@ -530,9 +530,9 @@ release notes under [`docs/release-notes/`](docs/release-notes/).
 - [`docs/cli.md`](docs/cli.md): command reference, common options, and exit
   codes.
 - [`docs/llm-agent-integration.md`](docs/llm-agent-integration.md): decision
-  rules for service workflows and LLM agents consuming lfguard JSON.
+  rules for service workflows and LLM agents consuming lfpolicy JSON.
 - [`docs/service-integration.md`](docs/service-integration.md): subprocess and
-  JSON artifact contract for services that embed lfguard as advisory evidence.
+  JSON artifact contract for services that embed lfpolicy as advisory evidence.
 - [`docs/library-embedding-boundary.md`](docs/library-embedding-boundary.md):
   what kinds of embedding requests belong in core, and what should stay in the
   consuming service or raw boto3 wrappers.
@@ -571,7 +571,7 @@ release notes under [`docs/release-notes/`](docs/release-notes/).
   non-goals, and good first contribution areas.
 - [`docs/safety-model.md`](docs/safety-model.md): conservative defaults,
   destructive-change flags, review behavior, and production patterns.
-- [`docs/positioning.md`](docs/positioning.md): where `lfguard` fits next to
+- [`docs/positioning.md`](docs/positioning.md): where `lfpolicy` fits next to
   Terraform, CloudFormation, CDK, raw boto3, and console workflows.
 - [`docs/terraform-cdk-coexistence.md`](docs/terraform-cdk-coexistence.md):
   detailed ownership split and pipeline pattern for IaC-managed environments.
@@ -589,7 +589,7 @@ release notes under [`docs/release-notes/`](docs/release-notes/).
   and Code Scanning workflows using GitHub OIDC, job summaries, SARIF, and
   uploaded report artifacts.
 - [`docs/aws-permissions.md`](docs/aws-permissions.md): suggested minimum IAM
-  permissions and preflight checks for read-only lfguard roles.
+  permissions and preflight checks for read-only lfpolicy roles.
 - [`docs/testing.md`](docs/testing.md): default tests, botocore Stubber
   contract tests, Moto emulator tests, and opt-in live AWS contract tests.
 - [`examples/README.md`](examples/README.md): offline files, commands,

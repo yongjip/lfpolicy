@@ -50,7 +50,7 @@
           "kind": "table",
           "table": "orders"
         },
-        "schema_version": "lfguard.explain.v1",
+        "schema_version": "lfpolicy.explain.v1",
         "summary": {
           "context": 0,
           "matched": 1,
@@ -122,7 +122,7 @@
           "kind": "table",
           "table": "orders"
         },
-        "schema_version": "lfguard.explain.v1",
+        "schema_version": "lfpolicy.explain.v1",
         "summary": {
           "context": 0,
           "matched": 0,
@@ -170,7 +170,7 @@
           "kind": "table",
           "table": "orders"
         },
-        "schema_version": "lfguard.explain.v1",
+        "schema_version": "lfpolicy.explain.v1",
         "summary": {
           "context": 0,
           "matched": 0,
@@ -190,7 +190,7 @@
       }
     }
   ],
-  "schema_version": "lfguard.explain_batch.v1",
+  "schema_version": "lfpolicy.explain_batch.v1",
   "summary": {
     "allowed": 1,
     "denied": 2,

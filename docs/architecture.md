@@ -1,44 +1,44 @@
 # Architecture
 
-`lfguard` keeps policy comparison separate from consuming-service execution. The core
+`lfpolicy` keeps policy comparison separate from consuming-service execution. The core
 package is small enough to audit and is structured around deterministic models,
 pure audit and planning functions, and an optional boto3 adapter.
 
 ## Module Boundaries
 
-- `lakeformation_guard.models` defines desired and current state objects,
+- `lfpolicy.models` defines desired and current state objects,
   resource references, LF-Tag definitions, named LF-Tag expressions, tag
   assignments, grants, and optional guardrail config. These classes normalize
   input and expose JSON-compatible dictionaries.
-- `lakeformation_guard.config` contains the matching helpers for lint severity
+- `lfpolicy.config` contains the matching helpers for lint severity
   overrides, ownership boundaries, ignore rules, and scoped policy exceptions.
-- `lakeformation_guard.audit` compares desired and current state and returns
+- `lfpolicy.audit` compares desired and current state and returns
   findings. It does not create a change plan and does not call AWS.
-- `lakeformation_guard.lint` checks desired-state semantic consistency, such as
+- `lfpolicy.lint` checks desired-state semantic consistency, such as
   undefined LF-Tag keys or values, without current state or AWS access.
-- `lakeformation_guard.planner` compares desired and current state and returns a
+- `lfpolicy.planner` compares desired and current state and returns a
   conservative ordered plan. Destructive changes are included only when the
   matching `PlanOptions` flag is set.
-- `lakeformation_guard.explain` explains one principal/resource access question
+- `lfpolicy.explain` explains one principal/resource access question
   from desired and current state. It is read-only and does not call AWS.
-- `lakeformation_guard.provider` defines the narrow `CurrentStateProvider`
+- `lfpolicy.provider` defines the narrow `CurrentStateProvider`
   protocol used by the CLI and integrations to supply current state.
-- `lakeformation_guard.io` reads JSON or optional YAML state files.
-- `lakeformation_guard.cli` handles command parsing, report rendering, file
+- `lfpolicy.io` reads JSON or optional YAML state files.
+- `lfpolicy.cli` handles command parsing, report rendering, file
   output, and exit codes.
-- `lakeformation_guard.aws` is the optional boto3 integration for read-only live
+- `lfpolicy.aws` is the optional boto3 integration for read-only live
   inventory and import operations.
-- `lakeformation_guard.schema` provides the JSON Schema used by the `schema`
+- `lfpolicy.schema` provides the JSON Schema used by the `schema`
   command and editor or CI validation.
 
-The `lakeformation_guard.policy` module sits above these boundaries rather than
+The `lfpolicy.policy` module sits above these boundaries rather than
 replacing them. It compiles Python-native tag keys, resource tag assignments,
 permission groups, safe permission templates, and IAM role bindings into the
 existing `DesiredState` model. The generated desired state still passes the same
 schema, lint, audit, plan, review, and explain workflows as hand-authored JSON
 or YAML.
 
-For requests that want to stretch `lfguard` into a broader service SDK, see
+For requests that want to stretch `lfpolicy` into a broader service SDK, see
 [`library-embedding-boundary.md`](library-embedding-boundary.md).
 
 ## Data Flow
@@ -110,13 +110,13 @@ the provider boundary rather than planner or audit behavior.
 
 ## Public API
 
-The intended import surface is exposed from `lakeformation_guard`:
+The intended import surface is exposed from `lfpolicy`:
 
 ```python
-from lakeformation_guard import CurrentState, DesiredState, PlanOptions, audit, explain, lint_desired, plan
+from lfpolicy import CurrentState, DesiredState, PlanOptions, audit, explain, lint_desired, plan
 ```
 
-Use `lakeformation_guard.aws.AWSLakeFormationAdapter` only for live inventory or
+Use `lfpolicy.aws.AWSLakeFormationAdapter` only for live inventory or
 import workflows. Internal helper functions and CLI rendering helpers are not
 part of the stable public API.
 
@@ -133,7 +133,7 @@ identity. AWS library integrations should use
 provider context that identifies their own source environment.
 
 The public API includes a narrow authoring layer under
-`lakeformation_guard.policy` for teams that want rigid permission groups and
+`lfpolicy.policy` for teams that want rigid permission groups and
 generic bundles such as `reader()`, `producer()`, `steward()`,
 `data_location_access()`, and `admin()` instead of raw grants. See
 [`policy-authoring-direction.md`](policy-authoring-direction.md) for the

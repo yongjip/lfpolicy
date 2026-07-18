@@ -1,4 +1,4 @@
-"""Current-state provider interfaces for lfguard integrations."""
+"""Current-state provider interfaces for lfpolicy integrations."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from .io import StateFormatError, dumps_json, load_current
 from .models import CurrentState, DesiredState
 
 
-CURRENT_STATE_CACHE_SCHEMA_VERSION = "lfguard.current-cache.v1"
+CURRENT_STATE_CACHE_SCHEMA_VERSION = "lfpolicy.current-cache.v1"
 
 
 class CurrentStateProvider(Protocol):

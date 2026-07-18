@@ -1,9 +1,9 @@
-# lfguard
+# lfpolicy
 
 > Advisory governance evidence for AWS Lake Formation permissions.
 
 Use these Markdown documents when an LLM needs to understand or integrate
-`lfguard`.
+`lfpolicy`.
 
 ## Core Documentation
 
@@ -35,4 +35,4 @@ Use these Markdown documents when an LLM needs to understand or integrate
   metadata and expiry behavior.
 - [Safety Model](docs/safety-model.md): Conservative planning and execution
   boundary model.
-- [Positioning](docs/positioning.md): What lfguard is and is not.
+- [Positioning](docs/positioning.md): What lfpolicy is and is not.

@@ -1,9 +1,9 @@
-"""Python-native policy authoring primitives for lfguard.
+"""Python-native policy authoring primitives for lfpolicy.
 
 The policy layer keeps the public model small:
 
 * users define permission group names;
-* lfguard provides a few safe permission templates;
+* lfpolicy provides a few safe permission templates;
 * database, table, and column LF-Tag assignments are explicit;
 * LF-Tag assignment scope decides whether a tag may narrow columns.
 """
@@ -548,7 +548,7 @@ class LakePolicy:
                             ).format(group.name, tag_key),
                             suggestion=(
                                 "Either make the tag key database-assignable or leave "
-                                "this group inline so lfguard can keep the database "
+                                "this group inline so lfpolicy can keep the database "
                                 "grant narrowed to database-compatible filters."
                             ),
                         )
@@ -556,7 +556,7 @@ class LakePolicy:
         return tuple(findings)
 
     def to_desired_state(self) -> DesiredState:
-        """Compile the high-level policy into normal lfguard desired state."""
+        """Compile the high-level policy into normal lfpolicy desired state."""
 
         self.validate()
         lf_tag_expressions = []
@@ -596,7 +596,7 @@ class LakePolicy:
                     code="POLICY_GENERATED_DESIRED_LINT_ERROR",
                     path="generated_desired.{}".format(finding.id),
                     message="{}: {}".format(finding.code, finding.message),
-                    suggestion="Fix the Python policy so generated desired state passes lfguard lint.",
+                    suggestion="Fix the Python policy so generated desired state passes lfpolicy lint.",
                 )
                 for finding in error_findings
             )
@@ -842,7 +842,7 @@ class LakePolicy:
                     path="{}.filters".format(path_prefix),
                     message=(
                         "permission group {!r} needs at least one tag filter that can "
-                        "be assigned to databases so lfguard can grant database "
+                        "be assigned to databases so lfpolicy can grant database "
                         "DESCRIBE safely"
                     ).format(group.name),
                     suggestion="Add a database-assignable tag key such as domain to the group filter.",
@@ -1017,7 +1017,7 @@ def load_policy(path: Union[str, Path], *, object_name: str = "policy") -> LakeP
     policy_path = Path(path)
     if not policy_path.exists():
         raise ValueError("policy file does not exist: {}".format(policy_path))
-    spec = importlib.util.spec_from_file_location("_lfguard_user_policy", policy_path)
+    spec = importlib.util.spec_from_file_location("_lfpolicy_user_policy", policy_path)
     if spec is None or spec.loader is None:
         raise ValueError("could not load policy file: {}".format(policy_path))
 

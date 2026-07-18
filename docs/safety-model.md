@@ -1,12 +1,12 @@
 # Safety Model
 
-`lfguard` is intentionally conservative. It is built for teams that want Lake
+`lfpolicy` is intentionally conservative. It is built for teams that want Lake
 Formation policy changes to be visible, reviewable, and easy to stop before
 they affect production access.
 
 ## Default Behavior
 
-By default, `lfguard plan` and `lfguard review` propose additive changes only:
+By default, `lfpolicy plan` and `lfpolicy review` propose additive changes only:
 
 - create missing LF-Tag definitions;
 - add missing LF-Tag values;
@@ -37,7 +37,7 @@ consuming service executes destructive changes.
 
 ## Audit Severity
 
-`lfguard audit` reports drift without producing a change plan:
+`lfpolicy audit` reports drift without producing a change plan:
 
 - `error` findings mean desired state is missing from current state.
 - `warning` findings mean current state contains unmanaged extras.
@@ -48,7 +48,7 @@ report but should not block a merge.
 
 ## Execution Boundary
 
-`lfguard` has no AWS mutation command in 0.9.0 and later. It emits advisory
+`lfpolicy` has no AWS mutation command in 0.9.0 and later. It emits advisory
 evidence: lint findings, audit findings, plan changes, review summaries,
 recommended actions, and `hard_block` markers. The consuming service or operator
 workflow owns approval, AWS write credentials, grant/revoke execution, and audit
@@ -57,16 +57,16 @@ storage.
 Plan evidence does not bypass AWS authorization. If an external workflow chooses
 to execute a reviewed change, its IAM principal must already have the required
 Lake Formation write permissions. See [`aws-permissions.md`](aws-permissions.md)
-for lfguard's read-only IAM policy shape and [`aws-api-coverage.md`](aws-api-coverage.md)
-for the exact read-only AWS calls lfguard makes.
+for lfpolicy's read-only IAM policy shape and [`aws-api-coverage.md`](aws-api-coverage.md)
+for the exact read-only AWS calls lfpolicy makes.
 
 ## Snapshot Scope
 
-`lfguard snapshot` uses the desired-state file as its scope. It reads the
+`lfpolicy snapshot` uses the desired-state file as its scope. It reads the
 LF-Tags, resources, and grants needed for comparison instead of trying to
 inventory an entire AWS account.
 
-This keeps drift checks focused and repeatable, but it also means `lfguard`
+This keeps drift checks focused and repeatable, but it also means `lfpolicy`
 should not be treated as a full account discovery tool. Keep separate discovery
 or inventory processes if your governance program needs account-wide coverage.
 
@@ -76,9 +76,9 @@ Use separate roles and workflows:
 
 - Read-only CI role: validate desired state, capture live snapshots, audit
   drift, and publish reports.
-- Service execution role: owned outside lfguard, executes approved grants or
+- Service execution role: owned outside lfpolicy, executes approved grants or
   revokes according to the consuming service's workflow.
-- Destructive maintenance workflow: owned outside lfguard, executes revokes and
+- Destructive maintenance workflow: owned outside lfpolicy, executes revokes and
   removals only during scheduled governance maintenance with explicit approval.
 
 For authoring, keep column-filtered reader intent separate from edit and create
@@ -98,7 +98,7 @@ contain principal ARNs, database names, table names, and tag values.
 
 ## Non-Goals
 
-`lfguard` does not:
+`lfpolicy` does not:
 
 - grant itself Lake Formation administrator privileges;
 - discover and govern every catalog resource unless those resources are in the

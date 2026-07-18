@@ -1,4 +1,4 @@
-"""Public API for lfguard."""
+"""Public API for lfpolicy."""
 
 from .audit import AuditFinding, audit
 from ._version import __version__

@@ -1,4 +1,4 @@
-"""Module entry point for ``python -m lakeformation_guard``."""
+"""Module entry point for ``python -m lfpolicy``."""
 
 from .cli import main
 

@@ -1,25 +1,25 @@
 # Import and Adoption Recipes
 
-Use `lfguard import` to scaffold desired state from AWS, then review and edit
+Use `lfpolicy import` to scaffold desired state from AWS, then review and edit
 the result. Do not treat import as synchronization. The generated file becomes
-policy only after a human or platform workflow decides what `lfguard` should
+policy only after a human or platform workflow decides what `lfpolicy` should
 own.
 
 ## Recipe 1: Evaluation Snapshot
 
-Use this when a team wants to evaluate `lfguard` without changing AWS:
+Use this when a team wants to evaluate `lfpolicy` without changing AWS:
 
 ```bash
-python -m pip install "lfguard[aws]"
+python -m pip install "lfpolicy[aws]"
 
-lfguard import \
+lfpolicy import \
   --catalog-id 111122223333 \
   --include lf-tags,lf-tag-expressions,data-cells-filters,resource-tags,grants \
   --output policy/imported-desired.json \
   --review-notes policy/import-review.md
 
-lfguard check --desired policy/imported-desired.json --fail-on-findings
-lfguard summary --desired policy/imported-desired.json --output markdown
+lfpolicy check --desired policy/imported-desired.json --fail-on-findings
+lfpolicy summary --desired policy/imported-desired.json --output markdown
 ```
 
 Expected review questions:
@@ -54,14 +54,14 @@ Start with ownership boundaries before failing on every unmanaged current grant:
 Then run audit from a scoped snapshot:
 
 ```bash
-lfguard snapshot \
+lfpolicy snapshot \
   --desired policy/desired.json \
   --profile sandbox \
   --region us-east-1 \
   --catalog-id 111122223333 \
   --output-file snapshots/sandbox-current.json
 
-lfguard audit \
+lfpolicy audit \
   --desired policy/desired.json \
   --current-snapshot snapshots/sandbox-current.json \
   --fail-on-findings \
@@ -90,13 +90,13 @@ declarations.
 Commands:
 
 ```bash
-lfguard generate policy.py --output-file policy/desired.json --force
-lfguard check --desired policy/desired.json --fail-on-findings
-lfguard plan \
+lfpolicy generate policy.py --output-file policy/desired.json --force
+lfpolicy check --desired policy/desired.json --fail-on-findings
+lfpolicy plan \
   --desired policy/desired.json \
   --current-snapshot snapshots/sandbox-current.json \
   --output markdown \
-  --output-file artifacts/lfguard-plan.md
+  --output-file artifacts/lfpolicy-plan.md
 ```
 
 ## Recipe 4: Data Cells Filter Adoption
@@ -105,7 +105,7 @@ Importing data cells filters is bounded to tables discovered from grants. That
 keeps adoption scoped, but it also means import is not a full catalog crawler.
 
 ```bash
-lfguard import \
+lfpolicy import \
   --catalog-id 111122223333 \
   --include data-cells-filters,grants \
   --output policy/imported-filters.json
@@ -115,7 +115,7 @@ After review, keep only filters that should be managed. Use `explain` to attach
 evidence for the filtered access:
 
 ```bash
-lfguard explain \
+lfpolicy explain \
   --desired policy/desired.json \
   --current-snapshot snapshots/prod-current.json \
   --principal arn:aws:iam::111122223333:role/FinanceAnalyst \
@@ -132,10 +132,10 @@ lfguard explain \
 Use the same policy logic and different environment constants:
 
 ```bash
-lfguard generate policy.py --output-file policy/desired-sandbox.json --force
-lfguard check --desired policy/desired-sandbox.json --fail-on-findings
+lfpolicy generate policy.py --output-file policy/desired-sandbox.json --force
+lfpolicy check --desired policy/desired-sandbox.json --fail-on-findings
 
-lfguard snapshot \
+lfpolicy snapshot \
   --desired policy/desired-sandbox.json \
   --profile sandbox \
   --region us-east-1 \

@@ -1,7 +1,7 @@
 # Publishing
 
-The package distribution name is `lfguard`; the import package is
-`lakeformation_guard`; the primary CLI command is `lfguard`.
+The package distribution name is `lfpolicy`; the import package is
+`lfpolicy`; the primary CLI command is `lfpolicy`.
 
 ## Recommended PyPI Release Path
 
@@ -10,25 +10,25 @@ PyPI token.
 
 Configure a pending publisher in PyPI with:
 
-- PyPI project name: `lfguard`
+- PyPI project name: `lfpolicy`
 - Owner: `yongjip`
 - Repository: `aws-datalake-guard`
 - Workflow: `release.yml`
 - Environment: `pypi`
 
-Then publish by publishing a GitHub Release for a version tag such as `v0.9.2`,
-or by manually dispatching the release workflow with `release_tag: v0.9.2`.
+Then publish by publishing a GitHub Release for a version tag such as `v0.10.0`,
+or by manually dispatching the release workflow with `release_tag: v0.10.0`.
 Pushing a tag alone does not publish to PyPI. The release workflow first
 verifies that the tag matches the package version, builds the artifacts,
 verifies distribution filenames and embedded metadata, checks them, smoke-tests
-the built wheel through an installed `lfguard` CLI, uploads to PyPI through OIDC
-when the version is not already published, then installs `lfguard` back from
+the built wheel through an installed `lfpolicy` CLI, uploads to PyPI through OIDC
+when the version is not already published, then installs `lfpolicy` back from
 PyPI and smoke-tests the published package.
 
 ```bash
-git tag v0.9.2
-git push origin v0.9.2
-gh release create v0.9.2 --title "lfguard 0.9.2" --notes-file docs/release-notes/v0.9.2.md
+git tag v0.10.0
+git push origin v0.10.0
+gh release create v0.10.0 --title "lfpolicy 0.10.0" --notes-file docs/release-notes/v0.10.0.md
 ```
 
 Use the matching file under [`release-notes/`](release-notes/) as the GitHub
@@ -42,34 +42,34 @@ Before publishing, verify the release candidate from the repository root:
 python -m unittest discover -s tests
 python -m build
 python -m twine check dist/*
-python -m venv /tmp/lfguard-wheel-smoke
-/tmp/lfguard-wheel-smoke/bin/python -m pip install --no-index --find-links dist lfguard
-/tmp/lfguard-wheel-smoke/bin/lfguard --version
-/tmp/lfguard-wheel-smoke/bin/lfguard generate examples/policy.py --output-file /tmp/lfguard-policy.json --force
-/tmp/lfguard-wheel-smoke/bin/lfguard generate examples/policy.py --output-file /tmp/lfguard-policy.json --check
-/tmp/lfguard-wheel-smoke/bin/lfguard check --desired /tmp/lfguard-policy.json --fail-on-findings
-/tmp/lfguard-wheel-smoke/bin/lfguard sample --output-dir /tmp/lfguard-demo
-/tmp/lfguard-wheel-smoke/bin/lfguard check \
-  --desired /tmp/lfguard-demo/desired.json \
-  --current-snapshot /tmp/lfguard-demo/current-snapshot.json \
+python -m venv /tmp/lfpolicy-wheel-smoke
+/tmp/lfpolicy-wheel-smoke/bin/python -m pip install --no-index --find-links dist lfpolicy
+/tmp/lfpolicy-wheel-smoke/bin/lfpolicy --version
+/tmp/lfpolicy-wheel-smoke/bin/lfpolicy generate examples/policy.py --output-file /tmp/lfpolicy-policy.json --force
+/tmp/lfpolicy-wheel-smoke/bin/lfpolicy generate examples/policy.py --output-file /tmp/lfpolicy-policy.json --check
+/tmp/lfpolicy-wheel-smoke/bin/lfpolicy check --desired /tmp/lfpolicy-policy.json --fail-on-findings
+/tmp/lfpolicy-wheel-smoke/bin/lfpolicy sample --output-dir /tmp/lfpolicy-demo
+/tmp/lfpolicy-wheel-smoke/bin/lfpolicy check \
+  --desired /tmp/lfpolicy-demo/desired.json \
+  --current-snapshot /tmp/lfpolicy-demo/current-snapshot.json \
   --fail-on-findings
-/tmp/lfguard-wheel-smoke/bin/lfguard review \
-  --desired /tmp/lfguard-demo/desired.json \
-  --current-snapshot /tmp/lfguard-demo/current-snapshot.json \
-  --output-dir /tmp/lfguard-review-smoke \
+/tmp/lfpolicy-wheel-smoke/bin/lfpolicy review \
+  --desired /tmp/lfpolicy-demo/desired.json \
+  --current-snapshot /tmp/lfpolicy-demo/current-snapshot.json \
+  --output-dir /tmp/lfpolicy-review-smoke \
   --force
-/tmp/lfguard-wheel-smoke/bin/lfguard explain-batch \
+/tmp/lfpolicy-wheel-smoke/bin/lfpolicy explain-batch \
   --requests examples/access-requests.json \
   --current-snapshot examples/access-current-snapshot.json \
   --output json \
-  --output-file /tmp/lfguard-explain-batch.json
+  --output-file /tmp/lfpolicy-explain-batch.json
 ```
 
 After the GitHub release workflow finishes, verify PyPI and the tag:
 
 ```bash
-python -m pip index versions lfguard
-git ls-remote --tags origin v0.9.2
+python -m pip index versions lfpolicy
+git ls-remote --tags origin v0.10.0
 ```
 
 The release workflow also runs this published-package smoke test automatically

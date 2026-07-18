@@ -1,8 +1,8 @@
 # CLI Reference
 
-`lfguard` installs one console command: `lfguard`.
+`lfpolicy` installs one console command: `lfpolicy`.
 
-Use `lfguard --help` or `lfguard <command> --help` for argparse-generated help.
+Use `lfpolicy --help` or `lfpolicy <command> --help` for argparse-generated help.
 
 ## Command Tiers
 
@@ -80,13 +80,13 @@ each supported Lake Formation resource kind.
 YAML files require the optional extra:
 
 ```bash
-python -m pip install "lfguard[yaml]"
+python -m pip install "lfpolicy[yaml]"
 ```
 
 Live AWS commands require the AWS extra:
 
 ```bash
-python -m pip install "lfguard[aws]"
+python -m pip install "lfpolicy[aws]"
 ```
 
 Current-state cache files are JSON envelopes, not plain current snapshots. Use
@@ -95,8 +95,8 @@ you want repeated live workflows to share a scoped current-state lookup. Pass
 `--profile`, `--region`, and `--catalog-id` explicitly for cached live workflows
 and keep separate cache paths per account, environment, region, and catalog.
 
-For isolated CLI installs, use `pipx install lfguard` or
-`uv tool install lfguard`. Add extras with pip when you need live AWS or YAML
+For isolated CLI installs, use `pipx install lfpolicy` or
+`uv tool install lfpolicy`. Add extras with pip when you need live AWS or YAML
 support inside a project environment.
 
 ## Exit Codes
@@ -119,7 +119,7 @@ examples for check, summary, audit, explain, review, and plan reports.
 Write a complete approval bundle:
 
 ```bash
-lfguard review \
+lfpolicy review \
   --desired desired.json \
   --current-snapshot current.json \
   --output-dir review/
@@ -127,7 +127,7 @@ lfguard review \
 
 The bundle contains:
 
-- `manifest.json`: schema version, lfguard version, input hashes, status, and
+- `manifest.json`: schema version, lfpolicy version, input hashes, status, and
   artifact list.
 - `summary.md` and `summary.json`: human and machine summaries.
 - `lint.json`, `audit.json`, `plan.json`, and `explain.json`: stable evidence
@@ -145,7 +145,7 @@ status to `review_required`. Existing bundle files are not overwritten unless
 Service-embedded LLM agents should follow
 [`llm-agent-integration.md`](llm-agent-integration.md) when interpreting
 `severity`, `recommended_action`, `hard_block`, and `blocking_reasons`.
-Backend services that wrap lfguard should follow
+Backend services that wrap lfpolicy should follow
 [`service-integration.md`](service-integration.md) and consume CLI JSON
 artifacts instead of private Python internals.
 
@@ -154,7 +154,7 @@ artifacts instead of private Python internals.
 Explain multiple access requests from one snapshot:
 
 ```bash
-lfguard explain-batch \
+lfpolicy explain-batch \
   --requests access-requests.json \
   --current-snapshot current.json \
   --output json
@@ -181,14 +181,14 @@ Pass `--desired desired.json` when the output should also include desired-grant
 gap evidence. Use `--fail-on-denied` when denied requests should fail CI.
 For adapter tests, see `examples/access-requests.json`,
 `examples/access-current-snapshot.json`, and
-`examples/artifacts/lfguard-explain-batch.json`.
+`examples/artifacts/lfpolicy-explain-batch.json`.
 
 ## `init`
 
 Generate a starter desired policy:
 
 ```bash
-lfguard init --output-file policy/desired.json
+lfpolicy init --output-file policy/desired.json
 ```
 
 Useful options:
@@ -204,7 +204,7 @@ When `--format` is omitted, `.yaml` and `.yml` output paths produce YAML;
 stdout defaults to JSON.
 
 ```bash
-lfguard init --template blank --output-file policy/desired.json
+lfpolicy init --template blank --output-file policy/desired.json
 ```
 
 ## `generate`
@@ -212,15 +212,15 @@ lfguard init --template blank --output-file policy/desired.json
 Generate desired state from a Python policy file:
 
 ```bash
-lfguard generate policy.py --output-file policy/desired.json
-lfguard generate policy.py --output-file policy/desired.json --check
-lfguard check --desired policy/desired.json --fail-on-findings
+lfpolicy generate policy.py --output-file policy/desired.json
+lfpolicy generate policy.py --output-file policy/desired.json --check
+lfpolicy check --desired policy/desired.json --fail-on-findings
 ```
 
 The policy file should define a `LakePolicy` named `policy`:
 
 ```python
-from lakeformation_guard.policy import LakePolicy, TagAssignmentScope, reader, table_creator
+from lfpolicy.policy import LakePolicy, TagAssignmentScope, reader, table_creator
 
 policy = LakePolicy()
 policy.tag_key(
@@ -266,35 +266,35 @@ Useful options:
 Create a starter policy repository layout:
 
 ```bash
-lfguard bootstrap --output-dir lfguard-policy
+lfpolicy bootstrap --output-dir lfpolicy-policy
 ```
 
 The generated layout includes:
 
 - `policy.py`: Python source of truth for permission groups.
 - `policy/desired.json`: generated desired LF-Tag and grant policy.
-- `policy/lfguard.schema.json`: JSON Schema for editor integration.
-- `.github/workflows/lfguard-policy.yml`: offline check, summary, and artifact
-  workflow. It runs `lfguard generate` before `lfguard check`.
+- `policy/lfpolicy.schema.json`: JSON Schema for editor integration.
+- `.github/workflows/lfpolicy-policy.yml`: offline check, summary, and artifact
+  workflow. It runs `lfpolicy generate` before `lfpolicy check`.
 - `.pre-commit-config.yaml`: local generate-and-check hook.
 - `README.md`: rollout steps and first commands.
 
 Useful options:
 
 - `--format json|yaml`: choose the desired policy file format. YAML workflows
-  install `lfguard[yaml]`.
+  install `lfpolicy[yaml]`.
 - `--template data-domain|blank`: choose the starter policy. `data-domain`
   writes a Python permission-group policy; `blank` writes an empty `LakePolicy`.
-- `--include-live-drift`: also write `.github/workflows/lfguard-live-drift.yml`
-  and `iam/lfguard-read-only.json` for scheduled live AWS drift checks through
+- `--include-live-drift`: also write `.github/workflows/lfpolicy-live-drift.yml`
+  and `iam/lfpolicy-read-only.json` for scheduled live AWS drift checks through
   GitHub OIDC.
 - `--include-code-scanning`: also write
-  `.github/workflows/lfguard-code-scanning.yml` for GitHub Code Scanning SARIF
-  upload. This also writes `iam/lfguard-read-only.json`.
+  `.github/workflows/lfpolicy-code-scanning.yml` for GitHub Code Scanning SARIF
+  upload. This also writes `iam/lfpolicy-read-only.json`.
 - `--include-review-template`: also write `.github/CODEOWNERS` and
   `.github/pull_request_template.md` for Lake Formation policy review.
 - `--include-editor-config`: also write `.vscode/settings.json` so VS Code
-  validates the desired policy against `policy/lfguard.schema.json`. YAML
+  validates the desired policy against `policy/lfpolicy.schema.json`. YAML
   bootstraps also get `.vscode/extensions.json` recommending YAML support.
 - `--policy-owner OWNER`: CODEOWNERS owner for generated policy review files.
 - `--aws-role-arn ARN`: role ARN to place in generated live AWS workflows.
@@ -304,10 +304,10 @@ Useful options:
 Optional scaffold examples:
 
 ```bash
-lfguard bootstrap --output-dir lfguard-policy --include-live-drift
-lfguard bootstrap --output-dir lfguard-policy --include-code-scanning
-lfguard bootstrap --output-dir lfguard-policy --include-review-template
-lfguard bootstrap --output-dir lfguard-policy --include-editor-config
+lfpolicy bootstrap --output-dir lfpolicy-policy --include-live-drift
+lfpolicy bootstrap --output-dir lfpolicy-policy --include-code-scanning
+lfpolicy bootstrap --output-dir lfpolicy-policy --include-review-template
+lfpolicy bootstrap --output-dir lfpolicy-policy --include-editor-config
 ```
 
 ## `sample`
@@ -315,10 +315,10 @@ lfguard bootstrap --output-dir lfguard-policy --include-editor-config
 Generate paired offline demo files that work immediately after `pip install`:
 
 ```bash
-lfguard sample --output-dir lfguard-demo --include-ci
-lfguard plan \
-  --desired lfguard-demo/desired.json \
-  --current-snapshot lfguard-demo/current-snapshot.json
+lfpolicy sample --output-dir lfpolicy-demo --include-ci
+lfpolicy plan \
+  --desired lfpolicy-demo/desired.json \
+  --current-snapshot lfpolicy-demo/current-snapshot.json
 ```
 
 The generated policy includes an LF-Tag policy grant, a Lake Formation data
@@ -331,8 +331,8 @@ Useful options:
 - `--output-dir PATH`: directory to write `desired.json` and
   `current-snapshot.json`, plus a local `README.md` with demo commands.
 - `--format json|yaml|both`: choose JSON sample files, YAML sample files, or
-  both. YAML files require `lfguard[yaml]` when read by later commands.
-- `--include-ci`: also write `.github/workflows/lfguard-demo.yml`, an offline
+  both. YAML files require `lfpolicy[yaml]` when read by later commands.
+- `--include-ci`: also write `.github/workflows/lfpolicy-demo.yml`, an offline
   GitHub Actions workflow that validates, lints, audits, plans, and uploads
   report artifacts for the generated sample files.
 - `--force`: overwrite existing sample files.
@@ -342,7 +342,7 @@ Useful options:
 Write the JSON Schema for editor integration or CI validation:
 
 ```bash
-lfguard schema --output-file policy/lfguard.schema.json
+lfpolicy schema --output-file policy/lfpolicy.schema.json
 ```
 
 ## `doctor`
@@ -351,10 +351,10 @@ Check the install, Python runtime, optional dependencies, and AWS-related
 environment variables without making AWS calls:
 
 ```bash
-lfguard doctor
-lfguard doctor --output json
-lfguard doctor --require aws --require yaml
-lfguard doctor --output json --output-file artifacts/lfguard-doctor.json
+lfpolicy doctor
+lfpolicy doctor --output json
+lfpolicy doctor --require aws --require yaml
+lfpolicy doctor --output json --output-file artifacts/lfpolicy-doctor.json
 ```
 
 Use `--require aws` or `--require yaml` to return exit code `1` when a needed
@@ -366,10 +366,10 @@ Generate starter IAM policies, or check whether the role about to run a live
 workflow has the selected permissions:
 
 ```bash
-lfguard permissions --template read-only --output-file iam/lfguard-read-only.json
-lfguard permissions --check --template read-only --profile prod --output json
-lfguard permissions --check --template read-only \
-  --principal-arn arn:aws:iam::111122223333:role/LfguardReadOnly
+lfpolicy permissions --template read-only --output-file iam/lfpolicy-read-only.json
+lfpolicy permissions --check --template read-only --profile prod --output json
+lfpolicy permissions --check --template read-only \
+  --principal-arn arn:aws:iam::111122223333:role/LfpolicyReadOnly
 ```
 
 Useful options:
@@ -379,7 +379,7 @@ Useful options:
 - `--include-glue-read`: add common Glue Data Catalog read actions.
 - `--check`: call AWS STS and IAM policy simulation to verify the selected
   template against the current caller or `--principal-arn`.
-- `--principal-arn ARN`: IAM role/user ARN to simulate. When omitted, `lfguard`
+- `--principal-arn ARN`: IAM role/user ARN to simulate. When omitted, `lfpolicy`
   uses `sts:GetCallerIdentity` and normalizes an assumed-role ARN to the
   underlying IAM role ARN.
 - `--profile PROFILE`, `--region REGION`: AWS profile and region for
@@ -391,7 +391,7 @@ Useful options:
 
 `--check` exits `0` when every required action is allowed and `1` when any
 required action is denied or missing. The JSON report uses
-`schema_version: "lfguard.permissions-check.v1"` and includes the simulated
+`schema_version: "lfpolicy.permissions-check.v1"` and includes the simulated
 principal, caller ARN when discovered, per-action IAM decisions, and denied
 actions. The caller running `--check` must be allowed to call
 `iam:SimulatePrincipalPolicy` for the simulated principal.
@@ -401,15 +401,15 @@ actions. The caller running `--check` must be allowed to call
 Emit shell completion scripts:
 
 ```bash
-lfguard completion --shell bash
-lfguard completion --shell zsh --output-file ~/.zsh/completions/_lfguard
-lfguard completion --shell fish --output-file ~/.config/fish/completions/lfguard.fish
+lfpolicy completion --shell bash
+lfpolicy completion --shell zsh --output-file ~/.zsh/completions/_lfpolicy
+lfpolicy completion --shell fish --output-file ~/.config/fish/completions/lfpolicy.fish
 ```
 
 For the current bash session:
 
 ```bash
-source <(lfguard completion --shell bash)
+source <(lfpolicy completion --shell bash)
 ```
 
 Useful options:
@@ -423,12 +423,12 @@ Useful options:
 Validate and lint local policy files in one offline command:
 
 ```bash
-lfguard check --desired policy/desired.json --fail-on-findings
-lfguard check \
+lfpolicy check --desired policy/desired.json --fail-on-findings
+lfpolicy check \
   --desired policy/desired.json \
   --current-snapshot snapshots/prod-current.json \
   --output markdown \
-  --output-file artifacts/lfguard-check.md \
+  --output-file artifacts/lfpolicy-check.md \
   --github-summary \
   --fail-on-findings
 ```
@@ -445,7 +445,7 @@ Useful options:
 Validate local policy files:
 
 ```bash
-lfguard validate \
+lfpolicy validate \
   --desired policy/desired.json \
   --current-snapshot snapshots/prod-current.json
 ```
@@ -456,10 +456,10 @@ against live state. It also enforces model invariants such as unique
 `(catalog_id, database, table, name)` identities for data cells filters.
 
 ```bash
-lfguard validate \
+lfpolicy validate \
   --desired policy/desired.json \
   --current-snapshot snapshots/prod-current.json \
-  --output-file artifacts/lfguard-validate.txt
+  --output-file artifacts/lfpolicy-validate.txt
 ```
 
 ## `lint`
@@ -467,7 +467,7 @@ lfguard validate \
 Lint desired policy for semantic issues that parse-time validation cannot catch:
 
 ```bash
-lfguard lint --desired policy/desired.json
+lfpolicy lint --desired policy/desired.json
 ```
 
 `lint` does not call AWS. It catches undefined LF-Tag keys and values used in
@@ -477,10 +477,10 @@ desired policy is empty.
 CI-friendly lint gate:
 
 ```bash
-lfguard lint \
+lfpolicy lint \
   --desired policy/desired.json \
   --output json \
-  --output-file artifacts/lfguard-lint.json \
+  --output-file artifacts/lfpolicy-lint.json \
   --fail-on-findings \
   --github-summary
 ```
@@ -498,7 +498,7 @@ Useful options:
 Summarize policy inventory without calling AWS:
 
 ```bash
-lfguard summary \
+lfpolicy summary \
   --desired policy/desired.json \
   --current-snapshot snapshots/prod-current.json
 ```
@@ -507,11 +507,11 @@ Use it in pull requests when reviewers need a compact view of LF-Tag keys,
 resource kinds, grant principals, grant resource kinds, and permissions:
 
 ```bash
-lfguard summary \
+lfpolicy summary \
   --desired policy/desired.json \
   --current-snapshot snapshots/prod-current.json \
   --output markdown \
-  --output-file artifacts/lfguard-summary.md \
+  --output-file artifacts/lfpolicy-summary.md \
   --github-summary
 ```
 
@@ -520,7 +520,7 @@ lfguard summary \
 Report drift between desired and current state:
 
 ```bash
-lfguard audit \
+lfpolicy audit \
   --desired policy/desired.json \
   --current-snapshot snapshots/prod-current.json
 ```
@@ -528,11 +528,11 @@ lfguard audit \
 CI-friendly audit:
 
 ```bash
-lfguard audit \
+lfpolicy audit \
   --desired policy/desired.json \
   --current-snapshot snapshots/prod-current.json \
   --output json \
-  --output-file artifacts/lfguard-audit.json \
+  --output-file artifacts/lfpolicy-audit.json \
   --fail-on-findings
 ```
 
@@ -554,7 +554,7 @@ Useful options:
 Produce a conservative change plan:
 
 ```bash
-lfguard plan \
+lfpolicy plan \
   --desired policy/desired.json \
   --current-snapshot snapshots/prod-current.json
 ```
@@ -563,12 +563,12 @@ For repeated live planning against the same desired scope, cache current state
 behind the provider boundary:
 
 ```bash
-lfguard plan \
+lfpolicy plan \
   --desired policy/desired.json \
   --profile prod \
   --region us-east-1 \
   --catalog-id 111122223333 \
-  --current-cache .lfguard/prod-us-east-1-111122223333-current.json \
+  --current-cache .lfpolicy/prod-us-east-1-111122223333-current.json \
   --current-cache-max-age 900
 ```
 
@@ -581,18 +581,18 @@ omitted unless the matching allow flag is set.
 CI-friendly plan gate:
 
 ```bash
-lfguard plan \
+lfpolicy plan \
   --desired policy/desired.json \
   --current-snapshot snapshots/prod-current.json \
   --output markdown \
-  --output-file artifacts/lfguard-plan.md \
+  --output-file artifacts/lfpolicy-plan.md \
   --fail-on-changes
 ```
 
 Save a reviewed JSON plan for external execution review:
 
 ```bash
-lfguard plan --desired desired.json --output json --output-file plan.json
+lfpolicy plan --desired desired.json --output json --output-file plan.json
 ```
 
 Destructive planning flags:
@@ -611,7 +611,7 @@ Destructive planning flags:
 Explain current access for one principal and resource:
 
 ```bash
-lfguard explain \
+lfpolicy explain \
   --desired policy/desired.json \
   --current-snapshot snapshots/prod-current.json \
   --principal arn:aws:iam::111122223333:role/Analyst \
@@ -646,7 +646,7 @@ Useful options:
 
 When `--current-snapshot` is omitted, live loading is still scoped. The desired
 file should include the LF-Tag policy grants or named LF-Tag expressions you
-want explained; otherwise use `lfguard import` or `lfguard snapshot` first for
+want explained; otherwise use `lfpolicy import` or `lfpolicy snapshot` first for
 a broader reviewed snapshot.
 
 ## `snapshot`
@@ -655,7 +655,7 @@ Export live AWS state for the resources and principals referenced by the desired
 policy:
 
 ```bash
-lfguard snapshot \
+lfpolicy snapshot \
   --desired policy/desired.json \
   --profile prod \
   --region ap-northeast-2 \
@@ -670,7 +670,7 @@ inventory an entire account.
 Import live AWS state into a starter desired-state file:
 
 ```bash
-lfguard import \
+lfpolicy import \
   --catalog-id 123456789012 \
   --include lf-tags,lf-tag-expressions,data-cells-filters,resource-tags,grants \
   --output policy/imported-desired.json \
@@ -679,7 +679,7 @@ lfguard import \
 
 `import` is for adoption scaffolding, not automatic synchronization. Review the
 generated file, remove unmanaged legacy access that should stay outside
-`lfguard`, then commit the desired state you intend to own. Use
+`lfpolicy`, then commit the desired state you intend to own. Use
 `--review-notes` to write a Markdown checklist and bounded-discovery warnings
 beside the scaffold.
 
@@ -696,18 +696,18 @@ Useful options:
   about bounded resource-tag and data-cells-filter discovery.
 - `--force`: overwrite an existing output file.
 
-Resource-tag import is intentionally bounded. `lfguard` reads LF-Tag
+Resource-tag import is intentionally bounded. `lfpolicy` reads LF-Tag
 assignments for resources discovered through Lake Formation grants, even when
 `resource-tags` is requested without including `grants` in the generated file.
 It does not crawl the whole Glue Data Catalog.
 
-Data-cells-filter import is also bounded. `lfguard` lists filters only for
+Data-cells-filter import is also bounded. `lfpolicy` lists filters only for
 tables discovered through imported grants, even when `data-cells-filters` is
 requested without including `grants` in the generated file.
 
 ## Execution Boundary
 
-`lfguard` has no `apply` command in 0.9.0 and later. `plan` and `review` emit
+`lfpolicy` has no `apply` command in 0.9.0 and later. `plan` and `review` emit
 planned change evidence, including `aws_api` metadata, but AWS write execution
 belongs to the consuming service or operator workflow. Use `recommended_action`,
 `hard_block`, `status`, and plan change metadata to decide whether an external
