@@ -13,7 +13,7 @@ from .advisory import (
 )
 
 
-DOCS_BASE_URL = "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md"
+DOCS_BASE_URL = "https://github.com/yongjip/lfpolicy/blob/main/docs/finding-catalog.md"
 
 
 def _entry(identifier: str, title: str, category: str, action: str, *, key: str = "code") -> Dict[str, Any]:

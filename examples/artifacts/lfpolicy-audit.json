@@ -11,7 +11,7 @@
         "tag_key": "sensitivity"
       },
       "docs_anchor": "lf-tag-values-missing",
-      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#lf-tag-values-missing",
+      "docs_url": "https://github.com/yongjip/lfpolicy/blob/main/docs/finding-catalog.md#lf-tag-values-missing",
       "hard_block": false,
       "id": "finding_001",
       "message": "Desired LF-Tag values are missing",
@@ -36,7 +36,7 @@
         "tag_key": "sensitivity"
       },
       "docs_anchor": "resource-tag-values-missing",
-      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#resource-tag-values-missing",
+      "docs_url": "https://github.com/yongjip/lfpolicy/blob/main/docs/finding-catalog.md#resource-tag-values-missing",
       "hard_block": false,
       "id": "finding_002",
       "message": "Resource is missing desired LF-Tag values",
@@ -75,7 +75,7 @@
         }
       },
       "docs_anchor": "grant-missing",
-      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#grant-missing",
+      "docs_url": "https://github.com/yongjip/lfpolicy/blob/main/docs/finding-catalog.md#grant-missing",
       "hard_block": false,
       "id": "finding_003",
       "message": "Principal grant is missing",

@@ -19,7 +19,7 @@
       },
       "destructive": false,
       "docs_anchor": "lf-tag-add-values",
-      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#lf-tag-add-values",
+      "docs_url": "https://github.com/yongjip/lfpolicy/blob/main/docs/finding-catalog.md#lf-tag-add-values",
       "hard_block": false,
       "id": "change_001",
       "payload": {
@@ -70,7 +70,7 @@
       },
       "destructive": false,
       "docs_anchor": "resource-tag-add-values",
-      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#resource-tag-add-values",
+      "docs_url": "https://github.com/yongjip/lfpolicy/blob/main/docs/finding-catalog.md#resource-tag-add-values",
       "hard_block": false,
       "id": "change_002",
       "payload": {
@@ -124,7 +124,7 @@
       "before": null,
       "destructive": false,
       "docs_anchor": "grant-add-permissions",
-      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#grant-add-permissions",
+      "docs_url": "https://github.com/yongjip/lfpolicy/blob/main/docs/finding-catalog.md#grant-add-permissions",
       "hard_block": false,
       "id": "change_003",
       "payload": {

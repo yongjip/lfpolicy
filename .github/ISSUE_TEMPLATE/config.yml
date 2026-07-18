@@ -1,11 +1,11 @@
 blank_issues_enabled: false
 contact_links:
   - name: Feature boundary and embedding scope
-    url: https://github.com/yongjip/aws-datalake-guard/blob/main/docs/library-embedding-boundary.md
+    url: https://github.com/yongjip/lfpolicy/blob/main/docs/library-embedding-boundary.md
     about: Check whether a feature request belongs in lfpolicy core, the service layer, or a raw boto3 wrapper.
   - name: Security issue
-    url: https://github.com/yongjip/aws-datalake-guard/blob/main/SECURITY.md
+    url: https://github.com/yongjip/lfpolicy/blob/main/SECURITY.md
     about: Please report vulnerabilities privately instead of opening a public issue.
   - name: Troubleshooting guide
-    url: https://github.com/yongjip/aws-datalake-guard/blob/main/docs/troubleshooting.md
+    url: https://github.com/yongjip/lfpolicy/blob/main/docs/troubleshooting.md
     about: Check common install, AWS permission, planning, and CI issues.

@@ -12,7 +12,7 @@ Configure a pending publisher in PyPI with:
 
 - PyPI project name: `lfpolicy`
 - Owner: `yongjip`
-- Repository: `aws-datalake-guard`
+- Repository: `lfpolicy`
 - Workflow: `release.yml`
 - Environment: `pypi`
 

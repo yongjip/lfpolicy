@@ -1,6 +1,6 @@
 # lfpolicy
 
-[![CI](https://github.com/yongjip/aws-datalake-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/yongjip/aws-datalake-guard/actions/workflows/ci.yml)
+[![CI](https://github.com/yongjip/lfpolicy/actions/workflows/ci.yml/badge.svg)](https://github.com/yongjip/lfpolicy/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/lfpolicy.svg)](https://pypi.org/project/lfpolicy/)
 [![Python](https://img.shields.io/pypi/pyversions/lfpolicy.svg)](https://pypi.org/project/lfpolicy/)
 

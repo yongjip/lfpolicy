@@ -3868,7 +3868,7 @@ def _findings_to_sarif(findings: Iterable[Any], *, sarif_uri: Optional[str] = No
                     "driver": {
                         "name": "lfpolicy",
                         "version": __version__,
-                        "informationUri": "https://github.com/yongjip/aws-datalake-guard",
+                        "informationUri": "https://github.com/yongjip/lfpolicy",
                         "rules": rules,
                     }
                 },

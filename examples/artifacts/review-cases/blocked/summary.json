@@ -15,7 +15,7 @@
     {
       "code": "POLICY_EXCEPTION_EXPIRED",
       "docs_anchor": "policy-exception-expired",
-      "docs_url": "https://github.com/yongjip/aws-datalake-guard/blob/main/docs/finding-catalog.md#policy-exception-expired",
+      "docs_url": "https://github.com/yongjip/lfpolicy/blob/main/docs/finding-catalog.md#policy-exception-expired",
       "id": null,
       "message": "Policy exception is expired and no longer suppresses lint findings",
       "recommended_action": "block",
