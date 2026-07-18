@@ -26,7 +26,7 @@
         "source": "desired_state"
       }
     },
-    "lfpolicy_version": "0.10.0",
+    "lfpolicy_version": "0.11.0",
     "truncation": {
       "artifacts": [],
       "truncated": false

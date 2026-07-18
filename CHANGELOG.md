@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.11.0
+
 - Adds a bounded read-only
   `AWSLakeFormationAdapter.list_data_cells_filters()` helper for listing
   deterministic modeled filters on one explicitly named table.
